@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { exportRoomSeatingToExcel } from '../utils/excelExport';
 
-export default function RoomDeskChart({ seatingResult, examDetails }) {
+export default function RoomDeskChart({ seatingResult, examDetails, absentStudents = {} }) {
   const { rooms = [] } = seatingResult;
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.roomId || 'all');
   const [viewMode, setViewMode] = useState('columns'); // 'columns' or 'grid'
@@ -282,7 +282,9 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                                   <div
                                     className={`p-2 rounded-lg border flex flex-col justify-between min-h-[64px] ${
                                       left
-                                        ? `${left.color} font-medium`
+                                        ? absentStudents[left.rollNo.toString()]
+                                          ? 'bg-rose-100 border-rose-400 text-rose-900 font-medium'
+                                          : `${left.color} font-medium`
                                         : 'border-dashed border-slate-200 bg-slate-100 text-slate-400 text-center items-center justify-center'
                                     }`}
                                   >
@@ -292,9 +294,15 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                                           <span className="font-black text-[11px]">
                                             {left.className}-{left.section}
                                           </span>
-                                          <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 font-semibold">
-                                            Left
-                                          </span>
+                                          {absentStudents[left.rollNo.toString()] ? (
+                                            <span className="text-[9px] px-1 py-0.2 rounded bg-rose-600 text-white font-black">
+                                              ABSENT
+                                            </span>
+                                          ) : (
+                                            <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 font-semibold">
+                                              Left
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="font-mono font-black text-sm my-0.5 text-slate-900">
                                           #{left.rollNo}
@@ -312,7 +320,9 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                                   <div
                                     className={`p-2 rounded-lg border flex flex-col justify-between min-h-[64px] ${
                                       right
-                                        ? `${right.color} font-medium`
+                                        ? absentStudents[right.rollNo.toString()]
+                                          ? 'bg-rose-100 border-rose-400 text-rose-900 font-medium'
+                                          : `${right.color} font-medium`
                                         : 'border-dashed border-slate-200 bg-slate-100 text-slate-400 text-center items-center justify-center'
                                     }`}
                                   >
@@ -322,9 +332,15 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                                           <span className="font-black text-[11px]">
                                             {right.className}-{right.section}
                                           </span>
-                                          <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 font-semibold">
-                                            Right
-                                          </span>
+                                          {absentStudents[right.rollNo.toString()] ? (
+                                            <span className="text-[9px] px-1 py-0.2 rounded bg-rose-600 text-white font-black">
+                                              ABSENT
+                                            </span>
+                                          ) : (
+                                            <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 font-semibold">
+                                              Right
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="font-mono font-black text-sm my-0.5 text-slate-900">
                                           #{right.rollNo}

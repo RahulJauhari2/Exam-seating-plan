@@ -17,6 +17,7 @@ export default function Navbar({
   handleShiftChange,
   activeTab,
   setActiveTab,
+  absentCount = 0,
   onResetData,
   onPrint
 }) {
@@ -171,6 +172,21 @@ export default function Navbar({
             }`}
           >
             🔍 5. Search Roll Number
+          </button>
+          <button
+            onClick={() => setActiveTab('absent-list')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'absent-list'
+                ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span>📝 6. Room Absent List (अनुपस्थिति पत्रक)</span>
+            {absentCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[10px] font-black">
+                {absentCount}
+              </span>
+            )}
           </button>
         </div>
       </div>

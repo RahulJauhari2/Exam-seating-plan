@@ -8,11 +8,15 @@ import MainGateNotice from './components/MainGateNotice';
 import RoomDeskChart from './components/RoomDeskChart';
 import DoorSlips from './components/DoorSlips';
 import StudentFinder from './components/StudentFinder';
+import AbsenteeManager from './components/AbsenteeManager';
 import { AlertTriangle, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
 
 export default function App() {
   // Active shift state: 'shift_1' (9th-12th) or 'shift_2' (6th-8th)
   const [activeShift, setActiveShift] = useState('shift_1');
+
+  // Absent students state: { [rollNo]: true }
+  const [absentStudents, setAbsentStudents] = useState({});
 
   // Exam details state
   const [examDetails, setExamDetails] = useState({
@@ -81,6 +85,7 @@ export default function App() {
         handleShiftChange={handleShiftChange}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        absentCount={Object.keys(absentStudents).length}
         onResetData={handleResetData}
         onPrint={handlePrint}
       />
@@ -155,6 +160,7 @@ export default function App() {
           <RoomDeskChart
             seatingResult={seatingResult}
             examDetails={examDetails}
+            absentStudents={absentStudents}
           />
         )}
 
@@ -167,6 +173,15 @@ export default function App() {
 
         {activeTab === 'search-student' && (
           <StudentFinder seatingResult={seatingResult} />
+        )}
+
+        {activeTab === 'absent-list' && (
+          <AbsenteeManager
+            seatingResult={seatingResult}
+            examDetails={examDetails}
+            absentStudents={absentStudents}
+            setAbsentStudents={setAbsentStudents}
+          />
         )}
       </main>
 

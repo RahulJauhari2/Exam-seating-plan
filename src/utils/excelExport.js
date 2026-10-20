@@ -49,3 +49,25 @@ export function exportRoomSeatingToExcel(roomsData, examDetails) {
   const fileName = `Seating_Plan_Layout_${(examDetails.examName || 'Exam').replace(/\s+/g, '_')}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
+
+/**
+ * Exports Absentee Summary to Excel
+ */
+export function exportAbsenteeListToExcel(absenteeSummary, examDetails) {
+  const rows = absenteeSummary.map((item, idx) => ({
+    'क्र.सं. (S.No)': idx + 1,
+    'कमरा / हॉल नं.': item.roomName,
+    'कुल आबंटित छात्र': item.totalSeated,
+    'उपस्थित छात्र (Present)': item.presentCount,
+    'अनुपस्थित छात्र (Absent)': item.absentCount,
+    'अनुपस्थित रोल नंबर (Absent Roll Numbers)': item.absentRollsText || 'कोई नहीं (None)',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Room Absentee List');
+
+  const fileName = `Room_Wise_Absentee_List_${(examDetails.examName || 'Exam').replace(/\s+/g, '_')}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
