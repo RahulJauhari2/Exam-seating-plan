@@ -198,6 +198,7 @@ export default function AbsenteeManager({
           <div className="flex-1 relative w-full">
             <input
               type="number"
+              inputMode="numeric"
               placeholder="रोल नंबर टाइप करें और Enter दबाएं (उदा. 9105, 10102)..."
               value={quickRollInput}
               onChange={(e) => setQuickRollInput(e.target.value)}
@@ -332,7 +333,8 @@ export default function AbsenteeManager({
 
         {/* Master Absentee Table */}
         <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
-          <table className="w-full text-left text-xs border-collapse">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[560px]">
             <thead className="bg-slate-900 text-white font-extrabold uppercase text-[11px]">
               <tr>
                 <th className="px-3 py-2.5 border-r border-slate-700 w-12 text-center">क्र.</th>
@@ -411,6 +413,7 @@ export default function AbsenteeManager({
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
 
         {/* Footer Notes & Signatures */}

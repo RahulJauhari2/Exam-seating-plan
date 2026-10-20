@@ -41,32 +41,33 @@ export default function StudentFinder({ seatingResult }) {
   return (
     <div className="space-y-6">
       {/* Search Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3">
-            <Search className="w-6 h-6" />
+          <div className="inline-flex p-2.5 sm:p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-2 sm:mb-3">
+            <Search className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-base sm:text-xl font-bold text-slate-800">
             विद्यार्थी रोल नंबर खोजें (Quick Student Seat Finder)
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
             गेट पर किसी भी छात्र का रोल नंबर डालें और तुरंत पता करें कि वह किस कमरे और किस बेंच पर बैठेगा
           </p>
 
-          <div className="mt-5 relative">
+          <div className="mt-4 sm:mt-5 relative">
             <input
               type="text"
-              placeholder="रोल नंबर डालें (उदा. 905, 1021, 1110) या क्लास (उदा. 9-A)..."
+              inputMode="numeric"
+              placeholder="रोल नंबर डालें (उदा. 9105, 10101)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-5 py-3.5 pl-12 rounded-2xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none shadow-sm text-sm font-semibold text-slate-800"
+              className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pl-11 sm:pl-12 rounded-2xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none shadow-sm text-sm font-bold text-slate-800 placeholder:font-normal"
               autoFocus
             />
-            <Search className="w-5 h-5 text-indigo-400 absolute left-4 top-4" />
+            <Search className="w-5 h-5 text-indigo-400 absolute left-3.5 top-3.5 sm:top-4" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-3.5 text-xs text-slate-400 hover:text-slate-600 font-bold px-2 py-0.5 rounded bg-slate-100"
+                className="absolute right-3.5 top-2.5 sm:top-3.5 text-xs text-slate-400 hover:text-slate-600 font-bold px-2.5 py-1 rounded-lg bg-slate-100"
               >
                 Clear
               </button>

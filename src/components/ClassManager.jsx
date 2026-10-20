@@ -138,39 +138,39 @@ export default function ClassManager({ classes, setClasses }) {
             <span className="font-semibold">क्विक 3-सेक्शन जनरेटर (A, B, C एक साथ जोड़ें):</span>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:flex items-center gap-2 w-full md:w-auto">
             <input
               type="text"
               placeholder="Class (उदा. 9)"
               value={quickGrade}
               onChange={(e) => setQuickGrade(e.target.value)}
-              className="w-20 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
+              className="w-full md:w-20 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
             />
             <input
               type="text"
               placeholder="Subject (उदा. Hindi)"
               value={quickSubject}
               onChange={(e) => setQuickSubject(e.target.value)}
-              className="w-28 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
+              className="w-full md:w-28 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
             />
             <input
               type="number"
               placeholder="Start Roll"
               value={quickStartRoll}
               onChange={(e) => setQuickStartRoll(e.target.value)}
-              className="w-24 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
+              className="w-full md:w-24 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
             />
             <input
               type="number"
-              placeholder="हर सेक्शन में छात्र"
+              placeholder="छात्र/सेक्शन"
               value={quickPerSectionCount}
               onChange={(e) => setQuickPerSectionCount(e.target.value)}
-              className="w-28 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
+              className="w-full md:w-28 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
             />
             <button
               type="button"
               onClick={handleAddThreeSections}
-              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs shadow-sm transition-all"
+              className="col-span-2 sm:col-span-4 md:col-auto w-full md:w-auto px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs shadow-sm transition-all"
             >
               + 3 सेक्शन जोड़ें (A, B, C)
             </button>

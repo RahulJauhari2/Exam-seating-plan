@@ -15,6 +15,7 @@ export default function RoomDeskChart({ seatingResult, examDetails, absentStuden
   const { rooms = [] } = seatingResult;
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.roomId || 'all');
   const [viewMode, setViewMode] = useState('columns'); // 'columns' or 'grid'
+  const [mobileColFilter, setMobileColFilter] = useState('all'); // 'all', 0, 1, 2
 
   const activeRooms = selectedRoomId === 'all' 
     ? rooms 
@@ -180,17 +181,50 @@ export default function RoomDeskChart({ seatingResult, examDetails, absentStuden
               </div>
 
               {/* Teacher / Blackboard indicator */}
-              <div className="mb-6 text-center">
-                <div className="inline-block px-8 py-1.5 bg-slate-800 text-white text-xs font-extrabold tracking-widest uppercase rounded-lg shadow-sm border border-slate-700">
-                  ⬛ BLACKBOARD / TEACHER'S TABLE (आगे का हिस्सा) ⬛
+              <div className="mb-4 sm:mb-6 text-center">
+                <div className="inline-block px-5 sm:px-8 py-1.5 bg-slate-800 text-white text-[11px] sm:text-xs font-extrabold tracking-widest uppercase rounded-lg shadow-sm border border-slate-700">
+                  ⬛ BLACKBOARD / TEACHER'S TABLE (आगे) ⬛
                 </div>
               </div>
+
+              {/* Mobile Column Switcher (Visible on mobile screens) */}
+              {viewMode === 'columns' && columns.length > 1 && (
+                <div className="lg:hidden flex items-center justify-center gap-1.5 mb-4 no-print overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setMobileColFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      mobileColFilter === 'all'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    सभी कॉलम ({columns.length})
+                  </button>
+                  {columns.map((c, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setMobileColFilter(i.toString())}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                        mobileColFilter === i.toString()
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {i === 0 ? 'बायां (7)' : i === 1 ? 'मध्य (6)' : i === 2 ? 'दायां (7)' : `कॉलम ${i+1}`}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Physical Columns View (Left: 7, Middle: 6, Right: 7) */}
               {viewMode === 'columns' ? (
                 <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 justify-center items-start">
-                  {columns.map((col, colIdx) => (
-                    <React.Fragment key={colIdx}>
+                  {columns
+                    .filter((_, colIdx) => mobileColFilter === 'all' || mobileColFilter === colIdx.toString())
+                    .map((col, colIdx) => (
+                    <React.Fragment key={col.colIndex}>
                       {/* Column Container */}
                       <div className="flex-1 w-full bg-slate-50/70 p-3 sm:p-4 rounded-2xl border border-slate-200">
                         {/* Column Header */}

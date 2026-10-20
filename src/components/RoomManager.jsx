@@ -113,7 +113,7 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
       <div className="p-4 sm:p-6 space-y-6">
         {/* Rooms Table */}
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[620px]">
             <thead className="bg-slate-100/80 text-slate-700 font-semibold uppercase tracking-wider border-b border-slate-200">
               <tr>
                 <th className="px-3 py-2.5 w-12 text-center">क्रम</th>
