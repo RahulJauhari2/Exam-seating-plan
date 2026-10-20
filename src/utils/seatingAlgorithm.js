@@ -18,6 +18,29 @@
  *    - Aggregates Roll Numbers From - To and total students per class for each room.
  */
 
+export function getColumnSplit(benchesCount, colCount = 3, customSplit = null) {
+  if (customSplit && Array.isArray(customSplit) && customSplit.length === colCount) {
+    const sum = customSplit.reduce((a, b) => a + Number(b), 0);
+    if (sum === benchesCount) return customSplit.map(Number);
+  }
+  if (colCount <= 1) return [benchesCount];
+  if (benchesCount === 20 && colCount === 3) return [7, 6, 7];
+
+  const base = Math.floor(benchesCount / colCount);
+  const remainder = benchesCount % colCount;
+  const result = Array(colCount).fill(base);
+
+  if (remainder === 2 && colCount === 3) {
+    result[0] += 1;
+    result[2] += 1;
+  } else {
+    for (let i = 0; i < remainder; i++) {
+      result[i] += 1;
+    }
+  }
+  return result;
+}
+
 export function generateSeatingPlan({ classes, rooms }) {
   // Step 1: Create queues of students for each class and section
   // Structure: { [gradeName]: { [section]: [students...] } }
@@ -323,11 +346,15 @@ export function generateSeatingPlan({ classes, rooms }) {
       return a.section.localeCompare(b.section);
     });
 
+    const colCount = Number(room.columns) || 3;
+    const columnSplit = getColumnSplit(benchCount, colCount, room.columnSplit);
+
     roomAllocations.push({
       roomId: room.id,
       roomName: room.name,
       benchesCount: benchCount,
-      columns: room.columns || 3,
+      columns: colCount,
+      columnSplit: columnSplit,
       capacity: roomCapacity,
       seatedCount: studentsInRoom.length,
       benches: benches,

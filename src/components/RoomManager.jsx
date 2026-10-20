@@ -7,8 +7,10 @@ import {
   ArrowDown, 
   CheckCircle2, 
   AlertTriangle,
-  Armchair
+  Armchair,
+  Columns3
 } from 'lucide-react';
+import { getColumnSplit } from '../utils/seatingAlgorithm';
 
 export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) {
   const [newRoom, setNewRoom] = useState({
@@ -159,17 +161,23 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <select
-                        value={room.columns || 3}
-                        onChange={(e) => handleUpdate(room.id, 'columns', e.target.value)}
-                        className="px-2 py-1 border border-slate-200 rounded font-medium text-slate-700 bg-white"
-                      >
-                        <option value={2}>2 कॉलम</option>
-                        <option value={3}>3 कॉलम</option>
-                        <option value={4}>4 कॉलम</option>
-                        <option value={5}>5 कॉलम</option>
-                        <option value={6}>6 कॉलम</option>
-                      </select>
+                      <div className="flex flex-col gap-1">
+                        <select
+                          value={room.columns || 3}
+                          onChange={(e) => handleUpdate(room.id, 'columns', e.target.value)}
+                          className="px-2 py-1 border border-slate-200 rounded font-medium text-slate-700 bg-white"
+                        >
+                          <option value={2}>2 कॉलम</option>
+                          <option value={3}>3 कॉलम (Left, Mid, Right)</option>
+                          <option value={4}>4 कॉलम</option>
+                          <option value={5}>5 कॉलम</option>
+                          <option value={6}>6 कॉलम</option>
+                        </select>
+                        <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-center">
+                          पंक्ति: {getColumnSplit(Number(room.benches) || 0, Number(room.columns) || 3, room.columnSplit).join(' + ')}
+                          {(Number(room.columns) || 3) === 3 && Number(room.benches) === 20 && ' (7+6+7)'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
