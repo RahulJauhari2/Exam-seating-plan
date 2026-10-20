@@ -205,6 +205,31 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
 
                         {/* Benches in this column */}
                         <div className="space-y-3">
+                          {/* Front Row (Row 1): Teacher / Invigilator Table if Middle Column has fewer benches */}
+                          {col.rowCount < maxRows && colIdx === 1 && (
+                            <div className="border-2 border-indigo-400 bg-gradient-to-r from-indigo-50 via-amber-50/50 to-indigo-50 rounded-xl p-3 shadow-sm text-center">
+                              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-indigo-200 text-[11px] font-bold text-indigo-900">
+                                <span className="flex items-center gap-1.5">
+                                  <span>👨‍🏫 पंक्ति 1</span>
+                                  <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded text-[10px] font-extrabold">
+                                    शिक्षक सीट
+                                  </span>
+                                </span>
+                                <span className="text-[10px] text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded font-extrabold">
+                                  Invigilator Desk
+                                </span>
+                              </div>
+                              <div className="py-1">
+                                <div className="font-black text-xs text-indigo-950 flex items-center justify-center gap-1.5">
+                                  <span>कक्ष निरीक्षक / शिक्षक मेज</span>
+                                </div>
+                                <div className="text-[10px] text-slate-600 font-semibold mt-0.5">
+                                  (प्रश्न पत्र, उत्तर पुस्तिका व उपस्थिति पटल)
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {col.benches.map((bench, rowIdx) => {
                             const left = bench.leftSeat;
                             const right = bench.rightSeat;
@@ -213,6 +238,13 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                               right &&
                               left.gradeGroup === right.gradeGroup &&
                               left.subject === right.subject;
+
+                            // Calculate actual physical row number
+                            // If middle column with front teacher desk, student benches start from Row 2!
+                            const actualRowNumber =
+                              col.rowCount < maxRows && colIdx === 1
+                                ? rowIdx + 2
+                                : rowIdx + 1;
 
                             return (
                               <div
@@ -228,7 +260,7 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                                 {/* Bench Header */}
                                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 pb-1.5 mb-1.5 border-b border-slate-100">
                                   <span className="font-mono text-slate-800">
-                                    पंक्ति {rowIdx + 1} • बेंच #{bench.benchNumber}
+                                    पंक्ति {actualRowNumber} • बेंच #{bench.benchNumber}
                                   </span>
                                   {!isConflict && (left || right) && (
                                     <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
@@ -309,13 +341,6 @@ export default function RoomDeskChart({ seatingResult, examDetails }) {
                               </div>
                             );
                           })}
-
-                          {/* If this column has fewer rows than maxRows (e.g. Middle column has 6 rows while Left and Right have 7), show empty gap */}
-                          {col.rowCount < maxRows && (
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-100/50 text-slate-400 text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[85px]">
-                              <span>🚶‍♂️ पंक्ति {maxRows}: खाली गलियारा / रास्ता (No Desk)</span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
