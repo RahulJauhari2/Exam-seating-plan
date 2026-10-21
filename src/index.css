@@ -8,16 +8,25 @@
   }
 }
 
-/* Custom Print Rules */
+/* Custom Print Rules for Perfect A4 Sheet Output */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 6mm 8mm;
   }
 
-  body {
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
+
+  html, body {
     background: white !important;
     color: black !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .no-print {
@@ -28,13 +37,33 @@
     display: block !important;
   }
 
+  /* Force 1 room per A4 page without spilling */
+  .print-room-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    max-height: 284mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Don't break page on the very last element */
+  .print-room-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   .page-break-after {
-    page-break-after: always;
-    break-after: page;
+    page-break-after: always !important;
+    break-after: page !important;
   }
 
   .page-break-inside-avoid {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }

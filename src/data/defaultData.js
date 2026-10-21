@@ -58,32 +58,46 @@ export const DEFAULT_SHIFT_1 = {
 export const DEFAULT_SHIFT_2 = {
   id: 'shift_2',
   name: '2nd Meeting (Shift 2: Afternoon)',
-  timeRange: '02:00 PM - 05:15 PM',
-  examName: 'Annual School Examination 2026',
-  schoolName: 'Govt. Model Inter College / Examination Center',
+  timeRange: '01:00 PM - 03:00 PM',
+  examName: 'Half Yearly  Examination 2026',
+  schoolName: 'A B V I C Katra Shahjahanpur',
   classes: [
     // 6th (Sections A, B, C)
-    { id: 'c6a', name: '6', section: 'A', subject: 'Social Science', startRoll: 601, totalStudents: 35, color: 'bg-teal-100 text-teal-800 border-teal-300' },
-    { id: 'c6b', name: '6', section: 'B', subject: 'Social Science', startRoll: 636, totalStudents: 35, color: 'bg-teal-100 text-teal-800 border-teal-300' },
-    { id: 'c6c', name: '6', section: 'C', subject: 'Social Science', startRoll: 671, totalStudents: 30, color: 'bg-teal-100 text-teal-800 border-teal-300' },
+    { id: 'c6a', name: '6', section: 'A', subject: '', startRoll: 6101, totalStudents: 65, color: 'bg-teal-100 text-teal-800 border-teal-300' },
+    { id: 'c6b', name: '6', section: 'B', subject: '', startRoll: 6201, totalStudents: 58, color: 'bg-teal-100 text-teal-800 border-teal-300' },
+    { id: 'c6c', name: '6', section: 'C', subject: '', startRoll: 6301, totalStudents: 27, color: 'bg-teal-100 text-teal-800 border-teal-300' },
 
     // 7th (Sections A, B, C)
-    { id: 'c7a', name: '7', section: 'A', subject: 'Science', startRoll: 701, totalStudents: 35, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-    { id: 'c7b', name: '7', section: 'B', subject: 'Science', startRoll: 736, totalStudents: 35, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-    { id: 'c7c', name: '7', section: 'C', subject: 'Science', startRoll: 771, totalStudents: 30, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+    { id: 'c7a', name: '7', section: 'A', subject: '', startRoll: 7101, totalStudents: 70, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+    { id: 'c7b', name: '7', section: 'B', subject: '', startRoll: 7201, totalStudents: 65, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+    { id: 'c7c', name: '7', section: 'C', subject: '', startRoll: 7301, totalStudents: 22, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
 
     // 8th (Sections A, B, C)
-    { id: 'c8a', name: '8', section: 'A', subject: 'English', startRoll: 801, totalStudents: 35, color: 'bg-rose-100 text-rose-800 border-rose-300' },
-    { id: 'c8b', name: '8', section: 'B', subject: 'English', startRoll: 836, totalStudents: 35, color: 'bg-rose-100 text-rose-800 border-rose-300' },
-    { id: 'c8c', name: '8', section: 'C', subject: 'English', startRoll: 871, totalStudents: 30, color: 'bg-rose-100 text-rose-800 border-rose-300' },
+    { id: 'c8a', name: '8', section: 'A', subject: '', startRoll: 8101, totalStudents: 60, color: 'bg-rose-100 text-rose-800 border-rose-300' },
+    { id: 'c8b', name: '8', section: 'B', subject: '', startRoll: 8201, totalStudents: 55, color: 'bg-rose-100 text-rose-800 border-rose-300' },
+    { id: 'c8c', name: '8', section: 'C', subject: '', startRoll: 8301, totalStudents: 48, color: 'bg-rose-100 text-rose-800 border-rose-300' },
   ],
   rooms: [
-    { id: 'r1', name: 'Room 101', benches: 18, columns: 3 },
-    { id: 'r2', name: 'Room 102', benches: 18, columns: 3 },
-    { id: 'r3', name: 'Room 103', benches: 20, columns: 4 },
-    { id: 'r4', name: 'Room 104', benches: 20, columns: 4 },
-    { id: 'r5', name: 'Hall 1 (Main Hall)', benches: 50, columns: 5 },
-    { id: 'r6', name: 'Hall 2 (Auditorium)', benches: 50, columns: 5 },
+     { id: 'r1', name: 'Room  01', benches: 20, columns: 3 },
+    { id: 'r2', name: 'Room  02', benches: 20, columns: 3 },
+    { id: 'r3', name: 'Room  03', benches: 20, columns: 3 },
+    { id: 'r4', name: 'Room  04', benches: 20, columns: 3 },
+    { id: 'r5', name: 'Room  05', benches: 20, columns: 3 },
+    { id: 'r6', name: 'Room  06', benches: 20, columns: 3 },
+    { id: 'r7', name: 'Room  07', benches: 20, columns: 3 },
+    { id: 'r8', name: 'Room  08', benches: 20, columns: 3 },
+  
+    { id: 'r9', name: 'Room  09',  benches: 20, columns: 3 },
+    { id: 'r10', name: 'Room  10', benches: 20, columns: 3 },
+    { id: 'r11', name: 'Room  11', benches: 20, columns: 3 },
+    { id: 'r12', name: 'Room  12', benches: 20, columns: 3 },
+    { id: 'r13', name: 'Room  13', benches: 20, columns: 3 },
+    { id: 'r14', name: 'Room  14', benches: 20, columns: 3 },
+    { id: 'r15', name: 'Room  15', benches: 20, columns: 3 },
+    { id: 'r16', name: 'Room  16', benches: 20, columns: 3 },
+    { id: 'r17', name: 'Room  17', benches: 20, columns: 3 },
+    { id: 'r18', name: 'Room  18', benches: 20, columns: 3 },
+    
   ]
 };
 
