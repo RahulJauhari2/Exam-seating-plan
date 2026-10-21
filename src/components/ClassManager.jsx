@@ -179,17 +179,17 @@ export default function ClassManager({ classes, setClasses }) {
 
         {/* Classes Table / List */}
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[720px]">
             <thead className="bg-slate-100/80 text-slate-700 font-semibold uppercase tracking-wider border-b border-slate-200">
               <tr>
-                <th className="px-3 py-2.5 w-12 text-center">#</th>
-                <th className="px-3 py-2.5">कक्षा (Class)</th>
-                <th className="px-3 py-2.5">सेक्शन (Section)</th>
-                <th className="px-3 py-2.5">विषय (Subject)</th>
-                <th className="px-3 py-2.5">Start Roll No.</th>
-                <th className="px-3 py-2.5">छात्र संख्या (Total)</th>
-                <th className="px-3 py-2.5">Roll No. Range</th>
-                <th className="px-3 py-2.5 w-16 text-center">हटाएं</th>
+                <th className="px-3 py-2.5 w-12 text-center whitespace-nowrap">#</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">कक्षा (Class)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">सेक्शन (Section)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">विषय (Subject)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">Start Roll No.</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">छात्र संख्या (Total)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">Roll No. Range</th>
+                <th className="px-3 py-2.5 w-16 text-center whitespace-nowrap">हटाएं</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -197,62 +197,62 @@ export default function ClassManager({ classes, setClasses }) {
                 const endRoll = (Number(cls.startRoll) || 1) + (Number(cls.totalStudents) || 1) - 1;
                 return (
                   <tr key={cls.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-3 py-2 text-center text-slate-400 font-medium">
+                    <td className="px-3 py-2.5 text-center text-slate-400 font-medium whitespace-nowrap">
                       {idx + 1}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-3 h-3 rounded-full border ${cls.color}`}></span>
                         <input
                           type="text"
                           value={cls.name}
                           onChange={(e) => handleUpdate(cls.id, 'name', e.target.value)}
-                          className="w-16 px-2 py-1 border border-slate-200 rounded font-semibold text-slate-800 focus:outline-indigo-500"
+                          className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-800 focus:outline-indigo-500 bg-white"
                         />
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="text"
                         value={cls.section}
                         onChange={(e) => handleUpdate(cls.id, 'section', e.target.value.toUpperCase())}
-                        className="w-14 px-2 py-1 border border-slate-200 rounded font-bold text-indigo-700 uppercase focus:outline-indigo-500 text-center"
+                        className="w-14 px-2 py-1.5 border border-slate-200 rounded-lg font-bold text-indigo-700 uppercase focus:outline-indigo-500 text-center bg-white"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="text"
                         value={cls.subject}
                         onChange={(e) => handleUpdate(cls.id, 'subject', e.target.value)}
-                        className="w-28 px-2 py-1 border border-slate-200 rounded text-slate-700 focus:outline-indigo-500"
+                        className="w-28 px-2 py-1.5 border border-slate-200 rounded-lg text-slate-700 focus:outline-indigo-500 bg-white"
                         placeholder="Subject"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="number"
                         value={cls.startRoll}
                         onChange={(e) => handleUpdate(cls.id, 'startRoll', e.target.value)}
-                        className="w-20 px-2 py-1 border border-slate-200 rounded font-mono text-slate-800 focus:outline-indigo-500"
+                        className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-indigo-500 text-center bg-white"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="number"
                         value={cls.totalStudents}
                         onChange={(e) => handleUpdate(cls.id, 'totalStudents', e.target.value)}
-                        className="w-20 px-2 py-1 border border-slate-200 rounded font-bold text-slate-800 focus:outline-indigo-500"
+                        className="w-20 px-2 py-1.5 border border-slate-200 rounded-lg font-bold text-slate-800 focus:outline-indigo-500 text-center bg-white"
                       />
                     </td>
-                    <td className="px-3 py-2 font-mono font-medium text-slate-600">
-                      <span className="px-2 py-0.5 bg-slate-100 rounded border border-slate-200">
+                    <td className="px-3 py-2.5 font-mono font-medium text-slate-600 whitespace-nowrap">
+                      <span className="px-2.5 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-700">
                         {cls.startRoll} - {endRoll}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <button
                         onClick={() => handleDelete(cls.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                         title="हटाएं"
                       >
                         <Trash2 className="w-4 h-4" />

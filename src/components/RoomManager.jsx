@@ -8,7 +8,8 @@ import {
   CheckCircle2, 
   AlertTriangle,
   Armchair,
-  Columns3
+  Columns3,
+  Users
 } from 'lucide-react';
 import { getColumnSplit } from '../utils/seatingAlgorithm';
 
@@ -16,7 +17,7 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
   const [newRoom, setNewRoom] = useState({
     name: 'Room 106',
     benches: 20,
-    columns: 4,
+    columns: 3,
   });
 
   const handleAddRoom = (e) => {
@@ -113,59 +114,61 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
       <div className="p-4 sm:p-6 space-y-6">
         {/* Rooms Table */}
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left text-xs min-w-[620px]">
+          <table className="w-full text-left text-xs min-w-[760px]">
             <thead className="bg-slate-100/80 text-slate-700 font-semibold uppercase tracking-wider border-b border-slate-200">
               <tr>
-                <th className="px-3 py-2.5 w-12 text-center">क्रम</th>
-                <th className="px-3 py-2.5">कमरे का नाम (Room / Hall Name)</th>
-                <th className="px-3 py-2.5">बेंच क्षमता (Benches)</th>
-                <th className="px-3 py-2.5">कुल सीटें (Capacity: 2/bench)</th>
-                <th className="px-3 py-2.5">कॉलम लेआउट (Cols)</th>
-                <th className="px-3 py-2.5 w-24 text-center">क्रम बदलें</th>
-                <th className="px-3 py-2.5 w-16 text-center">हटाएं</th>
+                <th className="px-3 py-2.5 w-12 text-center whitespace-nowrap">क्रम</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">कमरे का नाम (Room / Hall Name)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">बेंच क्षमता (Benches)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">कुल सीटें (Capacity: 2/bench)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">कॉलम लेआउट (Cols)</th>
+                <th className="px-3 py-2.5 w-24 text-center whitespace-nowrap">क्रम बदलें</th>
+                <th className="px-3 py-2.5 w-16 text-center whitespace-nowrap">हटाएं</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rooms.map((room, idx) => {
                 const seats = (Number(room.benches) || 0) * 2;
+                const colSplit = getColumnSplit(Number(room.benches) || 0, Number(room.columns) || 3, room.columnSplit);
                 return (
                   <tr key={room.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-3 py-2 text-center text-slate-400 font-medium">
+                    <td className="px-3 py-2.5 text-center text-slate-400 font-medium whitespace-nowrap">
                       {idx + 1}
                     </td>
-                    <td className="px-3 py-2 font-medium">
+                    <td className="px-3 py-2.5 font-medium whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <Armchair className="w-4 h-4 text-slate-400" />
+                        <Armchair className="w-4 h-4 text-slate-400 shrink-0" />
                         <input
                           type="text"
                           value={room.name}
                           onChange={(e) => handleUpdate(room.id, 'name', e.target.value)}
-                          className="w-48 px-2 py-1 border border-slate-200 rounded font-semibold text-slate-800 focus:outline-blue-500"
+                          className="w-44 px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-800 focus:outline-blue-500 bg-white"
                         />
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number"
                           value={room.benches}
                           onChange={(e) => handleUpdate(room.id, 'benches', e.target.value)}
-                          className="w-20 px-2 py-1 border border-slate-200 rounded font-bold text-slate-800 focus:outline-blue-500 text-center"
+                          className="w-20 px-2 py-1.5 border border-slate-200 rounded-lg font-bold text-slate-800 focus:outline-blue-500 text-center bg-white"
                         />
-                        <span className="text-slate-500 font-medium">बेंच</span>
+                        <span className="text-slate-500 font-medium text-xs">बेंच</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2">
-                      <span className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg font-bold text-xs">
-                        {seats} छात्र (सीटें)
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg font-bold text-xs whitespace-nowrap shadow-2xs">
+                        <span>{seats} छात्र</span>
+                        <span className="text-[11px] font-semibold text-blue-600">({room.benches} बेंच)</span>
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-1">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <div className="flex flex-col gap-1 w-48">
                         <select
                           value={room.columns || 3}
                           onChange={(e) => handleUpdate(room.id, 'columns', e.target.value)}
-                          className="px-2 py-1 border border-slate-200 rounded font-medium text-slate-700 bg-white"
+                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-700 bg-white text-xs focus:outline-blue-500"
                         >
                           <option value={2}>2 कॉलम</option>
                           <option value={3}>3 कॉलम (Left, Mid, Right)</option>
@@ -173,19 +176,18 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
                           <option value={5}>5 कॉलम</option>
                           <option value={6}>6 कॉलम</option>
                         </select>
-                        <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-center">
-                          पंक्ति: {getColumnSplit(Number(room.benches) || 0, Number(room.columns) || 3, room.columnSplit).join(' + ')}
-                          {(Number(room.columns) || 3) === 3 && Number(room.benches) === 20 && ' (7+6+7)'}
+                        <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-center whitespace-nowrap">
+                          पंक्ति: {colSplit.join(' + ')}
                         </span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
                           onClick={() => moveRoom(idx, -1)}
                           disabled={idx === 0}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 rounded"
+                          className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-20 rounded-lg hover:bg-slate-100 transition-colors"
                           title="ऊपर ले जाएं"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
@@ -194,17 +196,18 @@ export default function RoomManager({ rooms, setRooms, totalStudentsRequired }) 
                           type="button"
                           onClick={() => moveRoom(idx, 1)}
                           disabled={idx === rooms.length - 1}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 rounded"
+                          className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-20 rounded-lg hover:bg-slate-100 transition-colors"
                           title="नीचे ले जाएं"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <button
+                        type="button"
                         onClick={() => handleDelete(room.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                         title="हटाएं"
                       >
                         <Trash2 className="w-4 h-4" />
