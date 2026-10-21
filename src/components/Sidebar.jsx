@@ -63,6 +63,13 @@ export default function Sidebar({
       icon: '📝',
       count: absentCount,
     },
+    {
+      id: 'exam-scheme',
+      number: '7',
+      title: 'Scheme & Papers',
+      hindi: 'परीक्षा स्कीम व पेपर',
+      icon: '📅',
+    },
   ];
 
   const handleSelectTab = (tabId) => {
@@ -85,7 +92,7 @@ export default function Sidebar({
 
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-slate-400 font-bold px-1.5 py-0.5 bg-slate-100 rounded-md">
-              6 मॉड्यूल्स
+              7 मॉड्यूल्स
             </span>
 
             {/* Close Button on Mobile Drawer */}

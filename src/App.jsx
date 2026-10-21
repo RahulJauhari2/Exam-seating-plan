@@ -10,6 +10,7 @@ import RoomDeskChart from './components/RoomDeskChart';
 import DoorSlips from './components/DoorSlips';
 import StudentFinder from './components/StudentFinder';
 import AbsenteeManager from './components/AbsenteeManager';
+import ExamSchemeManager from './components/ExamSchemeManager';
 import { AlertTriangle, ShieldCheck, Compass } from 'lucide-react';
 
 export default function App() {
@@ -203,6 +204,16 @@ export default function App() {
               setAbsentStudents={setAbsentStudents}
             />
           )}
+
+          {activeTab === 'exam-scheme' && (
+            <ExamSchemeManager
+              seatingResult={seatingResult}
+              activeShift={activeShift}
+              classes={classes}
+              examDetails={examDetails}
+              setExamDetails={setExamDetails}
+            />
+          )}
         </main>
       </div>
 
@@ -213,7 +224,7 @@ export default function App() {
         className="lg:hidden fixed bottom-4 left-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
       >
         <Compass className="w-4 h-4" />
-        <span>मेन्यू (6 Tabs)</span>
+        <span>मेन्यू (7 Tabs)</span>
         {Object.keys(absentStudents).length > 0 && (
           <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-black">
             {Object.keys(absentStudents).length}
