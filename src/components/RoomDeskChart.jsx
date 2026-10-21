@@ -366,9 +366,15 @@ export default function RoomDeskChart({ seatingResult, examDetails, absentStuden
                                         <div className="font-mono font-black text-sm my-0.5 text-slate-900 print:!text-[11px] print:!my-0">
                                           #{left.rollNo}
                                         </div>
-                                        <div className="text-[9px] truncate text-slate-600 font-medium print:!text-[8px]">
-                                          {left.subject}
-                                        </div>
+                                        {left.name ? (
+                                          <div className="text-[10px] font-bold truncate text-slate-800 print:!text-[8px]" title={`${left.name}${left.fatherName ? ` S/D of ${left.fatherName}` : ''}`}>
+                                            {left.name}
+                                          </div>
+                                        ) : (
+                                          <div className="text-[9px] truncate text-slate-600 font-medium print:!text-[8px]">
+                                            {left.subject}
+                                          </div>
+                                        )}
                                       </>
                                     ) : (
                                       <span className="text-[9px] font-bold">खाली</span>
@@ -404,9 +410,15 @@ export default function RoomDeskChart({ seatingResult, examDetails, absentStuden
                                         <div className="font-mono font-black text-sm my-0.5 text-slate-900 print:!text-[11px] print:!my-0">
                                           #{right.rollNo}
                                         </div>
-                                        <div className="text-[9px] truncate text-slate-600 font-medium print:!text-[8px]">
-                                          {right.subject}
-                                        </div>
+                                        {right.name ? (
+                                          <div className="text-[10px] font-bold truncate text-slate-800 print:!text-[8px]" title={`${right.name}${right.fatherName ? ` S/D of ${right.fatherName}` : ''}`}>
+                                            {right.name}
+                                          </div>
+                                        ) : (
+                                          <div className="text-[9px] truncate text-slate-600 font-medium print:!text-[8px]">
+                                            {right.subject}
+                                          </div>
+                                        )}
                                       </>
                                     ) : (
                                       <span className="text-[9px] font-bold">खाली</span>

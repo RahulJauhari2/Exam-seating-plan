@@ -141,7 +141,7 @@ export default function MainGateNotice({ seatingResult, examDetails }) {
                           <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-black text-xs">
                             Class {item.className}-{item.section}
                           </span>
-                          {item.subject && (
+                          {item.subject && !item.subject.startsWith('UP Board') && (
                             <span className="text-[11px] text-slate-500 font-medium">
                               ({item.subject})
                             </span>
@@ -241,7 +241,7 @@ export default function MainGateNotice({ seatingResult, examDetails }) {
                             </span>
                           </td>
                           <td className="px-3 py-1.5 text-slate-700 font-medium border-r border-slate-300">
-                            {item.subject || '-'}
+                            {item.subject && !item.subject.startsWith('UP Board') ? item.subject : 'All Subjects'}
                           </td>
                           <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-900 border-r border-slate-300">
                             <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 rounded text-slate-900">
@@ -301,7 +301,7 @@ export default function MainGateNotice({ seatingResult, examDetails }) {
                       Class {row.className} - {row.section}
                     </td>
                     <td className="px-3 py-1.5 text-slate-600 border-r border-slate-300">
-                      {row.subject}
+                      {row.subject && !row.subject.startsWith('UP Board') ? row.subject : 'All Subjects'}
                     </td>
                     <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-900 border-r border-slate-300">
                       {row.rangeText}

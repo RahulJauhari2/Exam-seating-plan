@@ -7,11 +7,14 @@ import {
   BookOpen, 
   Hash, 
   Sparkles,
-  AlertCircle 
+  AlertCircle,
+  FileSpreadsheet
 } from 'lucide-react';
 import { COLOR_PALETTE } from '../data/defaultData';
+import ExcelImporterModal from './ExcelImporterModal';
 
 export default function ClassManager({ classes, setClasses }) {
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   // New single class form state
   const [newClass, setNewClass] = useState({
     name: '9',
@@ -119,7 +122,17 @@ export default function ClassManager({ classes, setClasses }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsImporterOpen(true)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            title="यूपी बोर्ड आधिकारिक एक्सेल/सीएसवी इम्पोर्ट करें"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>📥 यूपी बोर्ड एक्सेल इम्पोर्ट</span>
+          </button>
+
           <div className="px-3 py-1.5 bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
             <span>कुल छात्र:</span>
             <span className="text-sm font-bold text-indigo-700">{totalStudents}</span>
@@ -337,6 +350,21 @@ export default function ClassManager({ classes, setClasses }) {
           </div>
         </form>
       </div>
+
+      {/* UP Board Excel Import Modal */}
+      <ExcelImporterModal
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+        onImportClasses={(importedClasses, strategy = 'merge') => {
+          if (strategy === 'merge') {
+            const importedGrades = new Set(importedClasses.map((c) => String(c.name).trim()));
+            const retained = classes.filter((c) => !importedGrades.has(String(c.name).trim()));
+            setClasses([...importedClasses, ...retained]);
+          } else {
+            setClasses(importedClasses);
+          }
+        }}
+      />
     </div>
   );
 }

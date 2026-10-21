@@ -59,20 +59,49 @@ export function generateSeatingPlan({ classes, rooms }) {
       gradeQueues[grade] = [];
     }
 
-    for (let i = 0; i < count; i++) {
-      const roll = start + i;
-      const student = {
-        id: `${classKey}-${roll}`,
-        rollNo: roll,
-        className: grade,
-        section: section,
-        subject: cls.subject || 'General',
-        classKey: classKey,
-        gradeGroup: grade,
-        color: cls.color,
-      };
-      gradeQueues[grade].push(student);
-      allStudentsList.push(student);
+    if (cls.studentList && Array.isArray(cls.studentList) && cls.studentList.length > 0) {
+      cls.studentList.forEach((st, i) => {
+        const roll = st.rollNo !== undefined ? st.rollNo : (start + i);
+        const student = {
+          id: st.id || `${classKey}-${roll}`,
+          rollNo: roll,
+          formNumber: st.formNumber || roll,
+          name: st.name || '',
+          fatherName: st.fatherName || '',
+          motherName: st.motherName || '',
+          nameHindi: st.nameHindi || '',
+          gender: st.gender || '',
+          dob: st.dob || '',
+          mobile: st.mobile || '',
+          subjects: st.subjects || [],
+          medium: st.medium || cls.medium || (section.toUpperCase() === 'E' ? 'English' : 'Hindi'),
+          className: grade,
+          section: section,
+          subject: cls.subject || 'General',
+          classKey: classKey,
+          gradeGroup: grade,
+          color: cls.color,
+        };
+        gradeQueues[grade].push(student);
+        allStudentsList.push(student);
+      });
+    } else {
+      for (let i = 0; i < count; i++) {
+        const roll = start + i;
+        const student = {
+          id: `${classKey}-${roll}`,
+          rollNo: roll,
+          className: grade,
+          section: section,
+          medium: cls.medium || (section.toUpperCase() === 'E' ? 'English' : 'Hindi'),
+          subject: cls.subject || 'General',
+          classKey: classKey,
+          gradeGroup: grade,
+          color: cls.color,
+        };
+        gradeQueues[grade].push(student);
+        allStudentsList.push(student);
+      }
     }
   });
 
@@ -217,42 +246,49 @@ export function generateSeatingPlan({ classes, rooms }) {
           rightStudent = popAnyAvoiding(leftStudent.gradeGroup);
         }
       } else {
-        // 1 Grade with multiple sections (or single section)
+        // Only 1 Grade exists in total dataset (e.g. only Class 9 exists)
+        // STRICT ANTI-CHEATING RULE:
+        // Do NOT pair 9A with 9B on the same bench! They have the exact same exam papers!
+        // Instead, seat 1 student per bench (Single Seat) so no cheating is possible!
         leftStudent = popAnyAvoiding(null);
-        if (leftStudent) {
-          // Try different section
-          const activeG = distinctGrades[0];
-          if (gradeQueues[activeG] && gradeQueues[activeG].length > 0) {
-            const secIdx = gradeQueues[activeG].findIndex((s) => s.section !== leftStudent.section);
-            if (secIdx !== -1) {
-              rightStudent = gradeQueues[activeG].splice(secIdx, 1)[0];
-            } else if (isLastRoom || remainingGrades.length <= 1) {
-              // Last room grace: allow remaining students
-              rightStudent = gradeQueues[activeG].shift();
-            }
-          }
-        }
+        rightStudent = null; // Right seat remains empty!
       }
 
       // If left student was picked but right student couldn't be paired with a DIFFERENT grade:
       if (leftStudent && !rightStudent) {
         const remaining = getRemainingDistinctGrades();
         if (remaining.length > 0) {
-          // Try to get any other student
+          // Try to get any other student from a DIFFERENT grade
           rightStudent = popAnyAvoiding(leftStudent.gradeGroup);
         }
 
         // LAST ROOM GRACE RULE:
         // "last room me na mix ho pye to koi baat nahi"
-        // If we are in the last room (or only 1 grade has remaining students anywhere in center):
+        // In the last room (or when all other classes have completely finished):
+        // Allow remaining students of the same grade to occupy the remaining benches
+        // so that no student is left unseated when total seats exist in the center!
         if (!rightStudent && (isLastRoom || remaining.length <= 1)) {
-          // Take any remaining student so no student is left unseated
-          for (const g of distinctGrades) {
-            if (gradeQueues[g] && gradeQueues[g].length > 0) {
+          const g = leftStudent.gradeGroup;
+          if (gradeQueues[g] && gradeQueues[g].length > 0) {
+            // Prefer different section first (e.g. 9A with 9C or 9E)
+            const diffSecIdx = gradeQueues[g].findIndex((st) => st.section !== leftStudent.section);
+            if (diffSecIdx !== -1) {
+              rightStudent = gradeQueues[g].splice(diffSecIdx, 1)[0];
+            } else {
               rightStudent = gradeQueues[g].shift();
-              break;
             }
           }
+        }
+      }
+
+      // Strict enforcement for regular rooms: A bench MUST NOT seat two students of the SAME grade together
+      // UNLESS we are in the last room grace and all other classes have completed!
+      if (leftStudent && rightStudent && leftStudent.gradeGroup === rightStudent.gradeGroup) {
+        const remaining = getRemainingDistinctGrades();
+        if (!isLastRoom && remaining.length > 1) {
+          // In regular rooms, enforce strict anti-cheating separation
+          gradeQueues[rightStudent.gradeGroup].unshift(rightStudent);
+          rightStudent = null;
         }
       }
 
@@ -371,6 +407,34 @@ export function generateSeatingPlan({ classes, rooms }) {
     }
   });
 
+  // Detailed breakdown of unseated students by class & section
+  const unseatedBreakdown = [];
+  if (unseatedStudents.length > 0) {
+    const unseatedMap = {};
+    unseatedStudents.forEach((st) => {
+      const k = `${st.className}-${st.section}`;
+      if (!unseatedMap[k]) {
+        unseatedMap[k] = {
+          className: st.className,
+          section: st.section,
+          rolls: [],
+        };
+      }
+      unseatedMap[k].rolls.push(st.rollNo);
+    });
+
+    Object.values(unseatedMap).forEach((item) => {
+      const sorted = item.rolls.sort((a, b) => a - b);
+      unseatedBreakdown.push({
+        className: item.className,
+        section: item.section,
+        count: sorted.length,
+        fromRoll: sorted[0],
+        toRoll: sorted[sorted.length - 1],
+      });
+    });
+  }
+
   // Global Gate Notice Rows (flat list for entire center)
   const masterGateNotice = [];
   roomAllocations.forEach((rm) => {
@@ -399,6 +463,8 @@ export function generateSeatingPlan({ classes, rooms }) {
     totalSeated: totalStudents - unseatedStudents.length,
     unseatedCount: unseatedStudents.length,
     unseatedStudents,
+    unseatedBreakdown,
+    lastRoomName: rooms[rooms.length - 1]?.name || 'अंतिम कमरा',
     totalBenchesUsed,
   };
 }

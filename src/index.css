@@ -27,6 +27,15 @@
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    overflow: visible !important;
+  }
+
+  /* Eliminate scrollbars and overflow indicators in print */
+  * {
+    scrollbar-width: none !important;
+  }
+  ::-webkit-scrollbar {
+    display: none !important;
   }
 
   .no-print {

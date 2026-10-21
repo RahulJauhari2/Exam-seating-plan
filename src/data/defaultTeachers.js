@@ -1,0 +1,26 @@
+// Default Teacher / Invigilator Staff Directory for A B V I C Katra Shahjahanpur
+
+export const DEFAULT_TEACHERS = [
+  { id: 't1', name: 'श्री ब्रह्मधर मिश्र', englishName: 'MR. BRAHMADHAR MISHRA', designation: 'प्रवक्ता (Lecturer)', subject: 'हिन्दी (Hindi)', mobile: '9415000001', isPresent: true },
+  { id: 't2', name: 'श्री राहुल जौहरी', englishName: 'MR. RAHUL JAUHARI', designation: 'प्रवक्ता (Lecturer)', subject: 'विज्ञान / रसायन (Chemistry)', mobile: '9415000002', isPresent: true },
+  { id: 't3', name: 'श्री अजय कुमार यादव', englishName: 'MR. AJAY KUMAR YADAV', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'गणित (Mathematics)', mobile: '9415000003', isPresent: true },
+  { id: 't4', name: 'श्री राजेश वर्मा', englishName: 'MR. RAJESH VERMA', designation: 'प्रवक्ता (Lecturer)', subject: 'भौतिक विज्ञान (Physics)', mobile: '9415000004', isPresent: true },
+  { id: 't5', name: 'श्री मनोज शर्मा', englishName: 'MR. MANOJ SHARMA', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'कम्प्यूटर (Computer)', mobile: '9415000005', isPresent: true },
+  { id: 't6', name: 'श्री सुरेश चन्द्र', englishName: 'MR. SURESH CHANDRA', designation: 'प्रवक्ता (Lecturer)', subject: 'जीव विज्ञान (Biology)', mobile: '9415000006', isPresent: true },
+  { id: 't7', name: 'श्री राकेश कुमार सिंह', englishName: 'MR. RAKESH KUMAR SINGH', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'अंग्रेजी (English)', mobile: '9415000007', isPresent: true },
+  { id: 't8', name: 'श्री दिनेश पाण्डेय', englishName: 'MR. DINESH PANDEY', designation: 'प्रवक्ता (Lecturer)', subject: 'वाणिज्य / बहीखाता (Commerce)', mobile: '9415000008', isPresent: true },
+  { id: 't9', name: 'श्री संजय तिवारी', englishName: 'MR. SANJAY TIWARI', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'सामाजिक विज्ञान (SST)', mobile: '9415000009', isPresent: true },
+  { id: 't10', name: 'श्री आलोक त्रिपाठी', englishName: 'MR. ALOK TRIPATHI', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'चित्रकला (Art)', mobile: '9415000010', isPresent: true },
+  { id: 't11', name: 'श्री विनोद कुमार मिश्र', englishName: 'MR. VINOD KUMAR MISHRA', designation: 'प्रवक्ता (Lecturer)', subject: 'संस्कृत (Sanskrit)', mobile: '9415000011', isPresent: true },
+  { id: 't12', name: 'श्री धर्मेन्द्र सिंह', englishName: 'MR. DHARMENDRA SINGH', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'शारीरिक शिक्षा (P.E.)', mobile: '9415000012', isPresent: true },
+  { id: 't13', name: 'श्रीमती सुनीता देवी', englishName: 'SMT. SUNITA DEVI', designation: 'प्रवक्ता (Lecturer)', subject: 'अर्थशास्त्र (Economics)', mobile: '9415000013', isPresent: true },
+  { id: 't14', name: 'श्रीमती पूनम सक्सेना', englishName: 'SMT. POONAM SAXENA', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'गृह विज्ञान (Home Science)', mobile: '9415000014', isPresent: true },
+  { id: 't15', name: 'श्री अनिल कुमार', englishName: 'MR. ANIL KUMAR', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'विज्ञान (Science)', mobile: '9415000015', isPresent: true },
+  { id: 't16', name: 'श्री मुकेश यादव', englishName: 'MR. MUKESH YADAV', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'गणित (Math)', mobile: '9415000016', isPresent: true },
+  { id: 't17', name: 'श्री सुनील कुमार', englishName: 'MR. SUNIL KUMAR', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'अंग्रेजी (English)', mobile: '9415000017', isPresent: true },
+  { id: 't18', name: 'श्री रामवीर सिंह', englishName: 'MR. RAMVEER SINGH', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'हिन्दी (Hindi)', mobile: '9415000018', isPresent: true },
+  { id: 't19', name: 'श्री हरीश चन्द्र', englishName: 'MR. HARISH CHANDRA', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'सामाजिक विषय (Social Science)', mobile: '9415000019', isPresent: true },
+  { id: 't20', name: 'श्री आनन्द स्वरूप', englishName: 'MR. ANAND SWAROOP', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'कम्प्यूटर / सामान्य', mobile: '9415000020', isPresent: true },
+  { id: 't21', name: 'श्रीमती रेखा शर्मा', englishName: 'SMT. REKHA SHARMA', designation: 'सहायक अध्यापक (Asst. Teacher)', subject: 'हिन्दी (Hindi)', mobile: '9415000021', isPresent: true },
+  { id: 't22', name: 'श्री प्रदीप कुमार रस्तोगी', englishName: 'MR. PRADEEP RASTOGI', designation: 'प्रवक्ता (Lecturer)', subject: 'वाणिज्य (Commerce)', mobile: '9415000022', isPresent: true },
+];

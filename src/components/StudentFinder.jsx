@@ -32,9 +32,13 @@ export default function StudentFinder({ seatingResult }) {
   const matchedStudents = query
     ? allStudents.filter(
         (s) =>
-          s.rollNo.toString().includes(query) ||
+          (s.rollNo && s.rollNo.toString().includes(query)) ||
+          (s.formNumber && s.formNumber.toString().includes(query)) ||
+          (s.name && s.name.toLowerCase().includes(query)) ||
+          (s.fatherName && s.fatherName.toLowerCase().includes(query)) ||
+          (s.mobile && s.mobile.includes(query)) ||
           `${s.className}-${s.section}`.toLowerCase().includes(query) ||
-          s.subject.toLowerCase().includes(query)
+          (s.subject && s.subject.toLowerCase().includes(query))
       )
     : [];
 
@@ -47,17 +51,16 @@ export default function StudentFinder({ seatingResult }) {
             <Search className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <h2 className="text-base sm:text-xl font-bold text-slate-800">
-            विद्यार्थी रोल नंबर खोजें (Quick Student Seat Finder)
+            विद्यार्थी खोजें (Roll No or Name Seat Finder)
           </h2>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-            गेट पर किसी भी छात्र का रोल नंबर डालें और तुरंत पता करें कि वह किस कमरे और किस बेंच पर बैठेगा
+            गेट पर किसी भी छात्र का रोल नंबर, फॉर्म नंबर या नाम डालें और तुरंत कमरा व बेंच नंबर देखें
           </p>
 
           <div className="mt-4 sm:mt-5 relative">
             <input
               type="text"
-              inputMode="numeric"
-              placeholder="रोल नंबर डालें (उदा. 9105, 10101)..."
+              placeholder="रोल नंबर या छात्र का नाम डालें (उदा. 9105, ABHAY, YADAV)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pl-11 sm:pl-12 rounded-2xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none shadow-sm text-sm font-bold text-slate-800 placeholder:font-normal"
@@ -94,11 +97,26 @@ export default function StudentFinder({ seatingResult }) {
                   key={idx}
                   className="bg-white rounded-2xl border-2 border-slate-200 p-4 shadow-sm hover:border-indigo-400 transition-all"
                 >
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <span className="text-xs font-bold text-slate-400">
-                      रोल नंबर
-                    </span>
-                    <span className="font-mono font-black text-lg text-indigo-600">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                    <div>
+                      {st.name ? (
+                        <>
+                          <h4 className="text-sm font-black text-slate-900 leading-tight">
+                            {st.name}
+                          </h4>
+                          {st.fatherName && (
+                            <p className="text-[10px] text-slate-500 font-semibold">
+                              पिता: {st.fatherName}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs font-bold text-slate-400">
+                          रोल नंबर
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-mono font-black text-lg text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-xl border border-indigo-200">
                       #{st.rollNo}
                     </span>
                   </div>

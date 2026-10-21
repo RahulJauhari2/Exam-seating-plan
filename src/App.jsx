@@ -11,6 +11,8 @@ import DoorSlips from './components/DoorSlips';
 import StudentFinder from './components/StudentFinder';
 import AbsenteeManager from './components/AbsenteeManager';
 import ExamSchemeManager from './components/ExamSchemeManager';
+import TeacherDutyManager from './components/TeacherDutyManager';
+import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { AlertTriangle, ShieldCheck, Compass } from 'lucide-react';
 
 export default function App() {
@@ -34,6 +36,10 @@ export default function App() {
   // Dynamic Classes & Rooms
   const [classes, setClasses] = useState(DEFAULT_SHIFT_1.classes);
   const [rooms, setRooms] = useState(DEFAULT_SHIFT_1.rooms);
+
+  // Teacher Staff & Invigilation Duty State
+  const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
+  const [dutyRoster, setDutyRoster] = useState({});
 
   // Active view tab
   const [activeTab, setActiveTab] = useState('main-gate'); // Open to Main Gate by default or user choice
@@ -145,15 +151,57 @@ export default function App() {
             </div>
           </div>
 
-          {/* Warning if capacity is less */}
+          {/* Warning if capacity is less with precise room and class details */}
           {seatingResult.unseatedCount > 0 && (
-            <div className="mb-6 p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-800 text-xs font-semibold flex items-center gap-3 no-print">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-              <div>
-                <span className="font-bold text-sm block">कमरे की क्षमता कम है!</span>
-                <span>
-                  {seatingResult.unseatedCount} छात्र सीट न मिलने के कारण शेष हैं। कृपया "कमरे और क्षमता" में जाकर और कमरे या बेंच जोड़ें।
-                </span>
+            <div className="mb-6 p-4 sm:p-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 text-xs shadow-xs no-print">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-black text-sm text-rose-900">
+                      कमरे की क्षमता कम है ({seatingResult.unseatedCount} छात्र बिना सीट के शेष हैं)!
+                    </span>
+                    <span className="px-2 py-0.5 bg-rose-200 text-rose-900 rounded font-bold text-[11px]">
+                      कम से कम {Math.ceil(seatingResult.unseatedCount / 2)} और बेंच चाहिए
+                    </span>
+                  </div>
+
+                  <p className="text-rose-800">
+                    परीक्षा केंद्र के अंतिम कमरे <strong>"{seatingResult.lastRoomName}"</strong> तक कुल <strong>{seatingResult.totalCapacity} सीटें</strong> पूरी तरह भर चुकी हैं।
+                  </p>
+
+                  {/* Detailed Class-wise Breakdown of Unseated Students */}
+                  {seatingResult.unseatedBreakdown && seatingResult.unseatedBreakdown.length > 0 && (
+                    <div className="p-2.5 bg-white/80 border border-rose-200 rounded-xl space-y-1 text-[11px]">
+                      <span className="font-bold text-rose-950 block">
+                        सीट न मिल पाने वाले छात्रों का विवरण:
+                      </span>
+                      {seatingResult.unseatedBreakdown.map((ub, uIdx) => (
+                        <div key={uIdx} className="flex items-center justify-between text-rose-800">
+                          <span>
+                            • Class <strong>{ub.className} - {ub.section}</strong> (रोल नंबर <strong>{ub.fromRoll}</strong> से <strong>{ub.toRoll}</strong>)
+                          </span>
+                          <span className="font-black text-rose-900">
+                            {ub.count} छात्र शेष
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-slate-600 text-[11px]">
+                      समाधान: साइडबार में <strong>"Classes & Rooms"</strong> पर जाकर नए कमरे या बेंच जोड़ें।
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('classes-rooms')}
+                      className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer"
+                    >
+                      + कमरा / बेंच जोड़ें
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -212,6 +260,20 @@ export default function App() {
               classes={classes}
               examDetails={examDetails}
               setExamDetails={setExamDetails}
+              dutyRoster={dutyRoster}
+              teachers={teachers}
+            />
+          )}
+
+          {activeTab === 'teacher-duty' && (
+            <TeacherDutyManager
+              teachers={teachers}
+              setTeachers={setTeachers}
+              seatingResult={seatingResult}
+              activeShift={activeShift}
+              dutyRoster={dutyRoster}
+              setDutyRoster={setDutyRoster}
+              examDetails={examDetails}
             />
           )}
         </main>
@@ -224,7 +286,7 @@ export default function App() {
         className="lg:hidden fixed bottom-4 left-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
       >
         <Compass className="w-4 h-4" />
-        <span>मेन्यू (7 Tabs)</span>
+        <span>मेन्यू (8 Tabs)</span>
         {Object.keys(absentStudents).length > 0 && (
           <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-black">
             {Object.keys(absentStudents).length}
