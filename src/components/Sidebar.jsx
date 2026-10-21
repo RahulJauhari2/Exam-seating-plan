@@ -12,7 +12,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-export default function RightSidebar({
+export default function Sidebar({
   activeTab,
   setActiveTab,
   absentCount = 0,
@@ -233,12 +233,12 @@ export default function RightSidebar({
 
   return (
     <>
-      {/* 1. Desktop Right Sidebar (Visible on lg: and above) */}
+      {/* 1. Desktop Left Sidebar (Visible on lg: and above) */}
       <aside className="hidden lg:block w-72 xl:w-80 shrink-0 sticky top-20 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm no-print">
         {sidebarContent}
       </aside>
 
-      {/* 2. Mobile Drawer Overlay (Slide-in from Right on < lg:) */}
+      {/* 2. Mobile Drawer Overlay (Slide-in from Left on < lg:) */}
       {isOpen && (
         <div className="fixed inset-0 z-50 lg:hidden no-print">
           {/* Dark Backdrop */}
@@ -247,8 +247,8 @@ export default function RightSidebar({
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
           />
 
-          {/* Slide-over Right Drawer */}
-          <div className="fixed inset-y-0 right-0 w-80 max-w-[85vw] bg-white shadow-2xl p-4 sm:p-5 flex flex-col z-50 animate-slideLeft">
+          {/* Slide-over Left Drawer */}
+          <div className="fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl p-4 sm:p-5 flex flex-col z-50">
             {sidebarContent}
           </div>
         </div>

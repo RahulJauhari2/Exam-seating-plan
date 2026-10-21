@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from './data/defaultData';
 import { generateSeatingPlan } from './utils/seatingAlgorithm';
 import Navbar from './components/Navbar';
-import RightSidebar from './components/RightSidebar';
+import Sidebar from './components/Sidebar';
 import ClassManager from './components/ClassManager';
 import RoomManager from './components/RoomManager';
 import MainGateNotice from './components/MainGateNotice';
@@ -94,10 +94,23 @@ export default function App() {
         onOpenSidebar={() => setSidebarOpen(true)}
       />
 
-      {/* Main 2-Column Container (Left: Content, Right: Navigation Sidebar) */}
+      {/* Main 2-Column Container (Left: Navigation Sidebar, Right: Content) */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-6 flex flex-col lg:flex-row gap-6 items-start">
         
-        {/* Left / Center Content Area */}
+        {/* Left Navigation Sidebar (Desktop sticky on Left + Mobile slide-over drawer from Left) */}
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          absentCount={Object.keys(absentStudents).length}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          activeShift={activeShift}
+          handleShiftChange={handleShiftChange}
+          seatingResult={seatingResult}
+          onPrint={handlePrint}
+        />
+
+        {/* Right / Center Content Area */}
         <main className="flex-1 w-full min-w-0">
           
           {/* Anti-Adjacent Anti-Cheating Guarantee Banner */}
@@ -191,26 +204,13 @@ export default function App() {
             />
           )}
         </main>
-
-        {/* Right Navigation Sidebar (Desktop sticky + Mobile slide-over drawer) */}
-        <RightSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          absentCount={Object.keys(absentStudents).length}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          activeShift={activeShift}
-          handleShiftChange={handleShiftChange}
-          seatingResult={seatingResult}
-          onPrint={handlePrint}
-        />
       </div>
 
-      {/* Floating Action Button for Mobile Menu */}
+      {/* Floating Action Button for Mobile Menu (Bottom Left) */}
       <button
         type="button"
         onClick={() => setSidebarOpen(true)}
-        className="lg:hidden fixed bottom-4 right-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
+        className="lg:hidden fixed bottom-4 left-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
       >
         <Compass className="w-4 h-4" />
         <span>मेन्यू (6 Tabs)</span>
