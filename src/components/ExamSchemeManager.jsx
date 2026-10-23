@@ -21,18 +21,39 @@ import {
   EXAM_TIMETABLE 
 } from '../data/examSchemeData';
 
+// Helper to check if a class/section or student is English medium
+function isSectionEnglish(c) {
+  if (!c) return false;
+  if (c.medium === 'English') return true;
+  if (c.medium === 'Hindi') return false;
+  const sec = String(c.section || '').toUpperCase().trim();
+  const grade = String(c.name || c.className || c.grade || c.class || '').trim();
+  if (sec === 'E') return true;
+  if (['6', '7', '8'].includes(grade) && sec === 'C') return true;
+  return false;
+}
+
 // Helper to match a student to the correct subject among multiple optional subjects
 function matchSubjectForStudent(student, subs) {
+  if (!student || !subs || subs.length === 0) return null;
+
   // 1. Check registered UP Board subject codes (e.g. from Excel import)
   if (student.subjects && Array.isArray(student.subjects) && student.subjects.length > 0) {
     for (const sub of subs) {
       if (sub.code && student.subjects.includes(String(sub.code).trim())) {
         return sub;
       }
+      const sName = (sub.name || '').toUpperCase().trim();
+      if (student.subjects.some((sj) => {
+        const sjStr = String(sj).toUpperCase().trim();
+        return sjStr === sName || sjStr.includes(sName) || sName.includes(sjStr);
+      })) {
+        return sub;
+      }
     }
   }
 
-  // 2. Check student's class subject string (from Class Manager input)
+  // 2. Check student's class subject string (from Class Manager input or student record)
   const subStr = String(student.subject || '').toLowerCase().trim();
   if (subStr) {
     for (const sub of subs) {
@@ -49,11 +70,39 @@ function matchSubjectForStudent(student, subs) {
   }
 
   // 3. Match on section convention (UP Board standard stream sections)
-  // Section A = Computer (9/10) or Math (11/12)
-  // Section E = English Medium Computer (9/10) or English Medium Math/Science (11/12)
-  // Section B = Art (9/10) or Biology (11/12)
-  // Section C = Commerce (9/10) or Commerce/Accountancy (11/12)
   const sec = String(student.section || '').toUpperCase().trim();
+  const grade = String(student.className || student.grade || student.name || '').trim();
+
+  // For 6th to 8th: Section A = Computer, Section B = Commerce & Art, Section C = English Medium
+  if (['6', '7', '8'].includes(grade)) {
+    if (sec === 'A') {
+      const compSub = subs.find((s) => s.name.toUpperCase().includes('COMPUTER') || s.code === '941' || s.code === '144');
+      if (compSub) return compSub;
+    } else if (sec === 'B') {
+      const stSub = String(student.subject || '').toUpperCase();
+      if (stSub.includes('ART')) {
+        const artSub = subs.find((s) => s.name.toUpperCase().includes('ART') || s.code === '936');
+        if (artSub) return artSub;
+      }
+      if (stSub.includes('COMMERCE')) {
+        const comSub = subs.find((s) => s.name.toUpperCase().includes('COMMERCE') || s.code === '935');
+        if (comSub) return comSub;
+      }
+      const comSub = subs.find((s) => s.name.toUpperCase().includes('COMMERCE') || s.code === '935');
+      const artSub = subs.find((s) => s.name.toUpperCase().includes('ART') || s.code === '936');
+      if (comSub && artSub) {
+        return (Number(student.rollNo || 0) % 2 === 0) ? comSub : artSub;
+      }
+      if (comSub) return comSub;
+      if (artSub) return artSub;
+    } else if (sec === 'C') {
+      const compSub = subs.find((s) => s.name.toUpperCase().includes('COMPUTER') || s.code === '941');
+      if (compSub) return compSub;
+      return subs[0];
+    }
+  }
+
+  // For 9th to 12th:
   if (sec === 'A' || sec === 'E') {
     const compSub = subs.find((s) => s.name.toUpperCase().includes('COMPUTER') || s.code === '941');
     if (compSub) return compSub;
@@ -81,7 +130,6 @@ function matchSubjectForStudent(student, subs) {
 // Calculate paper demand and medium breakdown for a specific subject
 function getSubjectDemand(grade, sub, subList, gradeClasses, allGradeStudents, totalStudentsInGrade, customSplits, splitKey) {
   const countSubjects = subList.length;
-  const hasSubjectCodes = allGradeStudents.some((st) => st.subjects && st.subjects.length > 0);
   const sUpper = (sub.name || '').toUpperCase().trim();
   const sCode = String(sub.code || '').trim();
 
@@ -91,36 +139,45 @@ function getSubjectDemand(grade, sub, subList, gradeClasses, allGradeStudents, t
   let isExact = false;
 
   if (countSubjects === 1) {
-    // 100% of the class takes this single common subject (e.g. Science, Hindi, English, SST)
+    // 100% of the class takes this single common subject (e.g. Science, Hindi, English, SST, or COMMERCE / COMPUTER)
     papers = totalStudentsInGrade;
     isExact = true;
     if (allGradeStudents.length > 0) {
       allGradeStudents.forEach((st) => {
-        if (st.medium === 'English') englishCount++;
+        if (isSectionEnglish(st)) englishCount++;
         else hindiCount++;
       });
     } else {
       gradeClasses.forEach((c) => {
-        const isEng = String(c.section).toUpperCase() === 'E' || c.medium === 'English';
+        const isEng = isSectionEnglish(c);
         const cnt = Number(c.totalStudents) || 0;
         if (isEng) englishCount += cnt;
         else hindiCount += cnt;
       });
     }
-  } else if (hasSubjectCodes && sub.code) {
-    // Exact calculation from registered UP Board subject codes
-    isExact = true;
-    const matchingStudents = allGradeStudents.filter((st) => st.subjects && st.subjects.includes(sub.code));
-    matchingStudents.forEach((st) => {
-      if (st.medium === 'English') englishCount++;
-      else hindiCount++;
+  } else if (allGradeStudents.length > 0) {
+    // Exact student matching from uploaded student records
+    const matchingStudents = allGradeStudents.filter((st) => {
+      if (sub.code && st.subjects && st.subjects.includes(String(sub.code).trim())) return true;
+      const matched = matchSubjectForStudent(st, subList);
+      return matched && (matched.code === sub.code && matched.name === sub.name);
     });
-    papers = matchingStudents.length;
-    if (splitKey && customSplits && customSplits[splitKey] !== undefined) {
-      papers = Number(customSplits[splitKey]) || 0;
-      const tot = (hindiCount + englishCount) || 1;
-      englishCount = Math.round((englishCount / tot) * papers);
-      hindiCount = papers - englishCount;
+
+    if (matchingStudents.length > 0) {
+      isExact = true;
+      matchingStudents.forEach((st) => {
+        if (isSectionEnglish(st)) englishCount++;
+        else hindiCount++;
+      });
+      papers = matchingStudents.length;
+      if (splitKey && customSplits && customSplits[splitKey] !== undefined) {
+        papers = Number(customSplits[splitKey]) || 0;
+        const tot = (hindiCount + englishCount) || 1;
+        englishCount = Math.round((englishCount / tot) * papers);
+        hindiCount = papers - englishCount;
+      }
+    } else {
+      papers = 0;
     }
   } else {
     // Check section conventions or subject strings
@@ -130,7 +187,12 @@ function getSubjectDemand(grade, sub, subList, gradeClasses, allGradeStudents, t
       if (cSub && cSub !== 'GENERAL' && (cSub.includes(sUpper) || sUpper.includes(cSub) || (sCode && cSub.includes(sCode)))) {
         return true;
       }
-      if (grade === '9' || grade === '10') {
+      if (grade === '6' || grade === '7' || grade === '8') {
+        if (sec === 'A' && (sUpper.includes('COMPUTER') || sCode === '941' || sCode === '144')) return true;
+        if (sec === 'B' && (sUpper.includes('COMMERCE') || sUpper.includes('ART') || sCode === '935' || sCode === '936')) return true;
+        if (sec === 'C' && (sUpper.includes('ENGLISH') || isSectionEnglish(c))) return true;
+        if (sUpper.includes('COMPUTER') && (sUpper.includes('COMMERCE') || sUpper.includes('ART'))) return true;
+      } else if (grade === '9' || grade === '10') {
         if ((sec === 'A' || sec === 'E') && (sUpper.includes('COMPUTER') || sCode === '941')) return true;
         if (sec === 'B' && (sUpper.includes('ART') || sUpper.includes('DRAWING') || sCode === '936')) return true;
         if (sec === 'C' && (sUpper.includes('COMMERCE') || sCode === '935')) return true;
@@ -146,8 +208,23 @@ function getSubjectDemand(grade, sub, subList, gradeClasses, allGradeStudents, t
     if (matchingClasses.length > 0) {
       isExact = true;
       matchingClasses.forEach((c) => {
-        const isEng = String(c.section).toUpperCase() === 'E' || c.medium === 'English';
-        const cnt = Number(c.totalStudents) || 0;
+        const isEng = isSectionEnglish(c);
+        let cnt = Number(c.totalStudents) || 0;
+        const sec = String(c.section || '').toUpperCase().trim();
+
+        // If 6th-8th Section B is mixed Commerce and Art, split between them until individual student list is uploaded
+        if (['6', '7', '8'].includes(grade) && sec === 'B') {
+          const hasCommerce = subList.some((s) => (s.name || '').toUpperCase().includes('COMMERCE') || s.code === '935');
+          const hasArt = subList.some((s) => (s.name || '').toUpperCase().includes('ART') || s.code === '936' || (s.name || '').toUpperCase().includes('DRAWING'));
+          if (hasCommerce && hasArt) {
+            if (sUpper.includes('COMMERCE') || sCode === '935') {
+              cnt = Math.ceil(cnt / 2);
+            } else if (sUpper.includes('ART') || sCode === '936') {
+              cnt = Math.floor(cnt / 2);
+            }
+          }
+        }
+
         if (isEng) englishCount += cnt;
         else hindiCount += cnt;
       });
@@ -168,7 +245,7 @@ function getSubjectDemand(grade, sub, subList, gradeClasses, allGradeStudents, t
       let engTotal = 0;
       let hinTotal = 0;
       gradeClasses.forEach((c) => {
-        const isEng = String(c.section).toUpperCase() === 'E' || c.medium === 'English';
+        const isEng = isSectionEnglish(c);
         if (isEng) engTotal += Number(c.totalStudents) || 0;
         else hinTotal += Number(c.totalStudents) || 0;
       });
@@ -299,11 +376,11 @@ export default function ExamSchemeManager({
 
       if (c.studentList && c.studentList.length > 0) {
         c.studentList.forEach((st) => {
-          if (st.medium === 'English') e++;
+          if (isSectionEnglish(st)) e++;
           else h++;
         });
       } else {
-        const isEng = String(c.section).toUpperCase() === 'E' || c.medium === 'English';
+        const isEng = isSectionEnglish(c);
         const count = Number(c.totalStudents) || 0;
         if (isEng) e += count;
         else h += count;
@@ -420,7 +497,7 @@ export default function ExamSchemeManager({
             let hCount = 0;
             let eCount = 0;
             studentsOfGrade.forEach((st) => {
-              if (st.medium === 'English') eCount++;
+              if (isSectionEnglish(st)) eCount++;
               else hCount++;
             });
             packetSubjects.push({
@@ -441,7 +518,7 @@ export default function ExamSchemeManager({
             let hCount = 0;
             let eCount = 0;
             studentsOfGrade.forEach((st) => {
-              if (st.medium === 'English') eCount++;
+              if (isSectionEnglish(st)) eCount++;
               else hCount++;
             });
             packetSubjects.push({
@@ -476,7 +553,7 @@ export default function ExamSchemeManager({
               if (matchedSub) {
                 const key = matchedSub.code || matchedSub.name;
                 subjectCountMap[key] = (subjectCountMap[key] || 0) + 1;
-                if (st.medium === 'English') subjectEngMap[key] = (subjectEngMap[key] || 0) + 1;
+                if (isSectionEnglish(st)) subjectEngMap[key] = (subjectEngMap[key] || 0) + 1;
                 else subjectHindiMap[key] = (subjectHindiMap[key] || 0) + 1;
               } else {
                 unmatchedStudents.push(st);
@@ -489,7 +566,7 @@ export default function ExamSchemeManager({
               unmatchedStudents.forEach((st, idx) => {
                 const k = subKeys[idx % subKeys.length];
                 subjectCountMap[k]++;
-                if (st.medium === 'English') subjectEngMap[k]++;
+                if (isSectionEnglish(st)) subjectEngMap[k]++;
                 else subjectHindiMap[k]++;
               });
             }

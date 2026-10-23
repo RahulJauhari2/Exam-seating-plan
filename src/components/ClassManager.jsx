@@ -20,6 +20,7 @@ export default function ClassManager({ classes, setClasses }) {
     name: '9',
     section: 'A',
     subject: '',
+    medium: 'Hindi',
     startRoll: 901,
     totalStudents: 30,
   });
@@ -36,11 +37,16 @@ export default function ClassManager({ classes, setClasses }) {
     if (!newClass.name || !newClass.section) return;
 
     const color = COLOR_PALETTE[classes.length % COLOR_PALETTE.length];
+    const secUpper = newClass.section.trim().toUpperCase();
+    const gradeStr = newClass.name.trim();
+    const defaultMed = (secUpper === 'E' || (['6', '7', '8'].includes(gradeStr) && secUpper === 'C')) ? 'English' : 'Hindi';
+
     const newEntry = {
       id: `cls_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: newClass.name.trim(),
-      section: newClass.section.trim().toUpperCase(),
-      subject: newClass.subject.trim() || 'General',
+      name: gradeStr,
+      section: secUpper,
+      subject: newClass.subject.trim() || (['6', '7', '8'].includes(gradeStr) ? (secUpper === 'A' ? 'Computer' : secUpper === 'B' ? 'Commerce / Art' : 'English Medium') : 'General'),
+      medium: newClass.medium || defaultMed,
       startRoll: parseInt(newClass.startRoll) || 1,
       totalStudents: parseInt(newClass.totalStudents) || 1,
       color,
@@ -66,11 +72,15 @@ export default function ClassManager({ classes, setClasses }) {
 
     sections.forEach((sec, idx) => {
       const color = COLOR_PALETTE[(classes.length + idx) % COLOR_PALETTE.length];
+      const g = quickGrade.trim();
+      const med = (sec === 'E' || (['6', '7', '8'].includes(g) && sec === 'C')) ? 'English' : 'Hindi';
+      const sub = quickSubject.trim() || (['6', '7', '8'].includes(g) ? (sec === 'A' ? 'Computer' : sec === 'B' ? 'Commerce / Art' : 'English Medium') : 'General');
       newItems.push({
         id: `cls_${Date.now()}_${sec}_${Math.random().toString(36).substring(2, 6)}`,
-        name: quickGrade.trim(),
+        name: g,
         section: sec,
-        subject: quickSubject.trim() || 'General',
+        subject: sub,
+        medium: med,
         startRoll: currentRoll,
         totalStudents: count,
         color,
@@ -198,6 +208,7 @@ export default function ClassManager({ classes, setClasses }) {
                 <th className="px-3 py-2.5 w-12 text-center whitespace-nowrap">#</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">कक्षा (Class)</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">सेक्शन (Section)</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">माध्यम (Medium)</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">विषय (Subject)</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">Start Roll No.</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">छात्र संख्या (Total)</th>
@@ -231,6 +242,28 @@ export default function ClassManager({ classes, setClasses }) {
                         onChange={(e) => handleUpdate(cls.id, 'section', e.target.value.toUpperCase())}
                         className="w-14 px-2 py-1.5 border border-slate-200 rounded-lg font-bold text-indigo-700 uppercase focus:outline-indigo-500 text-center bg-white"
                       />
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {(() => {
+                        const secUp = String(cls.section || '').toUpperCase();
+                        const isEngDef = secUp === 'E' || (['6', '7', '8'].includes(String(cls.name)) && secUp === 'C');
+                        const currentMedium = cls.medium || (isEngDef ? 'English' : 'Hindi');
+                        const isEng = currentMedium === 'English';
+                        return (
+                          <select
+                            value={currentMedium}
+                            onChange={(e) => handleUpdate(cls.id, 'medium', e.target.value)}
+                            className={`px-2 py-1.5 border rounded-lg text-xs font-bold focus:outline-indigo-500 cursor-pointer ${
+                              isEng
+                                ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                : 'bg-orange-50 border-orange-200 text-orange-900'
+                            }`}
+                          >
+                            <option value="Hindi">हिन्दी माध्यम</option>
+                            <option value="English">English Med.</option>
+                          </select>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
@@ -285,7 +318,7 @@ export default function ClassManager({ classes, setClasses }) {
             <span>एक और क्लास/सेक्शन जोड़ें (Add Single Class):</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">कक्षा (Class)</label>
               <input
@@ -307,6 +340,17 @@ export default function ClassManager({ classes, setClasses }) {
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold uppercase focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white"
                 required
               />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">माध्यम (Medium)</label>
+              <select
+                value={newClass.medium}
+                onChange={(e) => setNewClass({ ...newClass, medium: e.target.value })}
+                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white cursor-pointer"
+              >
+                <option value="Hindi">हिन्दी माध्यम</option>
+                <option value="English">English Med.</option>
+              </select>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">विषय (Subject)</label>

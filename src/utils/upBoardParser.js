@@ -53,10 +53,25 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
     const motherName = findValue(row, 'MotherName', 'Mother', 'माता का नाम') || '';
     const candidateNameHindi = findValue(row, 'CandidateNameKruti', 'NameHindi', 'HindiName') || '';
 
-    // 4. Demographics
+    // 4. Demographics & Section
     const gender = findValue(row, 'Gender', 'लिंग') || '1'; // 1 = Male, 2 = Female
-    const rawMedium = findValue(row, 'Medium', 'माध्यम', 'Med') || '1';
-    const medium = (rawMedium === '2' || rawMedium.toLowerCase().startsWith('eng') || rawMedium.toUpperCase() === 'E') ? 'English' : 'Hindi';
+    const explicitSec = findValue(row, 'Section', 'वर्ग', 'शाखा', 'Sec', 'sec');
+    const rawMedium = findValue(row, 'Medium', 'माध्यम', 'Med');
+    let medium = '';
+    if (rawMedium) {
+      medium = (rawMedium === '2' || String(rawMedium).toLowerCase().startsWith('eng') || String(rawMedium).toUpperCase() === 'E') ? 'English' : 'Hindi';
+    } else if (explicitSec) {
+      const secUp = String(explicitSec).toUpperCase().trim();
+      if (secUp === 'E' || (['6', '7', '8'].includes(grade) && secUp === 'C')) {
+        medium = 'English';
+      } else {
+        medium = 'Hindi';
+      }
+    } else {
+      medium = 'Hindi';
+    }
+
+    const explicitSub = findValue(row, 'Subject', 'विषय', 'Stream', 'stream', 'वर्ग_विषय') || '';
     const dob = findValue(row, 'ddmmyyyy', 'DOB', 'DateOfBirth', 'जन्म तिथि') || '';
     const mobile = findValue(row, 'MobileNumber', 'Mobile', 'Phone') || '';
     const schoolCode = findValue(row, 'SchoolCode', 'School') || '1060';
@@ -64,6 +79,9 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
 
     // 5. Extract Subject Codes (Subject01 to Subject07, SubjectVOC, etc.)
     const subjectCodes = [];
+    if (explicitSub) {
+      subjectCodes.push(explicitSub);
+    }
     const subKeys = [
       'Subject01', 'Subject02', 'Subject03', 'Subject04', 'Subject05', 
       'Subject06', 'Subject07', 'SubjectVOC', 'SubjectRevVOC',
@@ -90,6 +108,9 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
       dob: dob,
       mobile: mobile,
       medium: medium,
+      explicitSection: explicitSec ? explicitSec.toUpperCase().trim() : '',
+      section: explicitSec ? explicitSec.toUpperCase().trim() : '',
+      subject: explicitSub,
       schoolCode: schoolCode,
       districtCode: districtCode,
       className: grade,
@@ -120,35 +141,96 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
     // Sort students by original Roll / Form number
     allStudentsInGrade.sort((a, b) => a.boardRollNo - b.boardRollNo);
 
-    // Split into sections of perSection size
-    const secCount = Math.ceil(allStudentsInGrade.length / perSection);
+    const hasExplicitSections = allStudentsInGrade.some((st) => st.explicitSection);
 
-    for (let s = 0; s < secCount; s++) {
-      const sectionLetter = sectionLetters[s] || `S${s + 1}`;
-      const chunk = allStudentsInGrade.slice(s * perSection, (s + 1) * perSection);
-      const color = COLOR_PALETTE[colorCounter % COLOR_PALETTE.length];
-      colorCounter++;
+    if (hasExplicitSections) {
+      // Group by explicit section provided in file (e.g. A, B, C)
+      const secMap = {};
+      allStudentsInGrade.forEach((st) => {
+        const sec = st.explicitSection || 'A';
+        if (!secMap[sec]) secMap[sec] = [];
+        secMap[sec].push(st);
+      });
 
-      // Tag each student with their assigned section and set Roll No starting from 1 for copy checking confidentiality
-      chunk.forEach((st, cIdx) => {
-        st.section = sectionLetter;
-        if (resetRollPerSection) {
-          st.rollNo = cIdx + 1; // 1, 2, 3... in each section!
+      const sortedSecs = Object.keys(secMap).sort();
+      sortedSecs.forEach((sec, sIdx) => {
+        const chunk = secMap[sec];
+        const color = COLOR_PALETTE[colorCounter % COLOR_PALETTE.length];
+        colorCounter++;
+
+        const isEng = sec === 'E' || (['6', '7', '8'].includes(grade) && sec === 'C');
+        let autoSub = '';
+        if (['6', '7', '8'].includes(grade)) {
+          if (sec === 'A') autoSub = 'Computer';
+          else if (sec === 'B') autoSub = 'Commerce / Art';
+          else if (sec === 'C') autoSub = 'English Medium';
         }
-      });
 
-      const startRoll = resetRollPerSection ? 1 : chunk[0].rollNo;
+        chunk.forEach((st, cIdx) => {
+          st.section = sec;
+          if (!st.medium) st.medium = isEng ? 'English' : 'Hindi';
+          if (!st.subject && autoSub) st.subject = autoSub;
+          if (resetRollPerSection) {
+            st.rollNo = cIdx + 1;
+          }
+        });
 
-      generatedClasses.push({
-        id: `cls_up_${grade}_${sectionLetter}_${Date.now()}_${s}`,
-        name: grade,
-        section: sectionLetter,
-        subject: '', // User-defined or empty, never raw "UP Board (Sub: 7)"
-        startRoll: startRoll,
-        totalStudents: chunk.length,
-        color: color,
-        studentList: chunk,
+        const startRoll = resetRollPerSection ? 1 : chunk[0].rollNo;
+
+        generatedClasses.push({
+          id: `cls_up_${grade}_${sec}_${Date.now()}_${sIdx}`,
+          name: grade,
+          section: sec,
+          medium: isEng ? 'English' : 'Hindi',
+          subject: autoSub,
+          startRoll: startRoll,
+          totalStudents: chunk.length,
+          color: color,
+          studentList: chunk,
+        });
       });
+    } else {
+      // Split into sections of perSection size
+      const secCount = Math.ceil(allStudentsInGrade.length / perSection);
+
+      for (let s = 0; s < secCount; s++) {
+        const sectionLetter = sectionLetters[s] || `S${s + 1}`;
+        const chunk = allStudentsInGrade.slice(s * perSection, (s + 1) * perSection);
+        const color = COLOR_PALETTE[colorCounter % COLOR_PALETTE.length];
+        colorCounter++;
+
+        const isEng = sectionLetter === 'E' || (['6', '7', '8'].includes(grade) && sectionLetter === 'C');
+        let autoSub = '';
+        if (['6', '7', '8'].includes(grade)) {
+          if (sectionLetter === 'A') autoSub = 'Computer';
+          else if (sectionLetter === 'B') autoSub = 'Commerce / Art';
+          else if (sectionLetter === 'C') autoSub = 'English Medium';
+        }
+
+        // Tag each student with their assigned section and set Roll No starting from 1
+        chunk.forEach((st, cIdx) => {
+          st.section = sectionLetter;
+          if (!st.medium) st.medium = isEng ? 'English' : 'Hindi';
+          if (!st.subject && autoSub) st.subject = autoSub;
+          if (resetRollPerSection) {
+            st.rollNo = cIdx + 1; // 1, 2, 3... in each section!
+          }
+        });
+
+        const startRoll = resetRollPerSection ? 1 : chunk[0].rollNo;
+
+        generatedClasses.push({
+          id: `cls_up_${grade}_${sectionLetter}_${Date.now()}_${s}`,
+          name: grade,
+          section: sectionLetter,
+          medium: isEng ? 'English' : 'Hindi',
+          subject: autoSub,
+          startRoll: startRoll,
+          totalStudents: chunk.length,
+          color: color,
+          studentList: chunk,
+        });
+      }
     }
   });
 

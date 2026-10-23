@@ -77,7 +77,11 @@ export const EXAM_TIMETABLE = [
     shift_2: {
       '6': [{ name: 'SCIENCE' }],
       '7': [{ name: 'SSC' }],
-      '8': [{ name: 'COMMERCE / COMPUTER' }],
+      '8': [
+        { name: 'COMMERCE', code: '935' },
+        { name: 'COMPUTER', code: '941' },
+        { name: 'ART', code: '936' },
+      ],
     },
   },
   {
@@ -117,7 +121,11 @@ export const EXAM_TIMETABLE = [
     },
     shift_2: {
       '6': [{ name: 'MATH' }],
-      '7': [{ name: 'COMMERCE / COMPUTER' }],
+      '7': [
+        { name: 'COMMERCE', code: '935' },
+        { name: 'COMPUTER', code: '941' },
+        { name: 'ART', code: '936' },
+      ],
       '8': [{ name: 'ENGLISH' }],
     },
   },
@@ -173,7 +181,11 @@ export const EXAM_TIMETABLE = [
       // No shift 1 on Saturday 7th Nov
     },
     shift_2: {
-      '6': [{ name: 'COMMERCE / COMPUTER / ART' }],
+      '6': [
+        { name: 'COMMERCE', code: '935' },
+        { name: 'COMPUTER', code: '941' },
+        { name: 'ART', code: '936' },
+      ],
       '7': [{ name: 'HINDI' }],
       '8': [{ name: 'SCIENCE' }],
     },

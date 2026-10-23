@@ -41,6 +41,43 @@ export function getColumnSplit(benchesCount, colCount = 3, customSplit = null) {
   return result;
 }
 
+// Helper to determine Medium for school conventions
+export function getSectionMedium(cls, grade, section) {
+  if (cls?.medium === 'English') return 'English';
+  if (cls?.medium === 'Hindi') return 'Hindi';
+  const sec = String(section || '').toUpperCase().trim();
+  const g = String(grade || '').trim();
+  // In UP Board school convention:
+  // - 9th to 12th: Section E is English Medium
+  // - 6th to 8th: Section C is English Medium
+  if (sec === 'E') return 'English';
+  if (['6', '7', '8'].includes(g) && sec === 'C') return 'English';
+  return 'Hindi';
+}
+
+// Helper to determine Stream Subject for school conventions
+export function getSectionSubject(cls, grade, section) {
+  if (cls?.subject && cls.subject !== 'General' && cls.subject.trim() !== '') return cls.subject;
+  const sec = String(section || '').toUpperCase().trim();
+  const g = String(grade || '').trim();
+  if (['6', '7', '8'].includes(g)) {
+    if (sec === 'A') return 'Computer';
+    if (sec === 'B') return 'Commerce / Art';
+    if (sec === 'C') return 'English Medium';
+  } else if (['9', '10'].includes(g)) {
+    if (sec === 'A') return 'Computer';
+    if (sec === 'B') return 'Art';
+    if (sec === 'C') return 'Commerce';
+    if (sec === 'E') return 'English Medium (Computer)';
+  } else if (['11', '12'].includes(g)) {
+    if (sec === 'A') return 'Math';
+    if (sec === 'B') return 'Biology';
+    if (sec === 'C') return 'Commerce';
+    if (sec === 'E') return 'English Medium (Math)';
+  }
+  return cls?.subject || 'General';
+}
+
 export function generateSeatingPlan({ classes, rooms }) {
   // Step 1: Create queues of students for each class and section
   // Structure: { [gradeName]: { [section]: [students...] } }
@@ -74,10 +111,10 @@ export function generateSeatingPlan({ classes, rooms }) {
           dob: st.dob || '',
           mobile: st.mobile || '',
           subjects: st.subjects || [],
-          medium: st.medium || cls.medium || (section.toUpperCase() === 'E' ? 'English' : 'Hindi'),
+          medium: st.medium || cls.medium || getSectionMedium(cls, grade, section),
           className: grade,
           section: section,
-          subject: cls.subject || 'General',
+          subject: st.subject || getSectionSubject(cls, grade, section),
           classKey: classKey,
           gradeGroup: grade,
           color: cls.color,
@@ -93,8 +130,8 @@ export function generateSeatingPlan({ classes, rooms }) {
           rollNo: roll,
           className: grade,
           section: section,
-          medium: cls.medium || (section.toUpperCase() === 'E' ? 'English' : 'Hindi'),
-          subject: cls.subject || 'General',
+          medium: cls.medium || getSectionMedium(cls, grade, section),
+          subject: getSectionSubject(cls, grade, section),
           classKey: classKey,
           gradeGroup: grade,
           color: cls.color,
