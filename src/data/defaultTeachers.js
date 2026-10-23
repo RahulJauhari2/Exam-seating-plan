@@ -75,15 +75,6 @@ export const DEFAULT_TEACHERS = [
     isPresent: true
   },
   {
-    id: 't9',
-    name: 'श्री राहुल जौहरी',
-    englishName: 'MR. RAHUL JAUHARI',
-    designation: 'प्रवक्ता (Lecturer)',
-    subject: 'कम्प्यूटर विज्ञान (Computer Science)',
-    mobile: '90******48',
-    isPresent: true
-  },
-  {
     id: 't10',
     name: 'श्री गिरजा शंकर मिश्रा',
     englishName: 'MR. GIRJA SHANKER MISHRA',
@@ -128,15 +119,7 @@ export const DEFAULT_TEACHERS = [
     mobile: '94******79',
     isPresent: true
   },
-  {
-    id: 't15',
-    name: 'श्री प्रदीप सिंह',
-    englishName: 'MR. PRADEEP SINGH',
-    designation: 'प्रधानाचार्य (Principal)',
-    subject: '',
-    mobile: '81******10',
-    isPresent: true
-  },
+  
   {
     id: 't16',
     name: 'श्रीमती यशोदा शर्मा',
@@ -202,7 +185,7 @@ export const DEFAULT_TEACHERS = [
   },
   {
     id: 't23',
-    name: 'श्रीमती रेनू गंगवार',
+    name: 'सुश्री रेनू गंगवार',
     englishName: 'MRS. RENU GANGWAR',
     designation: 'सहायक अध्यापक (Assistant Teacher)',
     subject: '',
