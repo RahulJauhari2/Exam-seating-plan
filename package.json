@@ -5,22 +5,32 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server/index.js",
+    "dev:all": "concurrently \"npm run dev\" \"node server/index.js\"",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
     "@vercel/speed-insights": "^2.0.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.60.0",
+    "mongoose": "^9.11.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.1",
+    "concurrently": "^10.0.6",
     "oxlint": "^1.88.0",
     "postcss": "^8.5.31",
     "tailwindcss": "^3.4.19",

@@ -72,6 +72,7 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
     }
 
     const explicitSub = findValue(row, 'Subject', 'विषय', 'Stream', 'stream', 'वर्ग_विषय') || '';
+    const explicitSrNo = findValue(row, 'SRNo', 'SR_No', 'SR', 'प्रवेशांक', 'SRNumber', 'ScholarNo', 'AdmissionNo', 'RegNo', 'RegistrationNo') || formNum;
     const dob = findValue(row, 'ddmmyyyy', 'DOB', 'DateOfBirth', 'जन्म तिथि') || '';
     const mobile = findValue(row, 'MobileNumber', 'Mobile', 'Phone') || '';
     const schoolCode = findValue(row, 'SchoolCode', 'School') || '1060';
@@ -97,6 +98,7 @@ export function processUPBoardRows(rawRows, perSection = 50, resetRollPerSection
 
     const studentObj = {
       id: `up_${grade}_${parsedRoll}_${idx}`,
+      srNo: explicitSrNo,
       rollNo: parsedRoll,
       formNumber: formNum,
       boardRollNo: parsedRoll,

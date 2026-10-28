@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment & Server Local Data
+.env
+.env*.local
+server/data/

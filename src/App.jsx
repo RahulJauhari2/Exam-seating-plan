@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from './data/defaultData';
 import { generateSeatingPlan } from './utils/seatingAlgorithm';
 import Navbar from './components/Navbar';
@@ -12,25 +12,45 @@ import StudentFinder from './components/StudentFinder';
 import AbsenteeManager from './components/AbsenteeManager';
 import ExamSchemeManager from './components/ExamSchemeManager';
 import TeacherDutyManager from './components/TeacherDutyManager';
+import ResultMarksheetManager from './components/ResultMarksheetManager';
+import DatabaseSyncModal from './components/DatabaseSyncModal';
+import LoginModal from './components/LoginModal';
+import UserManagementModal from './components/UserManagementModal';
+import TeacherRoomPortal from './components/TeacherRoomPortal';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
-import { AlertTriangle, ShieldCheck, Compass } from 'lucide-react';
+import { useAuth } from './context/AuthContext';
+import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI } from './services/api';
+import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X } from 'lucide-react';
 
 export default function App() {
+  const { currentUser, isAuthenticated, isTeacher, canAccessAllRooms, logout } = useAuth();
+
   // Active shift state: 'shift_1' (9th-12th) or 'shift_2' (6th-8th)
   const [activeShift, setActiveShift] = useState('shift_1');
 
   // Absent students state: { [rollNo]: true }
   const [absentStudents, setAbsentStudents] = useState({});
 
+  // Live absentee records map from server: { [rollNo]: record }
+  const [liveAbsentees, setLiveAbsentees] = useState({});
+
+  // Live Toast Notification
+  const [liveNotification, setLiveNotification] = useState(null);
+  const previousAbsentCount = useRef(0);
+
   // Mobile drawer state
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Exam details state
+  // Auth & RBAC Modals
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+
+  // Exam details state (Defaults to Today's date dynamically)
   const [examDetails, setExamDetails] = useState({
     schoolName: DEFAULT_SHIFT_1.schoolName,
     examName: DEFAULT_SHIFT_1.examName,
     timeRange: DEFAULT_SHIFT_1.timeRange,
-    date: '2026-10-21',
+    date: new Date().toISOString().split('T')[0],
   });
 
   // Dynamic Classes & Rooms
@@ -39,10 +59,152 @@ export default function App() {
 
   // Teacher Staff & Invigilation Duty State
   const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
-  const [dutyRoster, setDutyRoster] = useState({});
+  const [dutyRoster, setDutyRoster] = useState(() => {
+    try {
+      const saved = localStorage.getItem('exam_duty_roster_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Automatically persist dutyRoster changes locally so work is never lost
+  useEffect(() => {
+    try {
+      if (dutyRoster && Object.keys(dutyRoster).length > 0) {
+        localStorage.setItem('exam_duty_roster_v1', JSON.stringify(dutyRoster));
+      }
+    } catch (e) {
+      console.error('Error saving duty roster to localStorage', e);
+    }
+  }, [dutyRoster]);
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState('main-gate'); // Open to Main Gate by default or user choice
+  const [activeTab, setActiveTab] = useState('main-gate');
+
+  // MongoDB Database Sync Modal state
+  const [isDBSyncOpen, setIsDBSyncOpen] = useState(false);
+
+  // If a teacher logs in, automatically switch to Teacher Room Portal view
+  useEffect(() => {
+    if (isTeacher) {
+      setActiveTab('teacher-portal');
+    }
+  }, [isTeacher]);
+
+  // Real-time Live Absentee Polling (every 2.5 seconds)
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const pollLiveAbsentees = async () => {
+      try {
+        const res = await fetchLiveAbsenteesAPI({
+          sessionName: examDetails.examName,
+          date: examDetails.date,
+          shift: activeShift,
+        });
+
+        if (isSubscribed && res && res.success && res.absenteeMap) {
+          setLiveAbsentees(res.absenteeMap);
+
+          // Build absentStudents lookup: { [rollNo]: true }
+          const newAbsentLookup = {};
+          let newlyMarkedAbsent = null;
+
+          Object.values(res.absenteeMap).forEach((rec) => {
+            if (rec.isAbsent) {
+              newAbsentLookup[rec.rollNo] = true;
+              // Check if newly marked
+              if (!absentStudents[rec.rollNo]) {
+                newlyMarkedAbsent = rec;
+              }
+            }
+          });
+
+          // Show live notification toast if newly marked absent by teacher in control room
+          if (newlyMarkedAbsent && previousAbsentCount.current > 0 && !isTeacher) {
+            setLiveNotification({
+              rollNo: newlyMarkedAbsent.rollNo,
+              roomName: newlyMarkedAbsent.roomName,
+              markedBy: newlyMarkedAbsent.markedBy,
+              studentName: newlyMarkedAbsent.studentName,
+              time: new Date().toLocaleTimeString('hi-IN'),
+            });
+            setTimeout(() => setLiveNotification(null), 5000);
+          }
+
+          previousAbsentCount.current = Object.keys(newAbsentLookup).length;
+          setAbsentStudents(newAbsentLookup);
+        }
+      } catch (err) {
+        // Silent catch for smooth offline experience
+      }
+    };
+
+    // Initial fetch immediately
+    pollLiveAbsentees();
+
+    // Polling interval
+    const interval = setInterval(pollLiveAbsentees, 2500);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [examDetails.examName, examDetails.date, activeShift, isTeacher]);
+
+  // Handle absent toggle from Teacher Room Portal or Admin Absentee Manager
+  const handleToggleAbsent = async (toggleData) => {
+    // Optimistic local UI update
+    const { rollNo, isAbsent } = toggleData;
+    setAbsentStudents((prev) => {
+      const copy = { ...prev };
+      if (isAbsent) copy[rollNo] = true;
+      else delete copy[rollNo];
+      return copy;
+    });
+
+    setLiveAbsentees((prev) => ({
+      ...prev,
+      [rollNo]: {
+        ...prev[rollNo],
+        ...toggleData,
+      },
+    }));
+
+    // Send to backend API
+    try {
+      const res = await toggleAbsenteeAPI(toggleData);
+      return res;
+    } catch (err) {
+      console.error('Toggle absent error:', err);
+    }
+  };
+
+  // Load a full exam session from MongoDB into React State
+  const handleLoadSessionFromDB = (sessionData) => {
+    if (!sessionData) return;
+    if (sessionData.activeShift) setActiveShift(sessionData.activeShift);
+    if (sessionData.examDetails) setExamDetails(sessionData.examDetails);
+    if (sessionData.classes && Array.isArray(sessionData.classes)) setClasses(sessionData.classes);
+    if (sessionData.rooms && Array.isArray(sessionData.rooms)) setRooms(sessionData.rooms);
+    if (sessionData.teachers && Array.isArray(sessionData.teachers)) setTeachers(sessionData.teachers);
+    if (sessionData.dutyRoster) setDutyRoster(sessionData.dutyRoster);
+    if (sessionData.marksData) {
+      try {
+        localStorage.setItem('dynamic_exam_marks_data_v1', JSON.stringify(sessionData.marksData));
+      } catch (e) {
+        console.error('Error saving loaded marks', e);
+      }
+    }
+    if (sessionData.subjectConfig) {
+      try {
+        localStorage.setItem('dynamic_exam_subject_config_v1', JSON.stringify(sessionData.subjectConfig));
+      } catch (e) {
+        console.error('Error saving loaded subject config', e);
+      }
+    }
+  };
 
   // Handle Shift switch
   const handleShiftChange = (newShift) => {
@@ -86,8 +248,38 @@ export default function App() {
     window.print();
   };
 
+  // If user is pure Teacher and not on full admin view, render dedicated mobile-friendly Teacher Portal
+  const isDedicatedTeacherView = isTeacher && activeTab === 'teacher-portal';
+
   return (
     <div className="min-h-screen bg-slate-100/70 font-sans text-slate-900 flex flex-col">
+      {/* Live Absentee Real-Time Alert Toast (Shows instantly in Control Room / Principal Screen) */}
+      {liveNotification && (
+        <div className="fixed top-16 right-4 z-50 max-w-sm w-full bg-red-600 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-red-400/80 animate-bounce flex items-start gap-3">
+          <div className="p-2 bg-white/20 rounded-xl shrink-0">
+            <Radio className="w-5 h-5 text-yellow-300 animate-pulse" />
+          </div>
+          <div className="flex-1 text-xs">
+            <div className="font-bold flex items-center justify-between">
+              <span>लाइव अनुपस्थिति अलर्ट!</span>
+              <span className="text-[10px] text-red-200">{liveNotification.time}</span>
+            </div>
+            <p className="mt-1 text-red-100 leading-tight">
+              <strong>{liveNotification.roomName}</strong> में रोल <strong>#{liveNotification.rollNo}</strong> {liveNotification.studentName ? `(${liveNotification.studentName})` : ''} को अनुपस्थित दर्ज किया गया।
+            </p>
+            <div className="mt-1 text-[10px] text-red-200">
+              द्वारा: {liveNotification.markedBy || 'शिक्षक'}
+            </div>
+          </div>
+          <button
+            onClick={() => setLiveNotification(null)}
+            className="text-white/80 hover:text-white p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <Navbar
         examDetails={examDetails}
@@ -99,12 +291,16 @@ export default function App() {
         onResetData={handleResetData}
         onPrint={handlePrint}
         onOpenSidebar={() => setSidebarOpen(true)}
+        onOpenDBSync={() => setIsDBSyncOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenUserMgmt={() => setIsUserMgmtOpen(true)}
+        onOpenTeacherPortal={() => setActiveTab('teacher-portal')}
       />
 
-      {/* Main 2-Column Container (Left: Navigation Sidebar, Right: Content) */}
+      {/* Main 2-Column Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-6 flex flex-col lg:flex-row gap-6 items-start">
         
-        {/* Left Navigation Sidebar (Desktop sticky on Left + Mobile slide-over drawer from Left) */}
+        {/* Left Navigation Sidebar */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -121,38 +317,40 @@ export default function App() {
         <main className="flex-1 w-full min-w-0">
           
           {/* Anti-Adjacent Anti-Cheating Guarantee Banner */}
-          <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
-                <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-100" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-xs sm:text-sm md:text-base">
-                    स्मार्ट एंटी-चीटिंग पेयरिंग सक्रिय (Anti-Adjacent Active)
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] sm:text-[10px] font-black tracking-wide uppercase">
-                    Auto-Paired
-                  </span>
+          {activeTab !== 'teacher-portal' && (
+            <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
+                  <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-100" />
                 </div>
-                <p className="text-[11px] sm:text-xs text-emerald-100 mt-0.5">
-                  नियम: 1 बेंच पर 2 छात्र (बायां व दायां) अलग-अलग कक्षा के हैं। मध्य कॉलम में फ्रंट रो पर शिक्षक मेज स्थित है।
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-xs sm:text-sm md:text-base">
+                      स्मार्ट एंटी-चीटिंग पेयरिंग सक्रिय (Anti-Adjacent Active)
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] sm:text-[10px] font-black tracking-wide uppercase">
+                      Auto-Paired
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-emerald-100 mt-0.5">
+                    नियम: 1 बेंच पर 2 छात्र (बायां व दायां) अलग-अलग कक्षा के हैं। मध्य कॉलम में फ्रंट रो पर शिक्षक मेज स्थित है।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                <div className="px-2.5 py-1 bg-black/20 rounded-xl text-xs font-semibold backdrop-blur-sm">
+                  छात्र: <span className="font-black text-amber-300">{seatingResult.totalStudents}</span>
+                </div>
+                <div className="px-2.5 py-1 bg-black/20 rounded-xl text-xs font-semibold backdrop-blur-sm">
+                  सीटें: <span className="font-black text-white">{seatingResult.totalCapacity}</span>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-              <div className="px-2.5 py-1 bg-black/20 rounded-xl text-xs font-semibold backdrop-blur-sm">
-                छात्र: <span className="font-black text-amber-300">{seatingResult.totalStudents}</span>
-              </div>
-              <div className="px-2.5 py-1 bg-black/20 rounded-xl text-xs font-semibold backdrop-blur-sm">
-                सीटें: <span className="font-black text-white">{seatingResult.totalCapacity}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Warning if capacity is less with precise room and class details */}
-          {seatingResult.unseatedCount > 0 && (
+          {/* Warning if capacity is less */}
+          {activeTab !== 'teacher-portal' && seatingResult.unseatedCount > 0 && (
             <div className="mb-6 p-4 sm:p-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 text-xs shadow-xs no-print">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -253,6 +451,23 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'teacher-portal' && (
+            <TeacherRoomPortal
+              examSession={{
+                sessionName: examDetails.examName,
+                rooms: seatingResult.rooms || [],
+                seatingData: seatingResult.seatingData,
+                dutyRoster,
+              }}
+              activeDate={examDetails.date}
+              activeShift={activeShift}
+              liveAbsentees={liveAbsentees}
+              onToggleAbsent={handleToggleAbsent}
+              onLogout={logout}
+              onSwitchToAdminView={() => setActiveTab('main-gate')}
+            />
+          )}
+
           {activeTab === 'exam-scheme' && (
             <ExamSchemeManager
               seatingResult={seatingResult}
@@ -276,6 +491,15 @@ export default function App() {
               examDetails={examDetails}
             />
           )}
+
+          {activeTab === 'result-marksheet' && (
+            <ResultMarksheetManager
+              classes={classes}
+              activeShift={activeShift}
+              examDetails={examDetails}
+              seatingResult={seatingResult}
+            />
+          )}
         </main>
       </div>
 
@@ -286,7 +510,7 @@ export default function App() {
         className="lg:hidden fixed bottom-4 left-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
       >
         <Compass className="w-4 h-4" />
-        <span>मेन्यू (8 Tabs)</span>
+        <span>मेन्यू (10 Tabs)</span>
         {Object.keys(absentStudents).length > 0 && (
           <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-black">
             {Object.keys(absentStudents).length}
@@ -300,6 +524,44 @@ export default function App() {
           Exam Seating Plan Dynamic System • Built with React, Vite & Tailwind CSS • Anti-Cheating & Dynamic Capacity Support
         </p>
       </footer>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        onLoginSuccess={(user) => {
+          if (user.role === 'teacher') {
+            setActiveTab('teacher-portal');
+          }
+        }}
+      />
+
+      {/* Role Management Modal (Principal & SuperAdmin) */}
+      <UserManagementModal
+        isOpen={isUserMgmtOpen}
+        onClose={() => setIsUserMgmtOpen(false)}
+      />
+
+      {/* MongoDB Database Sync & Session Modal */}
+      <DatabaseSyncModal
+        isOpen={isDBSyncOpen}
+        onClose={() => setIsDBSyncOpen(false)}
+        currentSessionData={{
+          activeShift,
+          examDetails,
+          classes,
+          rooms,
+          teachers,
+          dutyRoster,
+          marksData: (() => {
+            try { return JSON.parse(localStorage.getItem('dynamic_exam_marks_data_v1')) || {}; } catch { return {}; }
+          })(),
+          subjectConfig: (() => {
+            try { return JSON.parse(localStorage.getItem('dynamic_exam_subject_config_v1')) || {}; } catch { return {}; }
+          })(),
+        }}
+        onLoadSession={handleLoadSessionFromDB}
+      />
     </div>
   );
 }
