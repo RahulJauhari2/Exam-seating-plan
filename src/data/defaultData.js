@@ -26,10 +26,10 @@ export const DEFAULT_SHIFT_1 = {
     { id: 'c11e', name: '11', section: 'E', subject: '', startRoll: 11401, totalStudents: 44, color: 'bg-blue-100 text-blue-800 border-blue-300' },
 
     // 12th (Sections A, B, C)
-    { id: 'c12a', name: '12', section: 'A', subject: '', startRoll: 12201, totalStudents: 62, color: 'bg-purple-100 text-purple-800 border-purple-300' },
-    { id: 'c12b', name: '12', section: 'B', subject: '', startRoll: 1231, totalStudents: 64, color: 'bg-purple-100 text-purple-800 border-purple-300' },
-    { id: 'c12c', name: '12', section: 'C', subject: '', startRoll: 1261, totalStudents: 30, color: 'bg-purple-100 text-purple-800 border-purple-300' },
-    { id: 'c12e', name: '12', section: 'E', subject: '', startRoll: 1261, totalStudents: 27, color: 'bg-purple-100 text-purple-800 border-purple-300' },
+    { id: 'c12a', name: '12', section: 'A', subject: '', startRoll: 12101, totalStudents: 62, color: 'bg-purple-100 text-purple-800 border-purple-300' },
+    { id: 'c12b', name: '12', section: 'B', subject: '', startRoll: 12201, totalStudents: 64, color: 'bg-purple-100 text-purple-800 border-purple-300' },
+    { id: 'c12c', name: '12', section: 'C', subject: '', startRoll: 12301, totalStudents: 30, color: 'bg-purple-100 text-purple-800 border-purple-300' },
+    { id: 'c12e', name: '12', section: 'E', subject: '', startRoll: 12401, totalStudents: 27, color: 'bg-purple-100 text-purple-800 border-purple-300' },
   ],
   rooms: [
     { id: 'r1', name: 'Room  01', benches: 20, columns: 3 },
