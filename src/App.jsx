@@ -37,6 +37,8 @@ export default function App() {
   // Live Toast Notification
   const [liveNotification, setLiveNotification] = useState(null);
   const previousAbsentCount = useRef(0);
+  // Tracks roll numbers already shown in alert — prevents repeat toasts on same student
+  const knownAbsentRolls = useRef(new Set());
 
   // Mobile drawer state
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -114,15 +116,17 @@ export default function App() {
           Object.values(res.absenteeMap).forEach((rec) => {
             if (rec.isAbsent) {
               newAbsentLookup[rec.rollNo] = true;
-              // Check if newly marked
-              if (!absentStudents[rec.rollNo]) {
+              // Only alert if this roll number has NOT been alerted before (ref-based, no stale closure)
+              if (!knownAbsentRolls.current.has(String(rec.rollNo))) {
                 newlyMarkedAbsent = rec;
               }
             }
           });
 
-          // Show live notification toast if newly marked absent by teacher in control room
+          // Show live notification toast only for truly NEW absent student
           if (newlyMarkedAbsent && previousAbsentCount.current > 0 && !isTeacher) {
+            // Mark this roll as known so future polls don't re-alert
+            knownAbsentRolls.current.add(String(newlyMarkedAbsent.rollNo));
             setLiveNotification({
               rollNo: newlyMarkedAbsent.rollNo,
               roomName: newlyMarkedAbsent.roomName,
@@ -150,6 +154,9 @@ export default function App() {
     return () => {
       isSubscribed = false;
       clearInterval(interval);
+      // Reset known absent set when session or shift changes
+      knownAbsentRolls.current = new Set();
+      previousAbsentCount.current = 0;
     };
   }, [examDetails.examName, examDetails.date, activeShift, isTeacher]);
 
