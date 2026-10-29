@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
 import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI } from './services/api';
-import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
 const ClassManager            = lazy(() => import('./components/ClassManager'));
@@ -30,6 +30,37 @@ const PageLoader = () => (
     <div className="flex flex-col items-center gap-3">
       <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       <p className="text-slate-500 text-sm font-medium">लोड हो रहा है...</p>
+    </div>
+  </div>
+);
+
+// Reusable Staff / Admin Locked Guard component for protected tabs
+const StaffLockedGuard = ({ title, description, onLogin, onGoToStudentView }) => (
+  <div className="bg-white rounded-2xl border-2 border-slate-200 p-6 sm:p-10 text-center max-w-lg mx-auto my-8 shadow-sm">
+    <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200 shadow-inner">
+      <Lock className="w-7 h-7" />
+    </div>
+    <span className="px-3 py-1 bg-amber-100 text-amber-900 rounded-full text-[10px] font-black uppercase tracking-wider">
+      🔒 स्टाफ व एडमिन सुरक्षा
+    </span>
+    <h2 className="text-base sm:text-lg font-black text-slate-800 mt-3">{title}</h2>
+    <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+      {description}
+    </p>
+    <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+      <button
+        onClick={onLogin}
+        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+      >
+        <KeyRound className="w-4 h-4" />
+        <span>स्टाफ / एडमिन लॉगिन करें</span>
+      </button>
+      <button
+        onClick={onGoToStudentView}
+        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all cursor-pointer"
+      >
+        रोल नंबर खोजें (छात्र दृश्य)
+      </button>
     </div>
   </div>
 );
@@ -93,8 +124,8 @@ export default function App() {
     }
   }, [dutyRoster]);
 
-  // Active view tab
-  const [activeTab, setActiveTab] = useState('main-gate');
+  // Active view tab — default to 'search-student' so students instantly find their seat
+  const [activeTab, setActiveTab] = useState('search-student');
 
   // MongoDB Database Sync Modal state
   const [isDBSyncOpen, setIsDBSyncOpen] = useState(false);
@@ -330,6 +361,7 @@ export default function App() {
           handleShiftChange={handleShiftChange}
           seatingResult={seatingResult}
           onPrint={handlePrint}
+          onOpenLogin={() => setIsLoginOpen(true)}
         />
 
         {/* Right / Center Content Area */}
@@ -406,18 +438,20 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-slate-600 text-[11px]">
-                      समाधान: साइडबार में <strong>"Classes & Rooms"</strong> पर जाकर नए कमरे या बेंच जोड़ें।
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('classes-rooms')}
-                      className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer"
-                    >
-                      + कमरा / बेंच जोड़ें
-                    </button>
-                  </div>
+                  {isAuthenticated && (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-slate-600 text-[11px]">
+                        समाधान: साइडबार में <strong>"Classes & Rooms"</strong> पर जाकर नए कमरे या बेंच जोड़ें।
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('classes-rooms')}
+                        className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer"
+                      >
+                        + कमरा / बेंच जोड़ें
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -425,14 +459,23 @@ export default function App() {
 
           {/* Dynamic Views based on active tab */}
           {activeTab === 'classes-rooms' && (
-            <div className="space-y-6 sm:space-y-8">
-              <ClassManager classes={classes} setClasses={setClasses} />
-              <RoomManager
-                rooms={rooms}
-                setRooms={setRooms}
-                totalStudentsRequired={seatingResult.totalStudents}
+            !isAuthenticated ? (
+              <StaffLockedGuard
+                title="कक्षा और कमरे (एडमिन अनुभाग)"
+                description="कक्षाएं, छात्र संख्या व कमरों का आवंटन केवल विद्यालय एडमिन द्वारा ही बदला जा सकता है। कृपया एडमिन खाते से लॉगिन करें।"
+                onLogin={() => setIsLoginOpen(true)}
+                onGoToStudentView={() => setActiveTab('search-student')}
               />
-            </div>
+            ) : (
+              <div className="space-y-6 sm:space-y-8">
+                <ClassManager classes={classes} setClasses={setClasses} />
+                <RoomManager
+                  rooms={rooms}
+                  setRooms={setRooms}
+                  totalStudentsRequired={seatingResult.totalStudents}
+                />
+              </div>
+            )
           )}
 
           {activeTab === 'main-gate' && (
@@ -462,29 +505,47 @@ export default function App() {
           )}
 
           {activeTab === 'absent-list' && (
-            <AbsenteeManager
-              seatingResult={seatingResult}
-              examDetails={examDetails}
-              absentStudents={absentStudents}
-              setAbsentStudents={setAbsentStudents}
-            />
+            !isAuthenticated ? (
+              <StaffLockedGuard
+                title="अनुपस्थिति पत्रक (स्टाफ अनुभाग)"
+                description="परीक्षा कक्ष में अनुपस्थिति दर्ज करने एवं पत्रक प्रिंट करने के लिए अधिकृत शिक्षक या एडमिन लॉगिन आवश्यक है।"
+                onLogin={() => setIsLoginOpen(true)}
+                onGoToStudentView={() => setActiveTab('search-student')}
+              />
+            ) : (
+              <AbsenteeManager
+                seatingResult={seatingResult}
+                examDetails={examDetails}
+                absentStudents={absentStudents}
+                setAbsentStudents={setAbsentStudents}
+              />
+            )
           )}
 
           {activeTab === 'teacher-portal' && (
-            <TeacherRoomPortal
-              examSession={{
-                sessionName: examDetails.examName,
-                rooms: seatingResult.rooms || [],
-                seatingData: seatingResult.seatingData,
-                dutyRoster,
-              }}
-              activeDate={examDetails.date}
-              activeShift={activeShift}
-              liveAbsentees={liveAbsentees}
-              onToggleAbsent={handleToggleAbsent}
-              onLogout={logout}
-              onSwitchToAdminView={() => setActiveTab('main-gate')}
-            />
+            !isAuthenticated ? (
+              <StaffLockedGuard
+                title="कक्ष उपस्थिति पोर्टल (शिक्षक अनुभाग)"
+                description="कक्षा में लाइव अनुपस्थिति दर्ज करने के लिए संबंधित कक्ष निरीक्षक अपने मोबाइल नंबर एवं पिन से लॉगिन करें।"
+                onLogin={() => setIsLoginOpen(true)}
+                onGoToStudentView={() => setActiveTab('search-student')}
+              />
+            ) : (
+              <TeacherRoomPortal
+                examSession={{
+                  sessionName: examDetails.examName,
+                  rooms: seatingResult.rooms || [],
+                  seatingData: seatingResult.seatingData,
+                  dutyRoster,
+                }}
+                activeDate={examDetails.date}
+                activeShift={activeShift}
+                liveAbsentees={liveAbsentees}
+                onToggleAbsent={handleToggleAbsent}
+                onLogout={logout}
+                onSwitchToAdminView={() => setActiveTab('main-gate')}
+              />
+            )
           )}
 
           {activeTab === 'exam-scheme' && (
@@ -500,24 +561,42 @@ export default function App() {
           )}
 
           {activeTab === 'teacher-duty' && (
-            <TeacherDutyManager
-              teachers={teachers}
-              setTeachers={setTeachers}
-              seatingResult={seatingResult}
-              activeShift={activeShift}
-              dutyRoster={dutyRoster}
-              setDutyRoster={setDutyRoster}
-              examDetails={examDetails}
-            />
+            !isAuthenticated ? (
+              <StaffLockedGuard
+                title="कक्ष निरीक्षक ड्यूटी चार्ट (एडमिन अनुभाग)"
+                description="शिक्षकों की परीक्षा ड्यूटी निर्धारित करने एवं आदेश पत्र प्रिंट करने के लिए व्यवस्थापक लॉगिन आवश्यक है।"
+                onLogin={() => setIsLoginOpen(true)}
+                onGoToStudentView={() => setActiveTab('search-student')}
+              />
+            ) : (
+              <TeacherDutyManager
+                teachers={teachers}
+                setTeachers={setTeachers}
+                seatingResult={seatingResult}
+                activeShift={activeShift}
+                dutyRoster={dutyRoster}
+                setDutyRoster={setDutyRoster}
+                examDetails={examDetails}
+              />
+            )
           )}
 
           {activeTab === 'result-marksheet' && (
-            <ResultMarksheetManager
-              classes={classes}
-              activeShift={activeShift}
-              examDetails={examDetails}
-              seatingResult={seatingResult}
-            />
+            !isAuthenticated ? (
+              <StaffLockedGuard
+                title="परीक्षाफल व अंकतालिका (स्टाफ अनुभाग)"
+                description="छात्रों के विषयवार प्राप्तांक भरने व मार्कशीट तैयार करने के लिए अधिकृत शिक्षक या एडमिन लॉगिन आवश्यक है।"
+                onLogin={() => setIsLoginOpen(true)}
+                onGoToStudentView={() => setActiveTab('search-student')}
+              />
+            ) : (
+              <ResultMarksheetManager
+                classes={classes}
+                activeShift={activeShift}
+                examDetails={examDetails}
+                seatingResult={seatingResult}
+              />
+            )
           )}
           </Suspense>
         </main>

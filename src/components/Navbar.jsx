@@ -34,7 +34,11 @@ export default function Navbar({
   onOpenTeacherPortal
 }) {
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
-  const { currentUser, isAuthenticated, logout, isPrincipal, isSuperAdmin, isTeacher } = useAuth();
+  const { currentUser, isAuthenticated, logout, isPrincipal, isSuperAdmin, isCoordinator, isTeacher } = useAuth();
+
+  const canEditExamDetails = isAuthenticated && (isPrincipal || isSuperAdmin || isCoordinator);
+  const canResetPreset = isAuthenticated && (isPrincipal || isSuperAdmin);
+  const canAccessDB = isAuthenticated && (isPrincipal || isSuperAdmin || isCoordinator);
 
   const tabLabels = {
     'classes-rooms': '📋 1. Classes & Rooms',
@@ -80,13 +84,19 @@ export default function Navbar({
               <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <input
-                type="text"
-                value={examDetails.schoolName}
-                onChange={(e) => setExamDetails({ ...examDetails, schoolName: e.target.value })}
-                className="font-black text-slate-800 text-sm sm:text-base md:text-lg bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-600 focus:outline-none transition-all w-full truncate"
-                title="विद्यालय का नाम बदलें"
-              />
+              {canEditExamDetails ? (
+                <input
+                  type="text"
+                  value={examDetails.schoolName}
+                  onChange={(e) => setExamDetails({ ...examDetails, schoolName: e.target.value })}
+                  className="font-black text-slate-800 text-sm sm:text-base md:text-lg bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-600 focus:outline-none transition-all w-full truncate"
+                  title="विद्यालय का नाम बदलें (एडमिन)"
+                />
+              ) : (
+                <h1 className="font-black text-slate-800 text-sm sm:text-base md:text-lg truncate select-none tracking-tight">
+                  {examDetails.schoolName}
+                </h1>
+              )}
               <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
                 <span className="font-bold text-indigo-700 truncate">
                   {examDetails.examName}
@@ -94,16 +104,28 @@ export default function Navbar({
                 <span className="hidden sm:inline text-slate-300">|</span>
                 <span className="hidden sm:inline-flex items-center gap-1 text-slate-600">
                   <Calendar className="w-3 h-3 text-indigo-600 shrink-0" />
-                  <input
-                    type="date"
-                    value={examDetails.date || '2026-10-26'}
-                    onChange={(e) => setExamDetails({ ...examDetails, date: e.target.value })}
-                    className="bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px] font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    title="परीक्षा तिथि (Exam Date)"
-                  />
+                  {canEditExamDetails ? (
+                    <input
+                      type="date"
+                      value={examDetails.date || ''}
+                      onChange={(e) => setExamDetails({ ...examDetails, date: e.target.value })}
+                      className="bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px] font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      title="परीक्षा तिथि (Exam Date)"
+                    />
+                  ) : (
+                    <span className="font-semibold text-slate-700">
+                      {examDetails.date || 'परीक्षा दिवस'}
+                    </span>
+                  )}
                 </span>
                 <span className="hidden md:inline text-slate-300">|</span>
                 <span className="hidden md:inline text-slate-600">{examDetails.timeRange}</span>
+                {!isAuthenticated && (
+                  <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    सुरक्षित छात्र दृश्य (Read Only)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -134,7 +156,13 @@ export default function Navbar({
 
             {/* Quick Teacher Room Portal Button */}
             <button
-              onClick={onOpenTeacherPortal}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  onOpenLogin();
+                } else {
+                  onOpenTeacherPortal();
+                }
+              }}
               className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer ${
                 activeTab === 'teacher-portal'
                   ? 'bg-blue-600 text-white'
@@ -144,17 +172,20 @@ export default function Navbar({
             >
               <Smartphone className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">कक्ष उपस्थिति</span>
+              {!isAuthenticated && <span className="text-[9px] text-blue-500">🔒</span>}
             </button>
 
-            {/* MongoDB Sync Button */}
-            <button
-              onClick={onOpenDBSync}
-              className="px-2.5 sm:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="MongoDB Database Sync & Sessions"
-            >
-              <Database className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden md:inline">DB Sync</span>
-            </button>
+            {/* MongoDB Sync Button — Only for authenticated Admin/Principal */}
+            {canAccessDB && (
+              <button
+                onClick={onOpenDBSync}
+                className="px-2.5 sm:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="MongoDB Database Sync & Sessions"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden md:inline">DB Sync</span>
+              </button>
+            )}
 
             {/* User Auth Section */}
             {isAuthenticated ? (
@@ -199,11 +230,11 @@ export default function Navbar({
             ) : (
               <button
                 onClick={onOpenLogin}
-                className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                 title="शिक्षक / प्रधानाचार्य लॉगिन"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>लॉगिन</span>
+                <span>स्टाफ लॉगिन</span>
               </button>
             )}
 
@@ -217,14 +248,16 @@ export default function Navbar({
               <span className="hidden sm:inline">Print</span>
             </button>
 
-            {/* Reset Preset Button */}
-            <button
-              onClick={onResetData}
-              title="डिफ़ॉल्ट प्रीसेट रीसेट करें"
-              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
+            {/* Reset Preset Button — Only for Admin */}
+            {canResetPreset && (
+              <button
+                onClick={onResetData}
+                title="डिफ़ॉल्ट प्रीसेट रीसेट करें (एडमिन)"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Info toggle for mobile */}
             <button
@@ -242,31 +275,49 @@ export default function Navbar({
           <div className="sm:hidden mt-2.5 pt-2.5 border-t border-slate-200 space-y-2 bg-slate-50 p-3 rounded-xl">
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase">परीक्षा का नाम</label>
-              <input
-                type="text"
-                value={examDetails.examName}
-                onChange={(e) => setExamDetails({ ...examDetails, examName: e.target.value })}
-                className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-semibold text-slate-800"
-              />
+              {canEditExamDetails ? (
+                <input
+                  type="text"
+                  value={examDetails.examName}
+                  onChange={(e) => setExamDetails({ ...examDetails, examName: e.target.value })}
+                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-semibold text-slate-800"
+                />
+              ) : (
+                <div className="text-xs font-bold text-slate-800 px-2 py-1 bg-white rounded-lg border border-slate-200">
+                  {examDetails.examName}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase">दिनांक</label>
-                <input
-                  type="date"
-                  value={examDetails.date || '2026-10-21'}
-                  onChange={(e) => setExamDetails({ ...examDetails, date: e.target.value })}
-                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
-                />
+                {canEditExamDetails ? (
+                  <input
+                    type="date"
+                    value={examDetails.date || ''}
+                    onChange={(e) => setExamDetails({ ...examDetails, date: e.target.value })}
+                    className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
+                  />
+                ) : (
+                  <div className="text-xs font-semibold text-slate-700 px-2 py-1 bg-white rounded-lg border border-slate-200">
+                    {examDetails.date || 'आज'}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase">समय</label>
-                <input
-                  type="text"
-                  value={examDetails.timeRange || ''}
-                  onChange={(e) => setExamDetails({ ...examDetails, timeRange: e.target.value })}
-                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
-                />
+                {canEditExamDetails ? (
+                  <input
+                    type="text"
+                    value={examDetails.timeRange || ''}
+                    onChange={(e) => setExamDetails({ ...examDetails, timeRange: e.target.value })}
+                    className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
+                  />
+                ) : (
+                  <div className="text-xs font-semibold text-slate-700 px-2 py-1 bg-white rounded-lg border border-slate-200">
+                    {examDetails.timeRange || 'प्रातः काल'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
