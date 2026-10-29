@@ -1,26 +1,38 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from './data/defaultData';
 import { generateSeatingPlan } from './utils/seatingAlgorithm';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
-import ClassManager from './components/ClassManager';
-import RoomManager from './components/RoomManager';
-import MainGateNotice from './components/MainGateNotice';
-import RoomDeskChart from './components/RoomDeskChart';
-import DoorSlips from './components/DoorSlips';
-import StudentFinder from './components/StudentFinder';
-import AbsenteeManager from './components/AbsenteeManager';
-import ExamSchemeManager from './components/ExamSchemeManager';
-import TeacherDutyManager from './components/TeacherDutyManager';
-import ResultMarksheetManager from './components/ResultMarksheetManager';
-import DatabaseSyncModal from './components/DatabaseSyncModal';
-import LoginModal from './components/LoginModal';
-import UserManagementModal from './components/UserManagementModal';
-import TeacherRoomPortal from './components/TeacherRoomPortal';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
 import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X } from 'lucide-react';
+
+// Lazy-load heavy components — improves mobile load time significantly
+const ClassManager            = lazy(() => import('./components/ClassManager'));
+const RoomManager             = lazy(() => import('./components/RoomManager'));
+const MainGateNotice          = lazy(() => import('./components/MainGateNotice'));
+const RoomDeskChart           = lazy(() => import('./components/RoomDeskChart'));
+const DoorSlips               = lazy(() => import('./components/DoorSlips'));
+const StudentFinder           = lazy(() => import('./components/StudentFinder'));
+const AbsenteeManager         = lazy(() => import('./components/AbsenteeManager'));
+const ExamSchemeManager       = lazy(() => import('./components/ExamSchemeManager'));
+const TeacherDutyManager      = lazy(() => import('./components/TeacherDutyManager'));
+const ResultMarksheetManager  = lazy(() => import('./components/ResultMarksheetManager'));
+const DatabaseSyncModal       = lazy(() => import('./components/DatabaseSyncModal'));
+const LoginModal              = lazy(() => import('./components/LoginModal'));
+const UserManagementModal     = lazy(() => import('./components/UserManagementModal'));
+const TeacherRoomPortal       = lazy(() => import('./components/TeacherRoomPortal'));
+
+// Loading spinner shown while lazy components load
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[60vh]">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <p className="text-slate-500 text-sm font-medium">लोड हो रहा है...</p>
+    </div>
+  </div>
+);
 
 export default function App() {
   const { currentUser, isAuthenticated, isTeacher, canAccessAllRooms, logout } = useAuth();
@@ -322,7 +334,7 @@ export default function App() {
 
         {/* Right / Center Content Area */}
         <main className="flex-1 w-full min-w-0">
-          
+          <Suspense fallback={<PageLoader />}>
           {/* Anti-Adjacent Anti-Cheating Guarantee Banner */}
           {activeTab !== 'teacher-portal' && (
             <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
@@ -507,6 +519,7 @@ export default function App() {
               seatingResult={seatingResult}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
@@ -532,43 +545,45 @@ export default function App() {
         </p>
       </footer>
 
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onLoginSuccess={(user) => {
-          if (user.role === 'teacher') {
-            setActiveTab('teacher-portal');
-          }
-        }}
-      />
+      <Suspense fallback={null}>
+        {/* Login Modal */}
+        <LoginModal
+          isOpen={isLoginOpen}
+          onClose={() => setIsLoginOpen(false)}
+          onLoginSuccess={(user) => {
+            if (user.role === 'teacher') {
+              setActiveTab('teacher-portal');
+            }
+          }}
+        />
 
-      {/* Role Management Modal (Principal & SuperAdmin) */}
-      <UserManagementModal
-        isOpen={isUserMgmtOpen}
-        onClose={() => setIsUserMgmtOpen(false)}
-      />
+        {/* Role Management Modal (Principal & SuperAdmin) */}
+        <UserManagementModal
+          isOpen={isUserMgmtOpen}
+          onClose={() => setIsUserMgmtOpen(false)}
+        />
 
-      {/* MongoDB Database Sync & Session Modal */}
-      <DatabaseSyncModal
-        isOpen={isDBSyncOpen}
-        onClose={() => setIsDBSyncOpen(false)}
-        currentSessionData={{
-          activeShift,
-          examDetails,
-          classes,
-          rooms,
-          teachers,
-          dutyRoster,
-          marksData: (() => {
-            try { return JSON.parse(localStorage.getItem('dynamic_exam_marks_data_v1')) || {}; } catch { return {}; }
-          })(),
-          subjectConfig: (() => {
-            try { return JSON.parse(localStorage.getItem('dynamic_exam_subject_config_v1')) || {}; } catch { return {}; }
-          })(),
-        }}
-        onLoadSession={handleLoadSessionFromDB}
-      />
+        {/* MongoDB Database Sync & Session Modal */}
+        <DatabaseSyncModal
+          isOpen={isDBSyncOpen}
+          onClose={() => setIsDBSyncOpen(false)}
+          currentSessionData={{
+            activeShift,
+            examDetails,
+            classes,
+            rooms,
+            teachers,
+            dutyRoster,
+            marksData: (() => {
+              try { return JSON.parse(localStorage.getItem('dynamic_exam_marks_data_v1')) || {}; } catch { return {}; }
+            })(),
+            subjectConfig: (() => {
+              try { return JSON.parse(localStorage.getItem('dynamic_exam_subject_config_v1')) || {}; } catch { return {}; }
+            })(),
+          }}
+          onLoadSession={handleLoadSessionFromDB}
+        />
+      </Suspense>
     </div>
   );
 }
