@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Smile,
   FileText,
-  UserCheck
+  UserCheck,
+  Printer
 } from 'lucide-react';
 import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA } from '../data/examSchemeData';
 
