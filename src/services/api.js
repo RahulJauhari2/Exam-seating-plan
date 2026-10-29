@@ -1,6 +1,7 @@
 // API Client for Express + MongoDB + Zod backend
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use relative /api path — works on Vercel (serverless) and locally (Vite proxy → localhost:5000)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Auth token helpers
 export const getAuthToken = () => localStorage.getItem('exam_auth_token') || '';
