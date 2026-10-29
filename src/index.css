@@ -60,6 +60,38 @@
     box-shadow: none !important;
   }
 
+  /* Dedicated 1-Page A4 Exam Scheme Print Rules */
+  .print-scheme-a4 {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print-scheme-a4 table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+    table-layout: auto !important;
+  }
+
+  .print-scheme-a4 th,
+  .print-scheme-a4 td {
+    border: 1px solid #000 !important;
+    padding: 3px 2px !important;
+    text-align: center !important;
+    line-height: 1.15 !important;
+  }
+
+  .print-scheme-a4 thead th {
+    background-color: #f1f5f9 !important;
+    font-weight: 800 !important;
+  }
+
   /* Don't break page on the very last element */
   .print-room-page:last-child {
     page-break-after: auto !important;

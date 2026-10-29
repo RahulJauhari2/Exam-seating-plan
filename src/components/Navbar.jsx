@@ -41,6 +41,7 @@ export default function Navbar({
   const canAccessDB = isAuthenticated && (isPrincipal || isSuperAdmin || isCoordinator);
 
   const tabLabels = {
+    'student-home': '🏠 Home - विद्यार्थी पोर्टल',
     'classes-rooms': '📋 1. Classes & Rooms',
     'main-gate': '🚪 2. Main Gate Notice Board',
     'desk-chart': '🪑 3. Desk Seating Plan',

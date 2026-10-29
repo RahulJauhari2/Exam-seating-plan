@@ -610,7 +610,15 @@ export default function ExamSchemeManager({
       });
   }, [seatingResult, selectedDay, activeShift, classTotals, customSplits]);
 
-  const handlePrint = () => {
+  const handlePrint = (orientation = 'landscape') => {
+    const existing = document.getElementById('print-scheme-orientation-style');
+    if (existing) existing.remove();
+
+    const style = document.createElement('style');
+    style.id = 'print-scheme-orientation-style';
+    style.innerHTML = `@media print { @page { size: A4 ${orientation}; margin: 5mm 6mm; } }`;
+    document.head.appendChild(style);
+
     window.print();
   };
 
@@ -1135,260 +1143,291 @@ export default function ExamSchemeManager({
       {/* SUB-VIEW 3: FULL TIME-TABLE (A4 संपूर्ण परीक्षा स्कीम)     */}
       {/* ========================================================= */}
       {activeSubView === 'full-scheme' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
-          {/* Print button on top right */}
-          <div className="flex justify-end no-print">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>प्रिंट ऑफिशियल टाइम टेबल (A4)</span>
-            </button>
-          </div>
-
-          {/* Official Scheme Header matching user's paper */}
-          <div className="text-center space-y-1 border-b pb-4">
-            <h2 className="text-base sm:text-lg font-black tracking-wider text-slate-900 uppercase">
-              {EXAM_SCHEME_METADATA.examTitle}
-            </h2>
-            <h3 className="text-sm sm:text-base font-bold text-slate-800 tracking-wide">
-              {EXAM_SCHEME_METADATA.schoolName}
-            </h3>
-          </div>
-
-          {/* Time Table Split: 1st Meeting (Left) & 2nd Meeting (Right) */}
-          <div className="overflow-x-auto border border-slate-300 rounded-lg">
-            <table className="w-full text-center text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-300 bg-slate-100 font-bold">
-                  <th colSpan="6" className="py-2 border-r border-slate-300 text-slate-800">
-                    {EXAM_SCHEME_METADATA.shift1Time}
-                  </th>
-                  <th colSpan="4" className="py-2 text-slate-800">
-                    {EXAM_SCHEME_METADATA.shift2Time}
-                  </th>
-                </tr>
-                <tr className="border-b border-slate-300 bg-slate-50 font-bold text-[11px] text-slate-700">
-                  <th className="py-2 px-1 border-r border-slate-300 w-20">DATE</th>
-                  <th className="py-2 px-1 border-r border-slate-300 w-24">DAY</th>
-                  <th className="py-2 px-1 border-r border-slate-300">CLASS - 9</th>
-                  <th className="py-2 px-1 border-r border-slate-300">CLASS - 10</th>
-                  <th className="py-2 px-1 border-r border-slate-300">CLASS - 11</th>
-                  <th className="py-2 px-1 border-r-2 border-slate-400">CLASS - 12</th>
-                  <th className="py-2 px-1 border-r border-slate-300">CLASS - 6</th>
-                  <th className="py-2 px-1 border-r border-slate-300">CLASS - 7</th>
-                  <th className="py-2 px-1">CLASS - 8</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-300 text-[11px] font-semibold text-slate-800">
-                {EXAM_TIMETABLE.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-1 border-r border-slate-300 font-bold">{row.date}</td>
-                    <td className="py-2.5 px-1 border-r border-slate-300 font-medium">{row.day}</td>
-                    
-                    {/* Shift 1 (9 to 12) */}
-                    <td className="py-2.5 px-1 border-r border-slate-300 bg-blue-50/20">
-                      {(row.shift_1['9'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                    <td className="py-2.5 px-1 border-r border-slate-300 bg-blue-50/20">
-                      {(row.shift_1['10'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                    <td className="py-2.5 px-1 border-r border-slate-300 bg-blue-50/20">
-                      {(row.shift_1['11'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                    <td className="py-2.5 px-1 border-r-2 border-slate-400 bg-blue-50/20">
-                      {(row.shift_1['12'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-
-                    {/* Shift 2 (6 to 8) */}
-                    <td className="py-2.5 px-1 border-r border-slate-300 bg-teal-50/20">
-                      {(row.shift_2['6'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                    <td className="py-2.5 px-1 border-r border-slate-300 bg-teal-50/20">
-                      {(row.shift_2['7'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                    <td className="py-2.5 px-1 bg-teal-50/20">
-                      {(row.shift_2['8'] || []).map((s) => s.name).join(' / ') || '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Note Section */}
-          <div className="text-[11px] font-bold text-slate-800 border-t pt-3">
-            <span>NOTE : - {EXAM_SCHEME_METADATA.practicalNote}</span>
-          </div>
-
-          {/* ========================================================= */}
-          {/* COLLEGE MEDIUM & STUDENT STRENGTH SUMMARY                 */}
-          {/* ========================================================= */}
-          <div className="pt-4 border-t border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>संपूर्ण कॉलेज माध्यम व छात्र संख्या सारांश (Medium-wise Student Strength)</span>
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  कॉलेज में संचालित दोनों माध्यमों (हिन्दी व अंग्रेजी) के विद्यार्थियों का कक्षावार विवरण
-                </p>
-              </div>
-
-              {/* Medium Badges */}
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-900 rounded-lg text-xs font-bold">
-                  हिन्दी माध्यम: {collegeMediumStats.grandHindi}
-                </span>
-                <span className="px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-xs font-bold">
-                  English Medium: {collegeMediumStats.grandEnglish}
-                </span>
-                <span className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-xs font-black">
-                  कुल: {collegeMediumStats.grandTotal} छात्र
-                </span>
-              </div>
-            </div>
-
-            {/* Class-wise Medium Table */}
-            <div className="overflow-x-auto border border-slate-300 rounded-lg">
-              <table className="w-full text-center text-xs border-collapse">
-                <thead className="bg-slate-100 font-bold text-[11px] text-slate-700 border-b border-slate-300">
-                  <tr>
-                    <th className="py-2 px-3 text-left">कक्षा (Class)</th>
-                    <th className="py-2 px-3 text-left">सेक्शन (Sections)</th>
-                    <th className="py-2 px-3 text-orange-800 bg-orange-50/50">हिन्दी माध्यम छात्र</th>
-                    <th className="py-2 px-3 text-blue-800 bg-blue-50/50">अंग्रेजी माध्यम छात्र</th>
-                    <th className="py-2 px-3 text-slate-900 bg-slate-50">कुल छात्र संख्या</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
-                  {collegeMediumStats.list.map((row) => (
-                    <tr key={row.grade} className="hover:bg-slate-50">
-                      <td className="py-2 px-3 text-left font-bold text-slate-900">
-                        कक्षा {row.grade}th
-                      </td>
-                      <td className="py-2 px-3 text-left text-slate-600">
-                        {row.sections.length > 0 ? row.sections.join(', ') : '—'}
-                      </td>
-                      <td className="py-2 px-3 font-bold text-orange-800 bg-orange-50/20">
-                        {row.hindiCount}
-                      </td>
-                      <td className="py-2 px-3 font-bold text-blue-800 bg-blue-50/20">
-                        {row.englishCount}
-                      </td>
-                      <td className="py-2 px-3 font-black text-slate-900 bg-slate-50/50">
-                        {row.total}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Totals Row */}
-                  <tr className="bg-slate-100/80 font-black text-slate-900 border-t-2 border-slate-300">
-                    <td colSpan="2" className="py-2.5 px-3 text-left uppercase tracking-wider text-[11px]">
-                      महायोग (College Total)
-                    </td>
-                    <td className="py-2.5 px-3 text-orange-900 bg-orange-100/50">
-                      {collegeMediumStats.grandHindi} छात्र
-                    </td>
-                    <td className="py-2.5 px-3 text-blue-900 bg-blue-100/50">
-                      {collegeMediumStats.grandEnglish} छात्र
-                    </td>
-                    <td className="py-2.5 px-3 text-indigo-950 bg-indigo-50">
-                      {collegeMediumStats.grandTotal} छात्र
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ========================================================= */}
-          {/* COMPLETE DATE-WISE MEDIUM PAPER DEMAND                    */}
-          {/* ========================================================= */}
-          <div className="pt-4 border-t border-slate-200 space-y-4">
+        <div className="space-y-6">
+          {/* Action Bar (Screen Only - Hidden in Print) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
             <div>
-              <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-emerald-600" />
-                <span>संपूर्ण परीक्षा तिथि अनुसार प्रश्न-पत्र मांग (Date-wise Question Paper Requirement)</span>
-              </h4>
-              <p className="text-[11px] text-slate-500">
-                प्रत्येक परीक्षा तिथि पर हिन्दी माध्यम व अंग्रेजी माध्यम के प्रश्न-पत्रों की कुल आवश्यकता
+              <h3 className="text-sm sm:text-base font-black text-slate-900">
+                ऑफिशियल परीक्षा समय-सारिणी (Official Exam Date-Sheet)
+              </h3>
+              <p className="text-xs text-slate-500">
+                A4 साइज पर ठीक 1 पेज में प्रिंट करने के लिए नीचे दिए गए बटन पर क्लिक करें
               </p>
             </div>
 
-            <div className="overflow-x-auto border border-slate-300 rounded-lg">
-              <table className="w-full text-center text-xs border-collapse">
-                <thead className="bg-slate-100 font-bold text-[11px] text-slate-700 border-b border-slate-300">
-                  <tr>
-                    <th className="py-2 px-2 text-left w-24">दिनांक (Date)</th>
-                    <th className="py-2 px-2 text-left w-28">दिन (Day)</th>
-                    <th className="py-2 px-3 text-left">कक्षाएं व विषय (Shift 1)</th>
-                    <th className="py-2 px-3 text-orange-800 bg-orange-50/50 w-32">हिन्दी माध्यम प्रतियां</th>
-                    <th className="py-2 px-3 text-blue-800 bg-blue-50/50 w-32">English प्रतियां</th>
-                    <th className="py-2 px-3 text-slate-900 bg-slate-50 w-28">कुल प्रश्न-पत्र</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
-                  {overallTimetableDemand.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-2 text-left font-bold text-slate-900">
-                        {d.date}
-                      </td>
-                      <td className="py-2.5 px-2 text-left text-slate-600">
-                        {d.day}
-                      </td>
-                      <td className="py-2.5 px-3 text-left text-[11px] text-slate-700">
-                        {d.classSummaries.map((cs) => `कक्षा ${cs.grade}: ${cs.subjects}`).join(' | ') || '—'}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-orange-800 bg-orange-50/20">
-                        {d.hindi}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-blue-800 bg-blue-50/20">
-                        {d.english}
-                      </td>
-                      <td className="py-2.5 px-3 font-black text-slate-900 bg-slate-50/50">
-                        {d.total}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Grand Totals */}
-                  <tr className="bg-slate-100/80 font-black text-slate-900 border-t-2 border-slate-300">
-                    <td colSpan="3" className="py-2.5 px-3 text-left uppercase tracking-wider text-[11px]">
-                      संपूर्ण परीक्षा कुल मांग (Grand Total All Days)
-                    </td>
-                    <td className="py-2.5 px-3 text-orange-900 bg-orange-100/50">
-                      {overallTimetableDemand.reduce((sum, d) => sum + d.hindi, 0)} प्रतियां
-                    </td>
-                    <td className="py-2.5 px-3 text-blue-900 bg-blue-100/50">
-                      {overallTimetableDemand.reduce((sum, d) => sum + d.english, 0)} प्रतियां
-                    </td>
-                    <td className="py-2.5 px-3 text-indigo-950 bg-indigo-50">
-                      {overallTimetableDemand.reduce((sum, d) => sum + d.total, 0)} प्रतियां
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handlePrint('landscape')}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="A4 लैंडस्केप में 9 कॉलम बिना कटे 1 पेज पर साफ आते हैं"
+              >
+                <Printer className="w-4 h-4" />
+                <span>प्रिंट A4 लैंडस्केप (सर्वश्रेष्ठ 1-पेज)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrint('portrait')}
+                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="A4 पोर्ट्रेट प्रिंट"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>A4 पोर्ट्रेट</span>
+              </button>
             </div>
           </div>
 
-          {/* Signatures matching paper exactly */}
-          <div className="pt-8 flex items-end justify-between text-xs font-bold text-slate-800 px-6">
-            <div className="text-left space-y-1">
-              <span className="underline block">EXAMINATION HEAD</span>
-              {EXAM_SCHEME_METADATA.authorities.examHeads.map((head, i) => (
-                <span key={i} className="block text-[11px] font-medium text-slate-700">
-                  {head}
-                </span>
-              ))}
+          {/* ========================================================= */}
+          {/* OFFICIAL A4 PRINTABLE TIMETABLE SHEET (1 PAGE CLEAN FIT) */}
+          {/* ========================================================= */}
+          <div className="print-scheme-a4 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-4">
+            {/* Official Scheme Header matching user's paper */}
+            <div className="text-center space-y-1 border-b border-slate-300 pb-3">
+              <h2 className="text-base sm:text-xl font-black tracking-wider text-slate-900 uppercase">
+                {EXAM_SCHEME_METADATA.examTitle}
+              </h2>
+              <h3 className="text-sm sm:text-base font-bold text-slate-800 tracking-wide">
+                {EXAM_SCHEME_METADATA.schoolName}
+              </h3>
+              <div className="text-[11px] font-semibold text-slate-500">
+                <span>वार्षिक / अर्धवार्षिक परीक्षा समय-सारिणी (Official Examination Date Sheet)</span>
+              </div>
             </div>
 
-            <div className="text-right space-y-1">
-              <span className="underline block">PRINCIPAL</span>
-              <span className="block text-[11px] font-medium text-slate-700">
-                {EXAM_SCHEME_METADATA.authorities.principal}
-              </span>
+            {/* Time Table Split: 1st Meeting (Left) & 2nd Meeting (Right) */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-center text-xs border-collapse">
+                <thead>
+                  <tr className="border border-slate-400 bg-slate-100 font-bold text-slate-900">
+                    <th colSpan="6" className="py-2 border-r border-slate-400 text-xs uppercase tracking-wide">
+                      {EXAM_SCHEME_METADATA.shift1Time}
+                    </th>
+                    <th colSpan="3" className="py-2 text-xs uppercase tracking-wide">
+                      {EXAM_SCHEME_METADATA.shift2Time}
+                    </th>
+                  </tr>
+                  <tr className="border border-slate-400 bg-slate-50 font-bold text-[11px] text-slate-800">
+                    <th className="py-2 px-1 border-r border-slate-400 w-20">DATE</th>
+                    <th className="py-2 px-1 border-r border-slate-400 w-24">DAY</th>
+                    <th className="py-2 px-1 border-r border-slate-400">CLASS - 9</th>
+                    <th className="py-2 px-1 border-r border-slate-400">CLASS - 10</th>
+                    <th className="py-2 px-1 border-r border-slate-400">CLASS - 11</th>
+                    <th className="py-2 px-1 border-r-2 border-slate-500">CLASS - 12</th>
+                    <th className="py-2 px-1 border-r border-slate-400">CLASS - 6</th>
+                    <th className="py-2 px-1 border-r border-slate-400">CLASS - 7</th>
+                    <th className="py-2 px-1">CLASS - 8</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-400 text-[11px] font-semibold text-slate-900 border border-slate-400">
+                  {EXAM_TIMETABLE.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50/70">
+                      <td className="py-2 px-1 border-r border-slate-400 font-bold">{row.date}</td>
+                      <td className="py-2 px-1 border-r border-slate-400 font-medium">{row.day}</td>
+                      
+                      {/* Shift 1 (9 to 12) */}
+                      <td className="py-2 px-1 border-r border-slate-400 bg-blue-50/20">
+                        {(row.shift_1['9'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                      <td className="py-2 px-1 border-r border-slate-400 bg-blue-50/20">
+                        {(row.shift_1['10'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                      <td className="py-2 px-1 border-r border-slate-400 bg-blue-50/20">
+                        {(row.shift_1['11'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                      <td className="py-2 px-1 border-r-2 border-slate-500 bg-blue-50/20">
+                        {(row.shift_1['12'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+
+                      {/* Shift 2 (6 to 8) */}
+                      <td className="py-2 px-1 border-r border-slate-400 bg-teal-50/20">
+                        {(row.shift_2['6'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                      <td className="py-2 px-1 border-r border-slate-400 bg-teal-50/20">
+                        {(row.shift_2['7'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                      <td className="py-2 px-1 bg-teal-50/20">
+                        {(row.shift_2['8'] || []).map((s) => s.name).join(' / ') || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Note Section */}
+            <div className="text-[11px] font-bold text-slate-800 border-t border-slate-300 pt-2.5">
+              <span>NOTE : - {EXAM_SCHEME_METADATA.practicalNote}</span>
+            </div>
+
+            {/* Signatures placed immediately below Note — fits on the same A4 page */}
+            <div className="pt-6 pb-2 flex items-end justify-between text-xs font-bold text-slate-800 px-4">
+              <div className="text-left space-y-1">
+                <span className="underline block">EXAMINATION HEAD</span>
+                {EXAM_SCHEME_METADATA.authorities.examHeads.map((head, i) => (
+                  <span key={i} className="block text-[11px] font-medium text-slate-700">
+                    {head}
+                  </span>
+                ))}
+              </div>
+
+              <div className="text-right space-y-1">
+                <span className="underline block">PRINCIPAL</span>
+                <span className="block text-[11px] font-medium text-slate-700">
+                  {EXAM_SCHEME_METADATA.authorities.principal}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* SCREEN-ONLY ANALYTICAL SUMMARIES (HIDDEN IN PRINT SO A4 NEVER OVERFLOWS)  */}
+          {/* ========================================================================= */}
+          <div className="no-print space-y-6 pt-4 border-t-2 border-dashed border-slate-200">
+            {/* Medium & Student Strength Summary */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <span>संपूर्ण कॉलेज माध्यम व छात्र संख्या सारांश (Medium-wise Student Strength)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    कॉलेज में संचालित दोनों माध्यमों (हिन्दी व अंग्रेजी) के विद्यार्थियों का कक्षावार विवरण
+                  </p>
+                </div>
+
+                {/* Medium Badges */}
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-900 rounded-lg text-xs font-bold">
+                    हिन्दी माध्यम: {collegeMediumStats.grandHindi}
+                  </span>
+                  <span className="px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-xs font-bold">
+                    English Medium: {collegeMediumStats.grandEnglish}
+                  </span>
+                  <span className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-xs font-black">
+                    कुल: {collegeMediumStats.grandTotal} छात्र
+                  </span>
+                </div>
+              </div>
+
+              {/* Class-wise Medium Table */}
+              <div className="overflow-x-auto border border-slate-300 rounded-lg">
+                <table className="w-full text-center text-xs border-collapse">
+                  <thead className="bg-slate-100 font-bold text-[11px] text-slate-700 border-b border-slate-300">
+                    <tr>
+                      <th className="py-2 px-3 text-left">कक्षा (Class)</th>
+                      <th className="py-2 px-3 text-left">सेक्शन (Sections)</th>
+                      <th className="py-2 px-3 text-orange-800 bg-orange-50/50">हिन्दी माध्यम छात्र</th>
+                      <th className="py-2 px-3 text-blue-800 bg-blue-50/50">अंग्रेजी माध्यम छात्र</th>
+                      <th className="py-2 px-3 text-slate-900 bg-slate-50">कुल छात्र संख्या</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {collegeMediumStats.list.map((row) => (
+                      <tr key={row.grade} className="hover:bg-slate-50">
+                        <td className="py-2 px-3 text-left font-bold text-slate-900">
+                          कक्षा {row.grade}th
+                        </td>
+                        <td className="py-2 px-3 text-left text-slate-600">
+                          {row.sections.length > 0 ? row.sections.join(', ') : '—'}
+                        </td>
+                        <td className="py-2 px-3 font-bold text-orange-800 bg-orange-50/20">
+                          {row.hindiCount}
+                        </td>
+                        <td className="py-2 px-3 font-bold text-blue-800 bg-blue-50/20">
+                          {row.englishCount}
+                        </td>
+                        <td className="py-2 px-3 font-black text-slate-900 bg-slate-50/50">
+                          {row.total}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Totals Row */}
+                    <tr className="bg-slate-100/80 font-black text-slate-900 border-t-2 border-slate-300">
+                      <td colSpan="2" className="py-2.5 px-3 text-left uppercase tracking-wider text-[11px]">
+                        महायोग (College Total)
+                      </td>
+                      <td className="py-2.5 px-3 text-orange-900 bg-orange-100/50">
+                        {collegeMediumStats.grandHindi} छात्र
+                      </td>
+                      <td className="py-2.5 px-3 text-blue-900 bg-blue-100/50">
+                        {collegeMediumStats.grandEnglish} छात्र
+                      </td>
+                      <td className="py-2.5 px-3 text-indigo-950 bg-indigo-50">
+                        {collegeMediumStats.grandTotal} छात्र
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Complete Date-wise Medium Paper Demand */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-emerald-600" />
+                  <span>संपूर्ण परीक्षा तिथि अनुसार प्रश्न-पत्र मांग (Date-wise Question Paper Requirement)</span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  प्रत्येक परीक्षा तिथि पर हिन्दी माध्यम व अंग्रेजी माध्यम के प्रश्न-पत्रों की कुल आवश्यकता
+                </p>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-300 rounded-lg">
+                <table className="w-full text-center text-xs border-collapse">
+                  <thead className="bg-slate-100 font-bold text-[11px] text-slate-700 border-b border-slate-300">
+                    <tr>
+                      <th className="py-2 px-2 text-left w-24">दिनांक (Date)</th>
+                      <th className="py-2 px-2 text-left w-28">दिन (Day)</th>
+                      <th className="py-2 px-3 text-left">कक्षाएं व विषय (Shift 1)</th>
+                      <th className="py-2 px-3 text-orange-800 bg-orange-50/50 w-32">हिन्दी माध्यम प्रतियां</th>
+                      <th className="py-2 px-3 text-blue-800 bg-blue-50/50 w-32">English प्रतियां</th>
+                      <th className="py-2 px-3 text-slate-900 bg-slate-50 w-28">कुल प्रश्न-पत्र</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {overallTimetableDemand.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-2 text-left font-bold text-slate-900">
+                          {d.date}
+                        </td>
+                        <td className="py-2.5 px-2 text-left text-slate-600">
+                          {d.day}
+                        </td>
+                        <td className="py-2.5 px-3 text-left text-[11px] text-slate-700">
+                          {d.classSummaries.map((cs) => `कक्षा ${cs.grade}: ${cs.subjects}`).join(' | ') || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-orange-800 bg-orange-50/20">
+                          {d.hindi}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-blue-800 bg-blue-50/20">
+                          {d.english}
+                        </td>
+                        <td className="py-2.5 px-3 font-black text-slate-900 bg-slate-50/50">
+                          {d.total}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Grand Totals */}
+                    <tr className="bg-slate-100/80 font-black text-slate-900 border-t-2 border-slate-300">
+                      <td colSpan="3" className="py-2.5 px-3 text-left uppercase tracking-wider text-[11px]">
+                        संपूर्ण परीक्षा कुल मांग (Grand Total All Days)
+                      </td>
+                      <td className="py-2.5 px-3 text-orange-900 bg-orange-100/50">
+                        {overallTimetableDemand.reduce((sum, d) => sum + d.hindi, 0)} प्रतियां
+                      </td>
+                      <td className="py-2.5 px-3 text-blue-900 bg-blue-100/50">
+                        {overallTimetableDemand.reduce((sum, d) => sum + d.english, 0)} प्रतियां
+                      </td>
+                      <td className="py-2.5 px-3 text-indigo-950 bg-indigo-50">
+                        {overallTimetableDemand.reduce((sum, d) => sum + d.total, 0)} प्रतियां
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

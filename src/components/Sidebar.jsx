@@ -37,6 +37,15 @@ export default function Sidebar({
   // Tabs for students & public (always accessible without login)
   const studentNavItems = [
     {
+      id: 'student-home',
+      number: '0',
+      title: 'Home (छात्र पोर्टल)',
+      hindi: 'मार्गदर्शन, कहानी व सीट खोज',
+      icon: '🏠',
+      badge: 'New',
+      badgeColor: 'bg-indigo-600',
+    },
+    {
       id: 'search-student',
       number: '1',
       title: 'Search Roll No',

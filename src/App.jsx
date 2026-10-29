@@ -9,6 +9,7 @@ import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
+const StudentHomePage         = lazy(() => import('./components/StudentHomePage'));
 const ClassManager            = lazy(() => import('./components/ClassManager'));
 const RoomManager             = lazy(() => import('./components/RoomManager'));
 const MainGateNotice          = lazy(() => import('./components/MainGateNotice'));
@@ -124,8 +125,8 @@ export default function App() {
     }
   }, [dutyRoster]);
 
-  // Active view tab — default to 'search-student' so students instantly find their seat
-  const [activeTab, setActiveTab] = useState('search-student');
+  // Active view tab — default to 'student-home' for welcoming student storytelling portal
+  const [activeTab, setActiveTab] = useState('student-home');
 
   // MongoDB Database Sync Modal state
   const [isDBSyncOpen, setIsDBSyncOpen] = useState(false);
@@ -368,7 +369,7 @@ export default function App() {
         <main className="flex-1 w-full min-w-0">
           <Suspense fallback={<PageLoader />}>
           {/* Anti-Adjacent Anti-Cheating Guarantee Banner */}
-          {activeTab !== 'teacher-portal' && (
+          {activeTab !== 'teacher-portal' && activeTab !== 'student-home' && (
             <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
@@ -401,7 +402,7 @@ export default function App() {
           )}
 
           {/* Warning if capacity is less */}
-          {activeTab !== 'teacher-portal' && seatingResult.unseatedCount > 0 && (
+          {activeTab !== 'teacher-portal' && activeTab !== 'student-home' && seatingResult.unseatedCount > 0 && (
             <div className="mb-6 p-4 sm:p-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 text-xs shadow-xs no-print">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -458,6 +459,17 @@ export default function App() {
           )}
 
           {/* Dynamic Views based on active tab */}
+          {activeTab === 'student-home' && (
+            <StudentHomePage
+              seatingResult={seatingResult}
+              examDetails={examDetails}
+              activeShift={activeShift}
+              handleShiftChange={handleShiftChange}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              onOpenLogin={() => setIsLoginOpen(true)}
+            />
+          )}
+
           {activeTab === 'classes-rooms' && (
             !isAuthenticated ? (
               <StaffLockedGuard
