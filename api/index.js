@@ -9,6 +9,7 @@ import examRoutes from '../server/routes/examRoutes.js';
 import authRoutes from '../server/routes/authRoutes.js';
 import absenteeRoutes from '../server/routes/absenteeRoutes.js';
 import teacherRoutes from '../server/routes/teacherRoutes.js';
+import { seedInitialUsers } from '../server/controllers/authController.js';
 
 dotenv.config();
 
@@ -41,9 +42,14 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // DB connection cache — reuse across warm invocations
 let isConnected = false;
+let hasSeeded = false;
 const ensureDB = async () => {
   if (!isConnected) {
     isConnected = await connectDB();
+  }
+  if (!hasSeeded && isConnected) {
+    hasSeeded = true;
+    seedInitialUsers().catch(err => console.error('Seed/sync error:', err.message));
   }
 };
 

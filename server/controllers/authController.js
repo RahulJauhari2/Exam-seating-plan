@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { User } from '../models/User.js';
+import { Teacher } from '../models/Teacher.js';
 import { LoginValidationSchema, UserValidationSchema } from '../validations/authValidation.js';
 import { DEFAULT_TEACHERS } from '../../src/data/defaultTeachers.js';
 
@@ -23,66 +24,67 @@ const generateToken = (user) => {
   );
 };
 
-// Seed initial default accounts if database is empty
+// Seed initial default accounts or sync missing verified teachers
 export const seedInitialUsers = async () => {
   if (mongoose.connection.readyState !== 1) return;
 
   try {
-    const count = await User.countDocuments();
-    if (count > 0) return; // Already seeded
-
-    console.log('🌱 Seeding initial default accounts (SuperAdmin, Principal, Coordinator, Teachers)...');
-
     const hashedAdminPass = await bcrypt.hash('admin@123', 10);
     const hashedPrincipalPass = await bcrypt.hash('principal@123', 10);
     const hashedCoordPass = await bcrypt.hash('exam@123', 10);
     const defaultPinHash = await bcrypt.hash('1234', 10);
 
-    const initialUsers = [
-      {
-        username: 'superadmin',
-        name: 'सुपर एडमिन (Super Admin)',
-        role: 'superadmin',
-        phone: '9999999999',
-        password: hashedAdminPass,
-        pin: defaultPinHash,
-      },
-      {
-        username: 'principal',
-        name: 'प्रधानाचार्य (Principal)',
-        role: 'principal',
-        phone: '9876543210',
-        password: hashedPrincipalPass,
-        pin: defaultPinHash,
-      },
-      {
-        username: 'coordinator',
-        name: 'परीक्षा प्रभारी (Exam Incharge)',
-        role: 'coordinator',
-        phone: '9876543211',
-        password: hashedCoordPass,
-        pin: defaultPinHash,
-      },
+    // 1. Ensure Admins exist
+    const admins = [
+      { username: 'superadmin', name: 'सुपर एडमिन (Super Admin)', role: 'superadmin', phone: '9999999999', password: hashedAdminPass },
+      { username: 'principal', name: 'प्रधानाचार्य (Principal)', role: 'principal', phone: '9876543210', password: hashedPrincipalPass },
+      { username: 'coordinator', name: 'परीक्षा प्रभारी (Exam Incharge)', role: 'coordinator', phone: '9876543211', password: hashedCoordPass },
     ];
 
-    // Seed Teachers from defaultTeachers list
-    DEFAULT_TEACHERS.forEach((t, idx) => {
-      const cleanPhone = t.phone || `98000000${String(idx + 1).padStart(2, '0')}`;
-      initialUsers.push({
-        username: `teacher_${t.id}`,
-        name: t.name,
-        role: 'teacher',
-        phone: cleanPhone,
-        pin: defaultPinHash,
-        password: defaultPinHash,
-        assignedTeacherId: t.id,
-      });
-    });
+    for (const a of admins) {
+      await User.updateOne(
+        { username: a.username },
+        {
+          $set: {
+            username: a.username,
+            name: a.name,
+            role: a.role,
+            phone: a.phone,
+            password: a.password,
+            pin: defaultPinHash,
+            active: true,
+          },
+        },
+        { upsert: true }
+      );
+    }
 
-    await User.insertMany(initialUsers);
-    console.log(`✅ Seeded ${initialUsers.length} initial users into MongoDB!`);
+    // 2. Ensure all verified teachers exist in User collection with correct mobile numbers
+    for (const t of DEFAULT_TEACHERS) {
+      const cleanPhone = (t.mobile || t.phone || '').trim();
+      if (!cleanPhone) continue;
+
+      await User.updateOne(
+        { phone: cleanPhone },
+        {
+          $set: {
+            username: `teacher_${cleanPhone}`,
+            name: t.name,
+            role: 'teacher',
+            phone: cleanPhone,
+            pin: defaultPinHash,
+            password: defaultPinHash,
+            assignedTeacherId: t.id,
+            active: true,
+          },
+        },
+        { upsert: true }
+      );
+    }
+
+    console.log('✅ Synchronized admin accounts and all 25 verified teachers in Users collection.');
   } catch (error) {
-    console.error('Failed to seed users:', error.message);
+    console.error('Failed to seed/sync users:', error.message);
   }
 };
 
@@ -105,6 +107,34 @@ export const loginUser = async (req, res) => {
     if (phone && pin) {
       const cleanPhone = String(phone).trim();
       user = await User.findOne({ phone: cleanPhone, active: true });
+
+      // If user not in User collection, dynamically check Teacher collection or DEFAULT_TEACHERS
+      if (!user) {
+        const teacherRec = (await Teacher.findOne({ mobile: cleanPhone })) ||
+          DEFAULT_TEACHERS.find(
+            (t) =>
+              (t.mobile && t.mobile.trim() === cleanPhone) ||
+              (t.phone && t.phone.trim() === cleanPhone)
+          );
+
+        if (teacherRec) {
+          const defaultPinHash = await bcrypt.hash('1234', 10);
+          user = await User.findOneAndUpdate(
+            { phone: cleanPhone },
+            {
+              username: `teacher_${cleanPhone}`,
+              name: teacherRec.name,
+              role: 'teacher',
+              phone: cleanPhone,
+              pin: defaultPinHash,
+              password: defaultPinHash,
+              assignedTeacherId: teacherRec._id ? teacherRec._id.toString() : teacherRec.id,
+              active: true,
+            },
+            { upsert: true, new: true }
+          );
+        }
+      }
 
       if (!user) {
         return res.status(401).json({
