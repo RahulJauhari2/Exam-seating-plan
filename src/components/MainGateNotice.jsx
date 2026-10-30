@@ -271,8 +271,21 @@ export default function MainGateNotice({ seatingResult, examDetails }) {
           })}
         </div>
 
-        {/* Master Consolidated Table */}
-        <div className="mt-6 sm:mt-8 border-2 border-slate-900 rounded-xl overflow-hidden page-break-after">
+        {/* Master Consolidated Table - Forces a clean new page on print */}
+        <div className="mt-6 sm:mt-8 border-2 border-slate-900 rounded-xl overflow-hidden page-break-before page-break-after">
+          {/* Print Header for Master Consolidated Notice when starting on a new page */}
+          <div className="hidden print:block text-center pb-3 border-b-2 border-slate-900 mb-3">
+            <h2 className="text-base font-black text-slate-900 uppercase">
+              {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
+            </h2>
+            <p className="text-xs font-bold text-indigo-900">
+              {examDetails.examName || 'Annual Examination 2026'}
+            </p>
+            <div className="text-[10px] text-slate-600 mt-0.5">
+              दिनांक: {examDetails.date || ''} • समय: {examDetails.timeRange || ''}
+            </div>
+          </div>
+
           <div className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 text-center font-bold text-xs uppercase tracking-wider">
             🏛️ संपूर्ण परीक्षा केंद्र सारांश (Master Consolidated Notice)
           </div>
