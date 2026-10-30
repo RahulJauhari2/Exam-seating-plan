@@ -135,55 +135,75 @@ export const deleteTeacher = async (req, res) => {
 // Bulk Import from Excel (Replace or merge teacher list)
 export const bulkImportTeachers = async (req, res) => {
   try {
-    const { teachers } = req.body;
+    const { teachers, strategy } = req.body;
     if (!Array.isArray(teachers) || teachers.length === 0) {
       return res.status(400).json({ success: false, message: 'वैध शिक्षक सूची प्रदान करें।' });
     }
 
+    if (strategy === 'replace') {
+      await Teacher.deleteMany({});
+    }
+
     const defaultPinHash = await bcrypt.hash('1234', 10);
 
-    for (const t of teachers) {
+    for (let i = 0; i < teachers.length; i++) {
+      const t = teachers[i];
       if (!t.name || !t.mobile) continue;
       const cleanPhone = String(t.mobile).replace(/\D/g, '').slice(-10);
       if (!cleanPhone) continue;
 
-      await Teacher.findOneAndUpdate(
+      const teacherCode = t.teacherCode || `T${String(i + 1).padStart(2, '0')}`;
+      const isIncharge = t.isExamIncharge !== undefined 
+        ? !!t.isExamIncharge 
+        : (cleanPhone === '9044881048' || cleanPhone === '9936990367');
+      const isExempt = t.exemptDuty !== undefined ? !!t.exemptDuty : isIncharge;
+
+      const updatedTeacher = await Teacher.findOneAndUpdate(
         { mobile: cleanPhone },
         {
-          name: t.name,
-          englishName: t.englishName || '',
-          fatherName: t.fatherName || '',
-          designation: t.designation || 'सहायक अध्यापक',
-          subject: t.subject || '',
+          teacherCode,
+          name: t.name.trim(),
+          englishName: (t.englishName || t.name).trim().toUpperCase(),
+          fatherName: t.fatherName ? t.fatherName.trim() : '',
+          designation: t.designation ? t.designation.trim() : 'सहायक अध्यापक',
+          subject: t.subject ? t.subject.trim() : '',
           mobile: cleanPhone,
           dob: t.dob || '',
           joiningDate: t.joiningDate || '',
           aadharNo: t.aadharNo || '',
           isClassTeacher: !!t.isClassTeacher,
           assignedClass: t.assignedClass || '',
-          assignedSection: t.assignedSection || '',
+          assignedSection: (t.assignedSection || '').toUpperCase(),
+          isExamIncharge: isIncharge,
+          exemptDuty: isExempt,
           isPresent: t.isPresent !== false,
         },
         { upsert: true, new: true }
       );
 
-      // Ensure user account exists
-      const existingUser = await User.findOne({ phone: cleanPhone });
-      if (!existingUser) {
-        await User.create({
-          username: `teacher_${cleanPhone}`,
-          name: t.name,
-          role: 'teacher',
-          phone: cleanPhone,
-          pin: defaultPinHash,
-        });
-      }
+      // Ensure user account exists for login with PIN 1234
+      await User.findOneAndUpdate(
+        { phone: cleanPhone },
+        {
+          $set: {
+            username: `teacher_${cleanPhone}`,
+            name: t.name.trim(),
+            role: 'teacher',
+            phone: cleanPhone,
+            pin: defaultPinHash,
+            password: defaultPinHash,
+            assignedTeacherId: updatedTeacher._id.toString(),
+            active: true,
+          },
+        },
+        { upsert: true }
+      );
     }
 
     const updatedList = await Teacher.find().sort({ teacherCode: 1, createdAt: 1 });
     res.json({
       success: true,
-      message: `${teachers.length} शिक्षकों का डेटा सफलतापूर्वक सिंक किया गया।`,
+      message: `${teachers.length} शिक्षकों का डेटा सफलतापूर्वक डेटाबेस में सुरक्षित किया गया।`,
       data: updatedList,
     });
   } catch (error) {

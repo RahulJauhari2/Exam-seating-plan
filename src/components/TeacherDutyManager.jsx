@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
-import { saveDutyRosterToDB, updateTeacherAPI } from '../services/api';
+import { saveDutyRosterToDB, fetchTeachersAPI, createTeacherAPI, updateTeacherAPI, deleteTeacherAPI, bulkImportTeachersAPI } from '../services/api';
 import { exportTeachersToExcel } from '../utils/excelExport';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +44,26 @@ export default function TeacherDutyManager({
   examDetails
 }) {
   const [selectedDateId, setSelectedDateId] = useState('d1');
+
+  const [isImporting, setIsImporting] = useState(false);
+
+  // Fetch teachers directly from MongoDB Atlas on mount
+  useEffect(() => {
+    let isMounted = true;
+    fetchTeachersAPI()
+      .then((res) => {
+        if (isMounted && res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setTeachers(res.data.map((t) => ({ ...t, id: t._id ? t._id.toString() : t.id })));
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch teachers from DB:', err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const [activeTab, setActiveTab] = useState('chart'); // 'chart', 'staff', 'print'
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -640,13 +660,15 @@ export default function TeacherDutyManager({
     );
   };
 
-  // Add single teacher
-  const handleAddSingleTeacher = (e) => {
+    // Add single teacher and save to MongoDB
+  const handleAddSingleTeacher = async (e) => {
     e.preventDefault();
-    if (!newTeacher.name.trim()) return;
+    if (!newTeacher.name.trim() || !newTeacher.mobile.trim()) {
+      alert('शिक्षक का नाम और 10-अंकीय मोबाइल नंबर आवश्यक है।');
+      return;
+    }
 
     const teacherObj = {
-      id: `t_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: newTeacher.name.trim(),
       englishName: newTeacher.name.trim().toUpperCase(),
       fatherName: newTeacher.fatherName ? newTeacher.fatherName.trim() : '',
@@ -659,7 +681,19 @@ export default function TeacherDutyManager({
       isPresent: true,
     };
 
-    setTeachers((prev) => [...prev, teacherObj]);
+    try {
+      const res = await createTeacherAPI(teacherObj);
+      if (res && res.success && res.data) {
+        const created = res.data;
+        setTeachers((prev) => [...prev, { ...created, id: created._id ? created._id.toString() : created.id }]);
+        alert('✅ नया शिक्षक डेटाबेस में सफलतापूर्वक सुरक्षित हो गया!');
+      } else {
+        setTeachers((prev) => [...prev, { ...teacherObj, id: `t_${Date.now()}` }]);
+      }
+    } catch (err) {
+      setTeachers((prev) => [...prev, { ...teacherObj, id: `t_${Date.now()}` }]);
+    }
+
     setNewTeacher({ name: '', fatherName: '', designation: 'सहायक अध्यापक', subject: '', mobile: '', assignedClass: '', assignedSection: '' });
   };
 
@@ -677,54 +711,88 @@ export default function TeacherDutyManager({
     });
   };
 
-  // Save inline edit
-  const handleSaveEdit = (teacherId) => {
+  // Save inline edit to state & MongoDB
+  const handleSaveEdit = async (teacherId) => {
+    const editPayload = {
+      name: editForm.name.trim(),
+      englishName: editForm.name.trim().toUpperCase(),
+      fatherName: editForm.fatherName.trim(),
+      mobile: editForm.mobile.trim(),
+      designation: editForm.designation.trim(),
+      subject: editForm.subject.trim(),
+      assignedClass: editForm.assignedClass.trim(),
+      assignedSection: editForm.assignedSection.trim().toUpperCase(),
+      isClassTeacher: !!editForm.assignedClass.trim(),
+    };
+
     setTeachers((prev) =>
-      prev.map((t) =>
-        t.id === teacherId
-          ? {
-              ...t,
-              name: editForm.name.trim(),
-              englishName: editForm.name.trim().toUpperCase(),
-              fatherName: editForm.fatherName.trim(),
-              mobile: editForm.mobile.trim(),
-              designation: editForm.designation.trim(),
-              subject: editForm.subject.trim(),
-              assignedClass: editForm.assignedClass.trim(),
-              assignedSection: editForm.assignedSection.trim().toUpperCase(),
-              isClassTeacher: !!editForm.assignedClass.trim(),
-            }
-          : t
-      )
+      prev.map((t) => (t.id === teacherId ? { ...t, ...editPayload } : t))
     );
     setEditingTeacherId(null);
+
+    const target = teachers.find((t) => t.id === teacherId);
+    const idToUpdate = target?._id || target?.id || teacherId;
+    if (idToUpdate) {
+      try {
+        await updateTeacherAPI(idToUpdate, editPayload);
+      } catch (err) {
+        console.error('Update teacher in DB failed:', err);
+      }
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingTeacherId(null);
   };
 
-  // Delete teacher
-  const handleDeleteTeacher = (teacherId) => {
-    if (window.confirm('क्या आप इस शिक्षक को सूची से हटाना चाहते हैं?')) {
-      setTeachers((prev) => prev.filter((t) => t.id !== teacherId));
+  // Delete teacher from state & MongoDB
+  const handleDeleteTeacher = async (teacherId) => {
+    if (!window.confirm('क्या आप इस शिक्षक को डेटाबेस और सूची से हटाना चाहते हैं?')) return;
+    setTeachers((prev) => prev.filter((t) => t.id !== teacherId));
+
+    const target = teachers.find((t) => t.id === teacherId);
+    const idToDelete = target?._id || target?.id || teacherId;
+    if (idToDelete) {
+      try {
+        await deleteTeacherAPI(idToDelete);
+      } catch (err) {
+        console.error('Delete teacher in DB failed:', err);
+      }
     }
   };
 
-  // Handle Excel import
-  const handleImportTeachers = (importedList, strategy) => {
-    if (strategy === 'replace') {
-      setTeachers(importedList);
-    } else {
-      setTeachers((prev) => {
-        const existingNames = new Set(prev.map((t) => t.name.toLowerCase().trim()));
-        const toAdd = importedList.filter((t) => !existingNames.has(t.name.toLowerCase().trim()));
-        return [...prev, ...toAdd];
-      });
+  // Handle Excel import and save directly to MongoDB Atlas
+  const handleImportTeachers = async (importedList, strategy) => {
+    if (!importedList || importedList.length === 0) return;
+    setIsImporting(true);
+
+    try {
+      const res = await bulkImportTeachersAPI(importedList, strategy);
+      if (res && res.success && Array.isArray(res.data)) {
+        const syncedTeachers = res.data.map((t) => ({
+          ...t,
+          id: t._id ? t._id.toString() : t.id,
+        }));
+        setTeachers(syncedTeachers);
+        alert(`✅ ${importedList.length} शिक्षकों का डेटा सफलतापूर्वक MongoDB डेटाबेस में सुरक्षित (Saved) हो गया है!`);
+      } else {
+        if (strategy === 'replace') {
+          setTeachers(importedList);
+        } else {
+          setTeachers((prev) => {
+            const existingNames = new Set(prev.map((t) => t.name.toLowerCase().trim()));
+            const toAdd = importedList.filter((t) => !existingNames.has(t.name.toLowerCase().trim()));
+            return [...prev, ...toAdd];
+          });
+        }
+        alert(`⚠️ डेटा लोड हुआ, परंतु डेटाबेस सिंक में समस्या: ${res?.message || 'सिंक विफल'}`);
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      alert(`इम्पोर्ट में त्रुटि: ${err.message}`);
+    } finally {
+      setIsImporting(false);
     }
-    setTimeout(() => {
-      handleAutoAllocate();
-    }, 100);
   };
 
   const handlePrint = () => {

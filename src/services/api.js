@@ -392,7 +392,7 @@ export async function deleteTeacherAPI(id) {
   }
 }
 
-export async function bulkImportTeachersAPI(teachers) {
+export async function bulkImportTeachersAPI(teachers, strategy = "merge") {
   const token = getAuthToken();
   try {
     const res = await fetch(`${API_BASE_URL}/teachers/bulk-import`, {
@@ -401,7 +401,7 @@ export async function bulkImportTeachersAPI(teachers) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ teachers }),
+      body: JSON.stringify({ teachers, strategy }),
     });
     return await res.json();
   } catch (error) {
