@@ -51,23 +51,51 @@ export function exportRoomSeatingToExcel(roomsData, examDetails) {
 }
 
 /**
- * Exports Absentee Summary to Excel
+ * Exports Absentee List to Excel
  */
-export function exportAbsenteeListToExcel(absenteeSummary, examDetails) {
-  const rows = absenteeSummary.map((item, idx) => ({
-    'क्र.सं. (S.No)': idx + 1,
-    'कमरा / हॉल नं.': item.roomName,
-    'कुल आबंटित छात्र': item.totalSeated,
-    'उपस्थित छात्र (Present)': item.presentCount,
-    'अनुपस्थित छात्र (Absent)': item.absentCount,
-    'अनुपस्थित रोल नंबर (Absent Roll Numbers)': item.absentRollsText || 'कोई नहीं (None)',
+export function exportAbsenteeListToExcel(absenteeData, examDetails) {
+  const rows = absenteeData.map((item, idx) => ({
+    'S.No': idx + 1,
+    'Roll Number': item.rollNo,
+    'Student Name': item.name || '',
+    'Class': item.className || '',
+    'Section': item.section || '',
+    'Room Name': item.roomName || '',
+    'Bench Number': item.benchNumber || '',
+    'Subject': item.subject || '',
+    'Status': 'ABSENT',
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Room Absentee List');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Absent Students');
 
-  const fileName = `Room_Wise_Absentee_List_${(examDetails.examName || 'Exam').replace(/\s+/g, '_')}.xlsx`;
+  const fileName = `Absentee_List_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
 
+/**
+ * Exports Teacher Staff Directory to Excel
+ */
+export function exportTeachersToExcel(teachersList) {
+  const rows = teachersList.map((t, idx) => ({
+    'NO.': idx + 1,
+    'TEACHER\'S NAME': t.name || t.englishName || '',
+    'FATHER/HUSBAND NAME': t.fatherName || '',
+    'DESIGNATION': t.designation || 'सहायक अध्यापक',
+    'SUBJECT': t.subject || '',
+    'MO.NO': t.mobile || '',
+    'DATE OF BIRTH': t.dob || '',
+    'JOINING DATE': t.joiningDate || '',
+    'ADHAR NO': t.aadharNo || '',
+    'CLASS TEACHER': t.assignedClass ? `Class ${t.assignedClass}` : 'NO',
+    'SECTION': t.assignedSection || '',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Teachers List');
+
+  const fileName = `Teachers_Directory_ABVIC_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}

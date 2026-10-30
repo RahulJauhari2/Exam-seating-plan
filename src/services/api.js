@@ -324,3 +324,87 @@ export async function resetAbsenteesAPI(params) {
     return { success: false, message: error.message };
   }
 }
+
+// ----------------------------------------------------------------------
+// Teacher Management APIs
+// ----------------------------------------------------------------------
+
+export async function fetchTeachersAPI() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/teachers`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    return data.success ? data.data : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createTeacherAPI(teacherData) {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE_URL}/teachers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(teacherData),
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function updateTeacherAPI(id, teacherData) {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE_URL}/teachers/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(teacherData),
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function deleteTeacherAPI(id) {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE_URL}/teachers/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function bulkImportTeachersAPI(teachers) {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE_URL}/teachers/bulk-import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ teachers }),
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}

@@ -5,6 +5,7 @@ import { connectDB } from './config/db.js';
 import examRoutes from './routes/examRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import absenteeRoutes from './routes/absenteeRoutes.js';
+import teacherRoutes from './routes/teacherRoutes.js';
 import { seedInitialUsers } from './controllers/authController.js';
 
 dotenv.config();
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api', examRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/absentees', absenteeRoutes);
+app.use('/api/teachers', teacherRoutes);
 
 // Root test endpoint
 app.get('/', (req, res) => {

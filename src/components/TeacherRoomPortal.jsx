@@ -300,26 +300,48 @@ export default function TeacherRoomPortal({
         {/* Room & Shift Selection Bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
           {/* Room Selector */}
-          <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-2.5">
-            <span className="text-blue-700 block text-[10px] font-bold uppercase tracking-wider">
-              आवंटित कमरा (Your Room):
-            </span>
+          <div className={`rounded-xl p-2.5 border ${
+            canAccessAllRooms 
+              ? 'bg-blue-50/80 border-blue-200' 
+              : 'bg-emerald-50/80 border-emerald-300'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+                canAccessAllRooms ? 'text-blue-700' : 'text-emerald-800'
+              }`}>
+                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : '🔒 आपका आवंटित परीक्षा कक्ष:'}
+              </span>
+              {!canAccessAllRooms && (
+                <span className="text-[9px] font-black bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded">
+                  ड्यूटी लॉक
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
-              <select
-                value={selectedRoomName}
-                onChange={(e) => {
-                  setSelectedRoomName(e.target.value);
-                  setSelectedClassFilter('all');
-                }}
-                className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
-              >
-                {rooms.map((rm) => (
-                  <option key={rm.roomId || rm.roomName} value={rm.roomName}>
-                    {rm.roomName} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
-                  </option>
-                ))}
-              </select>
+              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : 'text-emerald-700'}`} />
+              {canAccessAllRooms ? (
+                <select
+                  value={selectedRoomName}
+                  onChange={(e) => {
+                    setSelectedRoomName(e.target.value);
+                    setSelectedClassFilter('all');
+                  }}
+                  className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
+                >
+                  {rooms.map((rm) => (
+                    <option key={rm.roomId || rm.roomName} value={rm.roomName}>
+                      {rm.roomName} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full bg-white border border-emerald-300 rounded-lg py-1 px-2 text-xs font-black text-emerald-950 flex items-center justify-between">
+                  <span>{currentRoom ? currentRoom.roomName : selectedRoomName}</span>
+                  <span className="text-[10px] font-bold text-emerald-700">
+                    ({currentRoom?.benchesCount || 20} बेंच • {currentRoom?.seatedCount || 0} छात्र)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

@@ -30,6 +30,8 @@ import {
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
 import { saveDutyRosterToDB } from '../services/api';
+import { exportTeachersToExcel } from '../utils/excelExport';
+import { useAuth } from '../context/AuthContext';
 
 export default function TeacherDutyManager({
   teachers = [],
@@ -54,11 +56,19 @@ export default function TeacherDutyManager({
       return null;
     }
   });
+  const { isPrincipal, isSuperAdmin } = useAuth();
+  const canEditTeacher = isPrincipal || isSuperAdmin;
+  const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
   const [newTeacher, setNewTeacher] = useState({
     name: '',
+    fatherName: '',
     designation: 'सहायक अध्यापक',
     subject: '',
     mobile: '',
+    assignedClass: '',
+    assignedSection: '',
   });
 
   const selectedDay = useMemo(() => {
@@ -517,14 +527,59 @@ export default function TeacherDutyManager({
       id: `t_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: newTeacher.name.trim(),
       englishName: newTeacher.name.trim().toUpperCase(),
+      fatherName: newTeacher.fatherName ? newTeacher.fatherName.trim() : '',
       designation: newTeacher.designation.trim() || 'सहायक अध्यापक',
       subject: newTeacher.subject.trim() || 'General',
       mobile: newTeacher.mobile.trim(),
+      assignedClass: newTeacher.assignedClass.trim(),
+      assignedSection: newTeacher.assignedSection.trim().toUpperCase(),
+      isClassTeacher: !!newTeacher.assignedClass.trim(),
       isPresent: true,
     };
 
     setTeachers((prev) => [...prev, teacherObj]);
-    setNewTeacher({ name: '', designation: 'सहायक अध्यापक', subject: '', mobile: '' });
+    setNewTeacher({ name: '', fatherName: '', designation: 'सहायक अध्यापक', subject: '', mobile: '', assignedClass: '', assignedSection: '' });
+  };
+
+  // Start inline editing of a teacher
+  const handleStartEdit = (t) => {
+    setEditingTeacherId(t.id);
+    setEditForm({
+      name: t.name || '',
+      fatherName: t.fatherName || '',
+      mobile: t.mobile || '',
+      designation: t.designation || 'सहायक अध्यापक',
+      subject: t.subject || '',
+      assignedClass: t.assignedClass || '',
+      assignedSection: t.assignedSection || '',
+    });
+  };
+
+  // Save inline edit
+  const handleSaveEdit = (teacherId) => {
+    setTeachers((prev) =>
+      prev.map((t) =>
+        t.id === teacherId
+          ? {
+              ...t,
+              name: editForm.name.trim(),
+              englishName: editForm.name.trim().toUpperCase(),
+              fatherName: editForm.fatherName.trim(),
+              mobile: editForm.mobile.trim(),
+              designation: editForm.designation.trim(),
+              subject: editForm.subject.trim(),
+              assignedClass: editForm.assignedClass.trim(),
+              assignedSection: editForm.assignedSection.trim().toUpperCase(),
+              isClassTeacher: !!editForm.assignedClass.trim(),
+            }
+          : t
+      )
+    );
+    setEditingTeacherId(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTeacherId(null);
   };
 
   // Delete teacher
@@ -1114,9 +1169,70 @@ export default function TeacherDutyManager({
                     required
                     value={newTeacher.name}
                     onChange={(e) => setNewTeacher({ ...newTeacher, name: e.target.value })}
-                    placeholder="उदा. श्री राहुल कुमार"
+                    placeholder="उदा. श्री प्रभात कुमार"
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    पिता / पति का नाम (Father/Husband Name)
+                  </label>
+                  <input
+                    type="text"
+                    value={newTeacher.fatherName}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, fatherName: e.target.value })}
+                    placeholder="उदा. श्री गोरखनाथ पाण्डेय"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    मोबाइल नंबर (Mobile No) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newTeacher.mobile}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, mobile: e.target.value })}
+                    placeholder="9919353599"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500 font-mono"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      कक्षा अध्यापक (Class)
+                    </label>
+                    <select
+                      value={newTeacher.assignedClass}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, assignedClass: e.target.value })}
+                      className="w-full px-2 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500 bg-white"
+                    >
+                      <option value="">— कोई नहीं —</option>
+                      <option value="6">कक्षा 6th</option>
+                      <option value="7">कक्षा 7th</option>
+                      <option value="8">कक्षा 8th</option>
+                      <option value="9">कक्षा 9th</option>
+                      <option value="10">कक्षा 10th</option>
+                      <option value="11">कक्षा 11th</option>
+                      <option value="12">कक्षा 12th</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      सेक्शन (Section)
+                    </label>
+                    <input
+                      type="text"
+                      value={newTeacher.assignedSection}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, assignedSection: e.target.value.toUpperCase() })}
+                      placeholder="A / B / C"
+                      className="w-full px-2 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500 text-center font-bold"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -1138,26 +1254,13 @@ export default function TeacherDutyManager({
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    अध्यापन विषय (Teaching Subject)
+                    अध्यापन विषय (Subject)
                   </label>
                   <input
                     type="text"
                     value={newTeacher.subject}
                     onChange={(e) => setNewTeacher({ ...newTeacher, subject: e.target.value })}
-                    placeholder="उदा. गणित / विज्ञान / हिन्दी"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    मोबाइल नंबर (वैकल्पिक)
-                  </label>
-                  <input
-                    type="text"
-                    value={newTeacher.mobile}
-                    onChange={(e) => setNewTeacher({ ...newTeacher, mobile: e.target.value })}
-                    placeholder="9415..."
+                    placeholder="उदा. भौतिक विज्ञान / गणित"
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:outline-indigo-500"
                   />
                 </div>
@@ -1195,14 +1298,26 @@ export default function TeacherDutyManager({
                       className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs focus:outline-indigo-500 w-48"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsImporterOpen(true)}
-                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>इम्पोर्ट</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => exportTeachersToExcel(teachers)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
+                      title="शिक्षकों की सूची एक्सेल में डाउनलोड करें"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>एक्सेल एक्सपोर्ट</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsImporterOpen(true)}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
+                      title="शिक्षकों की सूची एक्सेल से इम्पोर्ट करें"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>एक्सेल इम्पोर्ट</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1213,58 +1328,170 @@ export default function TeacherDutyManager({
                     <tr className="border-b text-slate-500 font-bold uppercase text-[10px] bg-slate-50">
                       <th className="py-2 px-2 text-center w-10">क्र०</th>
                       <th className="py-2 px-3">शिक्षक का नाम</th>
-                      <th className="py-2 px-2">पदनाम</th>
-                      <th className="py-2 px-2">विषय</th>
+                      <th className="py-2 px-2">मोबाइल नंबर</th>
+                      <th className="py-2 px-2">कक्षा अध्यापक</th>
+                      <th className="py-2 px-2">पदनाम व विषय</th>
                       <th className="py-2 px-2 text-center">कुल ड्यूटी</th>
-                      <th className="py-2 px-2 text-center">स्थिति (उपस्थिति)</th>
-                      <th className="py-2 px-2 text-center w-12">हटाएं</th>
+                      <th className="py-2 px-2 text-center">स्थिति</th>
+                      {canEditTeacher && <th className="py-2 px-2 text-center w-20">कार्य</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
-                    {filteredTeachers.map((t, i) => (
-                      <tr key={t.id} className="hover:bg-slate-50">
-                        <td className="py-2 px-2 text-center text-slate-400 font-mono text-[10px]">
-                          {i + 1}
-                        </td>
-                        <td className="py-2 px-3 font-bold text-slate-900">
-                          {t.name}
-                        </td>
-                        <td className="py-2 px-2 text-slate-600">
-                          {t.designation}
-                        </td>
-                        <td className="py-2 px-2 text-indigo-700 font-semibold">
-                          {t.subject || '—'}
-                        </td>
-                        <td className="py-2 px-2 text-center font-bold text-slate-800">
-                          <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-800 font-mono text-xs">
-                            {teacherDutyCounts[t.id] || 0}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePresence(t.id)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                              t.isPresent !== false
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
-                          >
-                            {t.isPresent !== false ? 'उपस्थित (Active)' : 'अवकाश पर (Leave)'}
-                          </button>
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTeacher(t.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="हटाएं"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredTeachers.map((t, i) => {
+                      const isEditing = editingTeacherId === t.id;
+
+                      if (isEditing) {
+                        return (
+                          <tr key={t.id} className="bg-indigo-50/60 border-2 border-indigo-300">
+                            <td className="py-2 px-2 text-center font-mono text-[10px]">{i + 1}</td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="text"
+                                value={editForm.name}
+                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                className="w-full px-2 py-1 text-xs border rounded bg-white font-bold"
+                              />
+                              <input
+                                type="text"
+                                placeholder="पिता/पति का नाम"
+                                value={editForm.fatherName}
+                                onChange={(e) => setEditForm({ ...editForm, fatherName: e.target.value })}
+                                className="w-full px-2 py-0.5 text-[10px] border rounded bg-white mt-1 text-slate-500"
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="text"
+                                value={editForm.mobile}
+                                onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
+                                className="w-full px-2 py-1 text-xs border rounded bg-white font-mono font-bold"
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={editForm.assignedClass}
+                                  onChange={(e) => setEditForm({ ...editForm, assignedClass: e.target.value })}
+                                  className="px-1 py-1 text-xs border rounded bg-white"
+                                >
+                                  <option value="">—</option>
+                                  {['6', '7', '8', '9', '10', '11', '12'].map((c) => (
+                                    <option key={c} value={c}>{c}th</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  placeholder="Sec"
+                                  value={editForm.assignedSection}
+                                  onChange={(e) => setEditForm({ ...editForm, assignedSection: e.target.value.toUpperCase() })}
+                                  className="w-12 px-1 py-1 text-xs border rounded bg-white text-center font-bold"
+                                />
+                              </div>
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="text"
+                                placeholder="विषय"
+                                value={editForm.subject}
+                                onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })}
+                                className="w-full px-2 py-1 text-xs border rounded bg-white"
+                              />
+                            </td>
+                            <td colSpan="2" className="py-2 px-2 text-center text-slate-400 text-[10px]">
+                              एडिट मोड
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEdit(t.id)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold"
+                                >
+                                  सेव
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEdit}
+                                  className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-[10px]"
+                                >
+                                  रद्द
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-2 text-center text-slate-400 font-mono text-[10px]">
+                            {i + 1}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-bold text-slate-900 block">{t.name}</span>
+                            {t.fatherName && (
+                              <span className="text-[10px] text-slate-500 block">पिता/पति: {t.fatherName}</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 font-mono font-bold text-indigo-700">
+                            {t.mobile || '—'}
+                          </td>
+                          <td className="py-2 px-2">
+                            {t.assignedClass ? (
+                              <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-900 border border-purple-200 text-[11px] font-bold">
+                                Class {t.assignedClass}-{t.assignedSection || 'A'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-slate-600">
+                            <span className="block text-slate-800 font-semibold">{t.designation}</span>
+                            {t.subject && <span className="text-[10px] text-indigo-600">{t.subject}</span>}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-slate-800">
+                            <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-800 font-mono text-xs">
+                              {teacherDutyCounts[t.id] || 0}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePresence(t.id)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                t.isPresent !== false
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                              }`}
+                            >
+                              {t.isPresent !== false ? 'उपस्थित' : 'अवकाश'}
+                            </button>
+                          </td>
+                          {canEditTeacher && (
+                            <td className="py-2 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(t)}
+                                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold cursor-pointer"
+                                  title="एडिट करें"
+                                >
+                                  एडिट
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTeacher(t.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  title="हटाएं"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

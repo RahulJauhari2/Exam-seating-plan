@@ -8,6 +8,7 @@ import { connectDB } from '../server/config/db.js';
 import examRoutes from '../server/routes/examRoutes.js';
 import authRoutes from '../server/routes/authRoutes.js';
 import absenteeRoutes from '../server/routes/absenteeRoutes.js';
+import teacherRoutes from '../server/routes/teacherRoutes.js';
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use(async (req, res, next) => {
 app.use('/api', examRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/absentees', absenteeRoutes);
+app.use('/api/teachers', teacherRoutes);
 
 // Root health check
 app.get('/', (req, res) => {

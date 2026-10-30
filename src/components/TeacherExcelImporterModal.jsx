@@ -13,12 +13,10 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const SAMPLE_TEACHER_TSV = `Name\tDesignation\tSubject\tMobile
-श्री ब्रजमोहन शर्मा\tप्रवक्ता (Lecturer)\tभौतिक विज्ञान\t9415123456
-श्री अखिलेश कुमार\tसहायक अध्यापक\tगणित\t9415234567
-श्रीमती नीलम वर्मा\tसहायक अध्यापक\tअंग्रेजी\t9415345678
-श्री सत्य प्रकाश मिश्र\tप्रवक्ता (Lecturer)\tहिन्दी\t9415456789
-श्री देवेन्द्र सिंह\tसहायक अध्यापक\tसामाजिक विज्ञान\t9415567890`;
+const SAMPLE_TEACHER_TSV = `TEACHER'S NAME\tFATHER/HUSBAND NAME\tMO.NO\tDATE OF BIRTH\tJOINING DATE\tCLASS TEACHER\tSECTION
+PRABHAT KUMAR PANDEY\tGORAKHNATH PANDEY\t9919353599\t05-12-1970\t7/1/1997\t11\tA
+GIRIJA SHANKAR MISHRA\tMUNSHI LAL MISHRA\t7607495858\t01-08-1965\t7/1/1999\t10\tB
+PUSHPENDRA SINGH\tHAR DAYAL SINGH\t8400841223\t03-04-1965\t7/1/1999\t9\tA`;
 
 export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTeachers }) {
   const [activeInputMode, setActiveInputMode] = useState('file'); // 'file' or 'paste'
@@ -36,7 +34,6 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
       throw new Error('कोई डेटा नहीं मिला। कृपया फ़ाइल या टेक्स्ट की जांच करें।');
     }
 
-    // Identify header keys
     const firstRow = rows[0];
     const keys = Object.keys(firstRow);
 
@@ -47,13 +44,19 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
       });
     };
 
-    const nameKey = findKey(['name', 'teacher', 'shikshak', 'adhypak', 'staff', 'candidatename']);
+    const nameKey = findKey(['teacher', 'name', 'shikshak', 'adhypak', 'staff', 'candidatename']);
+    const fatherKey = findKey(['father', 'husband', 'pita', 'pati', 'guardian', 'parent']);
+    const mobileKey = findKey(['mono', 'mobile', 'phone', 'contact', 'durwash', 'phonenumber']);
+    const dobKey = findKey(['dob', 'birth', 'janm', 'dateofbirth']);
+    const joiningKey = findKey(['joining', 'niryukti', 'dateofjoining', 'joiningdate']);
+    const aadharKey = findKey(['adhar', 'aadhar', 'uid']);
     const desigKey = findKey(['designation', 'post', 'pad', 'padnam', 'role', 'cadre']);
     const subjectKey = findKey(['subject', 'vishay', 'sub', 'teaching']);
-    const mobileKey = findKey(['mobile', 'phone', 'contact', 'durwash', 'phonenumber']);
+    const classTeacherKey = findKey(['classteacher', 'class', 'kaksha']);
+    const sectionKey = findKey(['section', 'sec', 'varg']);
 
     if (!nameKey) {
-      throw new Error(`शिक्षक का नाम (Name/Teacher) का कॉलम नहीं मिला। उपलब्ध कॉलम: ${keys.join(', ')}`);
+      throw new Error(`शिक्षक का नाम (TEACHER'S NAME) का कॉलम नहीं मिला। उपलब्ध कॉलम: ${keys.join(', ')}`);
     }
 
     const teachers = [];
@@ -61,17 +64,30 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
       const rawName = String(r[nameKey] || '').trim();
       if (!rawName) return;
 
+      const rawFather = fatherKey && r[fatherKey] ? String(r[fatherKey]).trim() : '';
+      const rawMobile = mobileKey && r[mobileKey] ? String(r[mobileKey]).trim().replace(/\D/g, '').slice(-10) : '';
+      const rawDob = dobKey && r[dobKey] ? String(r[dobKey]).trim() : '';
+      const rawJoining = joiningKey && r[joiningKey] ? String(r[joiningKey]).trim() : '';
+      const rawAadhar = aadharKey && r[aadharKey] ? String(r[aadharKey]).trim() : '';
       const rawDesig = desigKey && r[desigKey] ? String(r[desigKey]).trim() : 'सहायक अध्यापक';
-      const rawSubject = subjectKey && r[subjectKey] ? String(r[subjectKey]).trim() : 'General';
-      const rawMobile = mobileKey && r[mobileKey] ? String(r[mobileKey]).trim().replace(/\D/g, '') : '';
+      const rawSubject = subjectKey && r[subjectKey] ? String(r[subjectKey]).trim() : '';
+      const rawClass = classTeacherKey && r[classTeacherKey] ? String(r[classTeacherKey]).trim() : '';
+      const rawSection = sectionKey && r[sectionKey] ? String(r[sectionKey]).trim().toUpperCase() : '';
 
       teachers.push({
         id: `t_imp_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
         name: rawName,
         englishName: rawName.toUpperCase(),
+        fatherName: rawFather,
         designation: rawDesig,
         subject: rawSubject,
         mobile: rawMobile,
+        dob: rawDob,
+        joiningDate: rawJoining,
+        aadharNo: rawAadhar,
+        isClassTeacher: !!(rawClass && rawClass !== 'undefined'),
+        assignedClass: rawClass,
+        assignedSection: rawSection,
         isPresent: true,
       });
     });
@@ -112,13 +128,16 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
         setIsProcessing(false);
       }
     };
-
+    reader.onerror = () => {
+      setErrorMsg('फ़ाइल लोड करने में विफल।');
+      setIsProcessing(false);
+    };
     reader.readAsBinaryString(file);
   };
 
-  // Handle direct text/TSV/CSV parse
-  const handleParsePastedData = (textToParse = pastedText) => {
-    if (!textToParse || !textToParse.trim()) {
+  // Handle Paste text
+  const handleParsePastedText = () => {
+    if (!pastedText.trim()) {
       setErrorMsg('कृपया एक्सेल से कॉपी किया गया डेटा पेस्ट करें।');
       return;
     }
@@ -127,24 +146,19 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
     setErrorMsg('');
 
     try {
-      // Split into lines
-      const lines = textToParse.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
+      const lines = pastedText.trim().split(/\r?\n/).filter(Boolean);
       if (lines.length < 2) {
-        throw new Error('कम से कम 1 हेडर लाइन और 1 डेटा लाइन आवश्यक है।');
+        throw new Error('कम से कम हेडर और एक शिक्षक का डेटा आवश्यक है।');
       }
 
-      // Determine separator: Tab or Comma
-      const firstLine = lines[0];
-      const sep = firstLine.includes('\t') ? '\t' : ',';
-
-      const headers = firstLine.split(sep).map((h) => h.trim().replace(/^["']|["']$/g, ''));
+      const headers = lines[0].split('\t').map((h) => h.trim());
       const rows = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(sep).map((p) => p.trim().replace(/^["']|["']$/g, ''));
+        const cols = lines[i].split('\t');
         const rowObj = {};
-        headers.forEach((h, hIdx) => {
-          rowObj[h] = parts[hIdx] !== undefined ? parts[hIdx] : '';
+        headers.forEach((h, colIdx) => {
+          rowObj[h] = cols[colIdx] !== undefined ? cols[colIdx].trim() : '';
         });
         rows.push(rowObj);
       }
@@ -153,7 +167,7 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
       setParseResult({
         teachers,
         total: teachers.length,
-        fileName: 'Pasted Excel Table',
+        fileName: 'पेस्ट किया गया डेटा (Pasted TSV)',
       });
     } catch (err) {
       setErrorMsg(`डेटा पार्स करने में त्रुटि: ${err.message}`);
@@ -162,141 +176,120 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
     }
   };
 
-  const handleApplyImport = () => {
+  const handleConfirmImport = () => {
     if (!parseResult || !parseResult.teachers) return;
     onImportTeachers(parseResult.teachers, importStrategy);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
-        {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-indigo-50/60 to-purple-50/60">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-indigo-800 text-white p-4 sm:p-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-xs">
-              <FileSpreadsheet className="w-5 h-5" />
-            </span>
+            <div className="p-2 bg-white/20 rounded-xl">
+              <FileSpreadsheet className="w-5 h-5 text-amber-300" />
+            </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                एक्सेल से शिक्षक स्टाफ इम्पोर्ट करें (Import Teachers)
+              <h3 className="text-base sm:text-lg font-black tracking-tight">
+                शिक्षक डेटा एक्सेल इम्पोर्ट (Teacher Directory Sync)
               </h3>
-              <p className="text-xs text-slate-500">
-                Excel (.xlsx, .xls), CSV या सीधे कॉपी-पेस्ट से शिक्षक सूची लोड करें
+              <p className="text-xs text-emerald-100">
+                नाम, पिता का नाम, मोबाइल नंबर व कक्षा अध्यापक जानकारी एक साथ अपडेट करें
               </p>
             </div>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
-          {/* Method Selector Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+          
+          {/* Tabs: File Upload vs Direct Paste */}
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
             <button
-              type="button"
-              onClick={() => {
-                setActiveInputMode('file');
-                setErrorMsg('');
-              }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              onClick={() => { setActiveInputMode('file'); setErrorMsg(''); }}
+              className={`flex-1 py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                 activeInputMode === 'file'
-                  ? 'bg-white text-indigo-700 shadow-xs'
+                  ? 'bg-white text-emerald-800 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Upload className="w-3.5 h-3.5" />
-              <span>एक्सेल फ़ाइल अपलोड (.xlsx, .csv)</span>
+              <Upload className="w-4 h-4" />
+              <span>एक्सेल फ़ाइल (.xlsx / .xls)</span>
             </button>
             <button
-              type="button"
-              onClick={() => {
-                setActiveInputMode('paste');
-                setErrorMsg('');
-              }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              onClick={() => { setActiveInputMode('paste'); setErrorMsg(''); }}
+              className={`flex-1 py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                 activeInputMode === 'paste'
-                  ? 'bg-white text-indigo-700 shadow-xs'
+                  ? 'bg-white text-emerald-800 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ClipboardPaste className="w-3.5 h-3.5" />
-              <span>सीधे कॉपी-पेस्ट करें</span>
+              <ClipboardPaste className="w-4 h-4" />
+              <span>सीधा टेक्स्ट पेस्ट करें (Copy-Paste)</span>
             </button>
           </div>
 
-          {/* Mode 1: File Upload */}
+          {/* Mode 1: File Upload Box */}
           {activeInputMode === 'file' && (
-            <div className="space-y-3">
+            <div className="border-2 border-dashed border-emerald-300 bg-emerald-50/40 rounded-2xl p-6 text-center hover:border-emerald-500 transition-colors">
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                id="teacher-file-input"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
               <label
-                htmlFor="teacher-excel-upload"
-                className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer group"
+                htmlFor="teacher-file-input"
+                className="cursor-pointer flex flex-col items-center gap-2.5"
               >
-                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:scale-110 transition-transform shadow-xs mb-3">
-                  <Upload className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-emerald-200 flex items-center justify-center text-emerald-600">
+                  <Upload className="w-6 h-6 animate-pulse" />
                 </div>
-                <span className="text-sm font-bold text-slate-800">
-                  एक्सेल फ़ाइल चुनें या यहाँ ड्रैग करें
-                </span>
-                <span className="text-xs text-slate-400 mt-1">
-                  समर्थित फॉर्मेट: <strong>.xlsx, .xls, .csv</strong>
-                </span>
-                <input
-                  id="teacher-excel-upload"
-                  type="file"
-                  accept=".xlsx, .xls, .csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                <div>
+                  <span className="font-bold text-sm text-emerald-950 block">
+                    कंप्यूटर से शिक्षक एक्सेल फ़ाइल चुनें
+                  </span>
+                  <span className="text-xs text-slate-500 mt-0.5 block">
+                    (TEACHER'S NAME, FATHER NAME, MO.NO, DATE OF BIRTH आदि)
+                  </span>
+                </div>
               </label>
             </div>
           )}
 
-          {/* Mode 2: Paste */}
+          {/* Mode 2: Paste Box */}
           {activeInputMode === 'paste' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700">
-                  एक्सेल से कॉपी की गई तालिका यहाँ पेस्ट करें:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPastedText(SAMPLE_TEACHER_TSV);
-                    handleParsePastedData(SAMPLE_TEACHER_TSV);
-                  }}
-                  className="text-indigo-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>नमूना डेटा भरें (Sample Data)</span>
-                </button>
-              </div>
+            <div className="space-y-2">
               <textarea
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder="Name	Designation	Subject	Mobile&#10;श्री ब्रजमोहन शर्मा	प्रवक्ता	भौतिक विज्ञान	9415123456&#10;श्री अखिलेश कुमार	सहायक अध्यापक	गणित	9415234567"
-                className="w-full h-32 p-3 border border-slate-300 rounded-xl text-xs font-mono bg-slate-50 focus:bg-white focus:outline-indigo-500 transition-all"
+                placeholder="एक्सेल शीट से पंक्तियाँ कॉपी करके यहाँ पेस्ट करें..."
+                rows={6}
+                className="w-full p-3 font-mono text-xs border border-slate-300 rounded-xl focus:border-emerald-600 focus:outline-none"
               />
               <button
-                type="button"
-                onClick={() => handleParsePastedData()}
+                onClick={handleParsePastedText}
                 disabled={isProcessing}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
               >
-                <span>डेटा पढ़ें व प्रोसेस करें (Parse Teachers)</span>
+                डेटा प्रोसेस करें (Parse)
               </button>
             </div>
           )}
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-xs text-rose-800">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
@@ -304,91 +297,93 @@ export default function TeacherExcelImporterModal({ isOpen, onClose, onImportTea
 
           {/* Parse Result Preview */}
           {parseResult && (
-            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between border-b border-emerald-200/80 pb-2.5">
-                <div className="flex items-center gap-2">
+            <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-black text-emerald-900">
-                    सफलतापूर्वक पार्स हुआ: {parseResult.total} शिक्षक रिकॉर्ड
-                  </span>
-                </div>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                  {parseResult.fileName}
+                  <span>सफलतापूर्वक पहचाने गए: <strong>{parseResult.total} शिक्षक</strong></span>
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-black">
+                  Ready to Sync
                 </span>
               </div>
 
-              {/* Sample list preview */}
-              <div className="max-h-40 overflow-y-auto border border-emerald-200/60 rounded-xl bg-white text-xs divide-y divide-slate-100">
-                {parseResult.teachers.map((t, i) => (
-                  <div key={t.id || i} className="p-2 flex items-center justify-between hover:bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 text-center text-slate-400 font-mono text-[10px]">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <span className="font-bold text-slate-800">{t.name}</span>
-                        <span className="text-[10px] text-slate-500 ml-2">({t.subject})</span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
-                      {t.designation}
-                    </span>
-                  </div>
-                ))}
+              {/* Sample 3 Rows */}
+              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl bg-white">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100 text-[10px] font-bold text-slate-500 uppercase border-b">
+                    <tr>
+                      <th className="p-2">नाम</th>
+                      <th className="p-2">पिता का नाम</th>
+                      <th className="p-2">मोबाइल</th>
+                      <th className="p-2">कक्षा अध्यापक</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {parseResult.teachers.slice(0, 10).map((t, i) => (
+                      <tr key={i}>
+                        <td className="p-2 font-bold">{t.name}</td>
+                        <td className="p-2 text-slate-600">{t.fatherName || '—'}</td>
+                        <td className="p-2 font-mono font-bold text-indigo-700">{t.mobile || '—'}</td>
+                        <td className="p-2 text-slate-700">
+                          {t.assignedClass ? `Class ${t.assignedClass}-${t.assignedSection || 'A'}` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              {/* Import Options Strategy */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <span className="font-bold text-slate-700">इम्पोर्ट का प्रकार (Strategy):</span>
+              {/* Strategy Selector */}
+              <div className="pt-2 flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>इम्पोर्ट विधि:</span>
                 <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="radio"
                       name="strategy"
                       value="merge"
                       checked={importStrategy === 'merge'}
                       onChange={() => setImportStrategy('merge')}
-                      className="text-indigo-600"
                     />
-                    <span className="font-semibold text-slate-700">मौजूदा सूची में जोड़ें (Append)</span>
+                    <span>मौजूदा में जोड़ें / अपडेट करें (Merge)</span>
                   </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer ml-3">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="radio"
                       name="strategy"
                       value="replace"
                       checked={importStrategy === 'replace'}
                       onChange={() => setImportStrategy('replace')}
-                      className="text-indigo-600"
                     />
-                    <span className="font-semibold text-slate-700">पूरी सूची बदलें (Replace)</span>
+                    <span>पूरी सूची बदलें (Replace)</span>
                   </label>
                 </div>
               </div>
             </div>
           )}
+
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between">
+        {/* Footer Actions */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition"
           >
             रद्द करें
           </button>
 
           <button
-            type="button"
-            onClick={handleApplyImport}
-            disabled={!parseResult || parseResult.total === 0}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+            onClick={handleConfirmImport}
+            disabled={!parseResult}
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{parseResult ? `${parseResult.total} शिक्षक इम्पोर्ट करें` : 'इम्पोर्ट लागू करें'}</span>
+            <span>इम्पोर्ट लागू करें ({parseResult ? parseResult.total : 0})</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+
       </div>
     </div>
   );
