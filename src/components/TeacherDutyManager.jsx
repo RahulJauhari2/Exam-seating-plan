@@ -25,7 +25,8 @@ import {
   Layers,
   Check,
   Database,
-  Save
+  Save,
+  RotateCcw
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
@@ -355,13 +356,53 @@ export default function TeacherDutyManager({
     alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${poolShift1.length} शिक्षक\n• Shift 2 (दोपहर): ${poolShift2.length} फ्रेश शिक्षक (बिना किसी दोहराव के)`);
   };
 
-  // If allocation is empty, auto-allocate once on initial load
-  useEffect(() => {
-    const key = `${selectedDay.id}_${activeShift}`;
-    if (!dutyRoster[key] && teachers.length > 0 && activeRooms.length > 0) {
-      handleAutoAllocate();
+  // Auto-allocation is on-demand by clicking 'ऑटो ड्यूटी आवंटन' button
+
+
+  // 1. Clear duty allocation for currently selected date & shift
+  const handleClearCurrentShift = () => {
+    if (!window.confirm(`क्या आप ${selectedDay.date} (${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) का ड्यूटी डेटा खाली करना चाहते हैं?`)) {
+      return;
     }
-  }, [selectedDay.id, activeShift, teachers.length, activeRooms.length]);
+    setDutyRoster((prev) => {
+      const next = { ...prev };
+      delete next[currentAllocKey];
+      return next;
+    });
+  };
+
+  // 2. Completely delete all test duty roster data (All dates & shifts) from state, localStorage & MongoDB Atlas
+  const handleClearAllDuties = async () => {
+    const ok = window.confirm(
+      '⚠️ क्या आप निश्चित हैं कि आप सभी तिथियों और शिफ्टों का टेस्ट ड्यूटी डेटा पूरी तरह हटाना (Delete) चाहते हैं?\n\nयह डेटाबेस (MongoDB Atlas) और स्थानीय ब्राउज़र दोनों से हमेशा के लिए साफ हो जाएगा।'
+    );
+    if (!ok) return;
+
+    // Reset local state
+    setDutyRoster({});
+
+    // Clear localStorage
+    try {
+      localStorage.removeItem('exam_duty_roster_v1');
+    } catch {}
+
+    // Clear from MongoDB Atlas
+    try {
+      setIsSavingDB(true);
+      await saveDutyRosterToDB(
+        examDetails?.examName || 'Half Yearly  Examination 2026',
+        activeShift,
+        {}
+      );
+      setLastSavedTime(new Date().toLocaleTimeString('hi-IN'));
+      alert('✅ सभी टेस्ट ड्यूटी डेटा सफलतापूर्वक डिलीट कर दिया गया है! अब परीक्षा के लिए डेटाबेस पूरी तरह क्लीन (Clean) है।');
+    } catch (err) {
+      console.error('Failed to clear duty roster from DB:', err);
+      alert('स्थानीय टेस्ट ड्यूटी डेटा साफ कर दिया गया है।');
+    } finally {
+      setIsSavingDB(false);
+    }
+  };
 
   // Handle manual dropdown change for a room
   // When a teacher is selected, remove them from relievers or other room if previously assigned
@@ -794,6 +835,26 @@ export default function TeacherDutyManager({
             >
               <Shuffle className="w-3.5 h-3.5" />
               <span>ऑटो ड्यूटी आवंटन</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearCurrentShift}
+              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              title="वर्तमान शिफ्ट का ड्यूटी आवंटन खाली करें"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+              <span>शिफ्ट खाली करें</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearAllDuties}
+              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              title="सभी तिथियों और शिफ्टों का टेस्ट ड्यूटी डेटा पूरी तरह हटाएं (Reset All)"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>🗑️ टेस्ट डेटा हटाएं</span>
             </button>
 
             <button

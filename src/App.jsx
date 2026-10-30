@@ -119,6 +119,8 @@ export default function App() {
     try {
       if (dutyRoster && Object.keys(dutyRoster).length > 0) {
         localStorage.setItem('exam_duty_roster_v1', JSON.stringify(dutyRoster));
+      } else {
+        localStorage.removeItem('exam_duty_roster_v1');
       }
     } catch (e) {
       console.error('Error saving duty roster to localStorage', e);
