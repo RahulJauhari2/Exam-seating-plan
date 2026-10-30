@@ -11,6 +11,6 @@ router.get('/', getLiveAbsentees);
 router.post('/toggle', verifyAuth, toggleAbsentee);
 
 // Reset absentees for a room or shift (Principal, Coordinator, SuperAdmin)
-router.post('/reset', verifyAuth, requireRole(['principal', 'coordinator']), resetAbsentees);
+router.post('/reset', verifyAuth, requireRole(['principal', 'coordinator', 'admin', 'teacher', 'superadmin']), resetAbsentees);
 
 export default router;

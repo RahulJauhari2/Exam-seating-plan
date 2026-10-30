@@ -529,9 +529,11 @@ export default function App() {
             ) : (
               <AbsenteeManager
                 seatingResult={seatingResult}
+                activeShift={activeShift}
                 examDetails={examDetails}
                 absentStudents={absentStudents}
                 setAbsentStudents={setAbsentStudents}
+                onToggleAbsent={handleToggleAbsent}
               />
             )
           )}

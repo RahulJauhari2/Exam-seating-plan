@@ -15,25 +15,57 @@ import { exportAbsenteeListToExcel } from '../utils/excelExport';
 
 export default function AbsenteeManager({ 
   seatingResult, 
+  activeShift = 'shift_1',
   examDetails, 
   absentStudents, 
-  setAbsentStudents 
+  setAbsentStudents,
+  onToggleAbsent 
 }) {
   const { rooms = [] } = seatingResult;
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.roomId || 'all');
   const [quickRollInput, setQuickRollInput] = useState('');
   const [searchFeedback, setSearchFeedback] = useState('');
 
-  // Toggle single student absent status
-  const toggleAbsent = (rollNo) => {
+  // Toggle single student absent status (Synchronized to Backend & MongoDB)
+  const toggleAbsent = async (rollNo) => {
     const rollStr = rollNo.toString();
+    const currentlyAbsent = Boolean(absentStudents[rollStr]);
+    const newStatus = !currentlyAbsent;
+
+    // Optimistic local state update
     const updated = { ...absentStudents };
-    if (updated[rollStr]) {
-      delete updated[rollStr];
-    } else {
+    if (newStatus) {
       updated[rollStr] = true;
+    } else {
+      delete updated[rollStr];
     }
     setAbsentStudents(updated);
+
+    // Find student details from rooms
+    let studentObj = null;
+    let roomName = '';
+    rooms.forEach((r) => {
+      r.students?.forEach((s) => {
+        if (s.rollNo?.toString() === rollStr) {
+          studentObj = s;
+          roomName = r.roomName;
+        }
+      });
+    });
+
+    if (onToggleAbsent) {
+      await onToggleAbsent({
+        rollNo: Number(rollNo),
+        isAbsent: newStatus,
+        roomName: roomName || 'General',
+        sessionName: examDetails?.examName || 'Half Yearly  Examination 2026',
+        date: examDetails?.date || new Date().toISOString().split('T')[0],
+        shift: activeShift,
+        studentName: studentObj?.name || '',
+        className: studentObj?.className || '',
+        section: studentObj?.section || '',
+      });
+    }
   };
 
   // Quick mark by roll number input
@@ -66,9 +98,18 @@ export default function AbsenteeManager({
   };
 
   // Clear all absentees
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (window.confirm('क्या आप सभी अनुपस्थित (Absent) छात्रों की सूची रीसेट करना चाहते हैं?')) {
       setAbsentStudents({});
+      try {
+        await resetAbsenteesAPI({
+          sessionName: examDetails?.examName || 'Half Yearly  Examination 2026',
+          shift: activeShift,
+          date: examDetails?.date || new Date().toISOString().split('T')[0],
+        });
+      } catch (e) {
+        console.error('Reset absentees error:', e);
+      }
     }
   };
 

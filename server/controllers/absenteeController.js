@@ -85,27 +85,35 @@ export const toggleAbsentee = async (req, res) => {
     let savedRecord = null;
 
     if (mongoose.connection.readyState === 1) {
-      savedRecord = await AbsenteeRecord.findOneAndUpdate(
-        { rollNo, date, shift, sessionName },
-        { ...recordData, updatedAt: new Date() },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+      if (isAbsent) {
+        // Mark student absent: upsert record for this student & shift
+        savedRecord = await AbsenteeRecord.findOneAndUpdate(
+          { rollNo, shift },
+          { ...recordData, updatedAt: new Date() },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } else {
+        // Mark student present: completely remove from AbsenteeRecord so no ghost record lingers!
+        await AbsenteeRecord.deleteMany({ rollNo, shift });
+        savedRecord = { ...recordData, isAbsent: false };
+      }
     }
 
-    // Always mirror to local JSON file for bulletproof reliability
-    const localRecords = readLocalAbsentees();
-    const existingIdx = localRecords.findIndex(
-      (r) =>
-        r.rollNo === rollNo &&
-        r.date === date &&
-        r.shift === shift &&
-        r.sessionName === sessionName
-    );
-
-    if (existingIdx >= 0) {
-      localRecords[existingIdx] = { ...localRecords[existingIdx], ...recordData };
+    // Always mirror to local JSON file
+    let localRecords = readLocalAbsentees();
+    if (isAbsent) {
+      const existingIdx = localRecords.findIndex(
+        (r) => r.rollNo === rollNo && r.shift === shift
+      );
+      if (existingIdx >= 0) {
+        localRecords[existingIdx] = { ...localRecords[existingIdx], ...recordData };
+      } else {
+        localRecords.push(recordData);
+      }
     } else {
-      localRecords.push(recordData);
+      localRecords = localRecords.filter(
+        (r) => !(r.rollNo === rollNo && r.shift === shift)
+      );
     }
     writeLocalAbsentees(localRecords);
 
@@ -151,11 +159,14 @@ export const getLiveAbsentees = async (req, res) => {
     }
 
     // Create a fast lookup map: { [rollNo]: record }
+    // Only take the first/newest record per rollNo (since records is sorted { updatedAt: -1 })
     const absenteeMap = {};
     let totalAbsent = 0;
     records.forEach((r) => {
-      absenteeMap[r.rollNo] = r;
-      if (r.isAbsent) totalAbsent++;
+      if (!absenteeMap[r.rollNo]) {
+        absenteeMap[r.rollNo] = r;
+        if (r.isAbsent) totalAbsent++;
+      }
     });
 
     return res.json({
