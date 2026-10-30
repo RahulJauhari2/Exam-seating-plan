@@ -138,19 +138,37 @@ export default function App() {
     }
   }, [dutyRoster]);
 
-  // Sync dutyRoster from MongoDB on app mount and when shift/examName changes
+  // Primary: Load entire session (classes, rooms, examDetails, dutyRoster) directly from MongoDB as Single Source of Truth
   useEffect(() => {
-    loadExamSessionFromDB(examDetails.examName || 'Half Yearly  Examination 2026', activeShift)
+    loadExamSessionFromDB(examDetails.examName || 'Half_Yearly_2026_27', activeShift)
       .then((res) => {
-        if (res && res.success && res.data && res.data.dutyRoster && Object.keys(res.data.dutyRoster).length > 0) {
-          setDutyRoster((prev) => ({
-            ...prev,
-            ...res.data.dutyRoster,
-          }));
+        if (res && res.success && res.data) {
+          const s = res.data;
+          if (Array.isArray(s.classes) && s.classes.length > 0) {
+            setClasses(s.classes);
+          }
+          if (Array.isArray(s.rooms) && s.rooms.length > 0) {
+            setRooms(s.rooms);
+          }
+          if (s.examDetails && s.examDetails.schoolName) {
+            setExamDetails((prev) => ({
+              ...prev,
+              schoolName: s.examDetails.schoolName || prev.schoolName,
+              examName: s.examDetails.examName || prev.examName,
+              timeRange: s.examDetails.timeRange || prev.timeRange,
+              date: s.examDetails.date || prev.date,
+            }));
+          }
+          if (s.dutyRoster && Object.keys(s.dutyRoster).length > 0) {
+            setDutyRoster((prev) => ({
+              ...prev,
+              ...s.dutyRoster,
+            }));
+          }
         }
       })
       .catch(() => {});
-  }, [examDetails.examName, activeShift]);
+  }, [activeShift]);
 
   // Active view tab — default to 'student-home' for welcoming student storytelling portal
   const [activeTab, setActiveTab] = useState('student-home');

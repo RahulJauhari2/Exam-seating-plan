@@ -410,7 +410,7 @@ export default function TeacherDutyManager({
     try {
       setIsSavingDB(true);
       await saveDutyRosterToDB(
-        examDetails?.examName || 'Half Yearly  Examination 2026',
+        examDetails?.examName || 'Half_Yearly_2026_27',
         activeShift,
         {}
       );

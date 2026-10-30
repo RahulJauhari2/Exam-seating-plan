@@ -178,10 +178,25 @@ export const getSessionByName = async (req, res) => {
     const { shift = 'shift_1' } = req.query;
 
     if (mongoose.connection.readyState === 1) {
-      const session = await ExamSession.findOne({ 
+      let session = await ExamSession.findOne({ 
         sessionName: sessionName, 
         activeShift: shift 
       });
+
+      // Flexible fallback: match regex or match most recent session for this shift
+      if (!session) {
+        session = await ExamSession.findOne({
+          activeShift: shift,
+          $or: [
+            { sessionName: { $regex: sessionName.replace(/[_\\s]+/g, '.*'), $options: 'i' } },
+            { 'examDetails.examName': { $regex: sessionName.replace(/[_\\s]+/g, '.*'), $options: 'i' } }
+          ]
+        });
+      }
+
+      if (!session) {
+        session = await ExamSession.findOne({ activeShift: shift }).sort({ updatedAt: -1 });
+      }
 
       if (!session) {
         return res.status(404).json({
@@ -352,8 +367,19 @@ export const saveDutyRoster = async (req, res) => {
     }
 
     if (mongoose.connection.readyState === 1) {
+      let target = await ExamSession.findOne({ sessionName, activeShift });
+      if (!target) {
+        target = await ExamSession.findOne({
+          activeShift,
+          $or: [
+            { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+            { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } }
+          ]
+        });
+      }
+      const actualName = target ? target.sessionName : sessionName;
       const updatedSession = await ExamSession.findOneAndUpdate(
-        { sessionName, activeShift },
+        { sessionName: actualName, activeShift },
         { 
           $set: { dutyRoster } 
         },
@@ -363,7 +389,7 @@ export const saveDutyRoster = async (req, res) => {
       return res.status(200).json({
         success: true,
         storage: 'mongodb',
-        message: `सत्र '${sessionName}' (${activeShift}) का ड्यूटी रोस्टर MongoDB में सुरक्षित हो गया!`,
+        message: `सत्र '${actualName}' (${activeShift}) का ड्यूटी रोस्टर MongoDB में सुरक्षित हो गया!`,
         data: updatedSession.dutyRoster,
       });
     }
