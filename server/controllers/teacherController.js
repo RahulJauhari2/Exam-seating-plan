@@ -178,7 +178,7 @@ export const bulkImportTeachers = async (req, res) => {
           exemptDuty: isExempt,
           isPresent: t.isPresent !== false,
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
 
       // Ensure user account exists for login with PIN 1234

@@ -92,6 +92,42 @@
     font-weight: 800 !important;
   }
 
+  /* Dedicated A4 Teacher Duty Roster Print Rules */
+  .print-duty-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .print-duty-container table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9.5pt !important;
+    margin-top: 4px !important;
+  }
+
+  .print-duty-container th,
+  .print-duty-container td {
+    border: 1px solid #000 !important;
+    padding: 4px 6px !important;
+    color: #000 !important;
+  }
+
+  .print-duty-container thead th {
+    background-color: #f1f5f9 !important;
+    color: #000 !important;
+    font-weight: 800 !important;
+    border-bottom: 2px solid #000 !important;
+  }
+
+  .print-duty-container .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   /* Don't break page on the very last element */
   .print-room-page:last-child {
     page-break-after: auto !important;

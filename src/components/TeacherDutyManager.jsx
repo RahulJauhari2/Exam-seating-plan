@@ -689,9 +689,13 @@ export default function TeacherDutyManager({
         alert('✅ नया शिक्षक डेटाबेस में सफलतापूर्वक सुरक्षित हो गया!');
       } else {
         setTeachers((prev) => [...prev, { ...teacherObj, id: `t_${Date.now()}` }]);
+        if (res && !res.success) {
+          alert(`⚠️ शिक्षक जोड़ा गया, परंतु डेटाबेस में सुरक्षित नहीं हुआ: ${res.message || 'त्रुटि'}`);
+        }
       }
     } catch (err) {
       setTeachers((prev) => [...prev, { ...teacherObj, id: `t_${Date.now()}` }]);
+      alert(`⚠️ त्रुटि: ${err.message}`);
     }
 
     setNewTeacher({ name: '', fatherName: '', designation: 'सहायक अध्यापक', subject: '', mobile: '', assignedClass: '', assignedSection: '' });
@@ -796,7 +800,10 @@ export default function TeacherDutyManager({
   };
 
   const handlePrint = () => {
-    window.print();
+    setActiveTab('chart');
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   // Compute duties count per teacher across current schedule
@@ -1024,22 +1031,22 @@ export default function TeacherDutyManager({
       {/* TAB 1: DAILY DUTY CHART (दैनिक ड्यूटी चार्ट)               */}
       {/* ========================================================= */}
       {activeTab === 'chart' && (
-        <div className="space-y-6">
+        <div className="space-y-6 print:space-y-2 print-duty-container">
           {/* Official Print Header */}
-          <div className="hidden print:block text-center border-b-2 border-slate-900 pb-3 mb-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 block">
+          <div className="hidden print:block text-center border-b-2 border-black pb-2 mb-2 print-avoid-break">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-700 block">
               OFFICIAL INVIGILATION DUTY ROSTER
             </span>
-            <h1 className="text-base sm:text-lg font-black uppercase tracking-wider text-slate-900 mt-0.5">
+            <h1 className="text-base sm:text-lg font-black uppercase tracking-wider text-black mt-0.5">
               {EXAM_SCHEME_METADATA.schoolName}
             </h1>
-            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-black">
               {EXAM_SCHEME_METADATA.examTitle}
             </h2>
-            <div className="text-xs sm:text-sm font-black text-indigo-950 mt-1 uppercase underline underline-offset-2">
+            <div className="text-xs sm:text-sm font-black text-black mt-1 uppercase underline underline-offset-2">
               कक्ष निरीक्षक दैनिक ड्यूटी चार्ट (Daily Invigilation Duty Chart)
             </div>
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 mt-2 px-2 bg-slate-50 py-1 rounded border border-slate-300">
+            <div className="flex items-center justify-between text-[11px] font-bold text-black mt-2 px-2.5 bg-slate-100 py-1 border border-black">
               <span>दिनांक: <strong>{selectedDay.date} ({selectedDay.day})</strong></span>
               <span>शिफ्ट: <strong>{activeShift === 'shift_1' ? EXAM_SCHEME_METADATA.shift1Time : EXAM_SCHEME_METADATA.shift2Time}</strong></span>
               <span>आवंटित कमरे: <strong>{activeRooms.length}</strong> (कुल परीक्षार्थी: {seatingResult?.totalSeated || 0})</span>
@@ -1048,27 +1055,27 @@ export default function TeacherDutyManager({
 
 
           {/* Exam Control Room & Incharge Banner */}
-          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-3.5 sm:p-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs print:border print:border-slate-400 print:rounded-none print:py-1.5 print:my-1.5">
+          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-3.5 sm:p-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs print:border print:border-black print:rounded-none print:p-2 print:my-1.5 print:bg-slate-50 print:shadow-none print-avoid-break">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0 print:hidden shadow-xs">
                 🎯
               </div>
               <div>
-                <div className="text-[11px] font-black text-purple-950 uppercase tracking-wide">
-                  कंट्रोल रूम एवं परीक्षा संचालन समिति (Exam Control Room & Committee)
+                <div className="text-[11px] font-black text-purple-950 uppercase tracking-wide print:text-black">
+                  कंट्रोल रूम एवं परीक्षा संचालन समिति (Exam Control Room & Committee):
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1 print:mt-0.5">
                   {inchargeTeachers.length > 0 ? (
                     inchargeTeachers.map((t) => (
                       <span
                         key={t.id}
-                        className="px-2.5 py-0.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-purple-950 shadow-2xs print:border-none print:p-0 print:text-black"
+                        className="px-2.5 py-0.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-purple-950 shadow-2xs print:border-none print:p-0 print:text-black print:font-bold"
                       >
-                        ⭐ {t.name}
+                        ⭐ {t.name} ({t.designation})
                       </span>
                     ))
                   ) : (
-                    <span className="text-xs text-slate-500 italic">कोई परीक्षा प्रभारी नामित नहीं</span>
+                    <span className="text-xs text-slate-500 italic print:text-black">कोई परीक्षा प्रभारी नामित नहीं</span>
                   )}
                   <span className="text-[10px] text-purple-700 font-bold bg-purple-100/70 px-2 py-0.5 rounded print:hidden">
                     [कक्ष निरीक्षक ड्यूटी से पूर्णतः मुक्त]
@@ -1092,32 +1099,32 @@ export default function TeacherDutyManager({
           </div>
 
           {/* Allocation Table */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print:border print:border-slate-400 print:shadow-none print:rounded-none">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print:border print:border-black print:shadow-none print:rounded-none">
             <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full text-left text-xs border-collapse print:text-[11px]">
-                <thead className="bg-slate-100/90 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 print:bg-slate-200/80 print:text-black print:border-b-2 print:border-slate-500">
+                <thead className="bg-slate-100/90 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 print:bg-slate-200 print:text-black print:border-b-2 print:border-black">
                   <tr>
-                    <th className="px-3 py-3 w-12 text-center print:w-[6%] print:px-1 print:border-r print:border-slate-300">
+                    <th className="px-3 py-3 w-12 text-center print:w-[6%] print:px-1.5 print:border print:border-black print:text-center">
                       क्र०
                     </th>
-                    <th className="px-3 py-3 w-32 print:w-[16%] print:px-2 print:border-r print:border-slate-300">
+                    <th className="px-3 py-3 w-32 print:w-[18%] print:px-2 print:border print:border-black">
                       कमरा संख्या (Room)
                     </th>
-                    <th className="px-3 py-3 w-24 text-center print:w-[10%] print:px-1 print:border-r print:border-slate-300">
+                    <th className="px-3 py-3 w-24 text-center print:w-[12%] print:px-1.5 print:border print:border-black print:text-center">
                       छात्र संख्या
                     </th>
-                    <th className="px-4 py-3 print:w-[26%] print:px-2 print:border-r print:border-slate-300">
+                    <th className="px-4 py-3 print:w-[28%] print:px-2 print:border print:border-black">
                       कक्ष निरीक्षक - 1 (Invigilator 1)
                     </th>
-                    <th className="px-4 py-3 print:w-[26%] print:px-2 print:border-r print:border-slate-300">
+                    <th className="px-4 py-3 print:w-[24%] print:px-2 print:border print:border-black">
                       कक्ष निरीक्षक - 2 (Invigilator 2)
                     </th>
-                    <th className="px-3 py-3 w-32 text-center print:w-[16%] print:px-2">
+                    <th className="px-3 py-3 w-32 text-center print:w-[12%] print:px-2 print:border print:border-black print:text-center">
                       हस्ताक्षर पावती (Sign)
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-300 font-medium">
+                <tbody className="divide-y divide-slate-100 print:divide-y-0 font-medium">
                   {activeRooms.map((rm, idx) => {
                     const roomAlloc = currentAllocation.rooms?.[rm.roomId] || {};
                     const t1Id = roomAlloc.invigilator1;
@@ -1127,11 +1134,11 @@ export default function TeacherDutyManager({
                     const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
 
                     return (
-                      <tr key={rm.roomId} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="px-3 py-2.5 text-center font-bold text-slate-500 print:px-1 print:border-r print:border-slate-300 print:text-black">
+                      <tr key={rm.roomId} className="hover:bg-slate-50/70 transition-colors print:break-inside-avoid">
+                        <td className="px-3 py-2.5 text-center font-bold text-slate-500 print:border print:border-black print:text-black print:py-1">
                           {idx + 1}
                         </td>
-                        <td className="px-3 py-2.5 font-black text-slate-900 print:px-2 print:border-r print:border-slate-300">
+                        <td className="px-3 py-2.5 font-black text-slate-900 print:border print:border-black print:text-black print:py-1">
                           <div className="flex items-center gap-1.5">
                             <span className="no-print">🚪</span>
                             <span>{rm.roomName}</span>
@@ -1145,14 +1152,14 @@ export default function TeacherDutyManager({
                             {rm.benchesCount} बेंच
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-center font-bold text-slate-700 print:px-1 print:border-r print:border-slate-300 print:text-black">
+                        <td className="px-3 py-2.5 text-center font-bold text-slate-700 print:border print:border-black print:text-black print:py-1">
                           <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-800 font-black print:bg-transparent print:p-0">
                             {rm.seatedCount} छात्र
                           </span>
                         </td>
 
                         {/* Invigilator 1 Dropdown: ONLY FREE TEACHERS + CURRENTLY SELECTED */}
-                        <td className="px-4 py-2.5 print:px-2 print:border-r print:border-slate-300">
+                        <td className="px-4 py-2.5 print:border print:border-black print:text-black print:py-1">
                           <div className="no-print">
                             <select
                               value={t1Id || ''}
@@ -1181,11 +1188,11 @@ export default function TeacherDutyManager({
                               </optgroup>
                             </select>
                           </div>
-                          <div className="hidden print:block">
+                          <div className="hidden print:block leading-tight">
                             {t1 ? (
                               <div>
-                                <span className="font-bold text-slate-900 block">{t1.name}</span>
-                                <span className="text-[9px] text-slate-600 block">{t1.designation} • {t1.subject}</span>
+                                <span className="font-bold text-black block">{t1.name}</span>
+                                <span className="text-[9px] text-slate-700 block">{t1.designation}{t1.subject ? ` • ${t1.subject}` : ''}</span>
                               </div>
                             ) : (
                               <span className="text-slate-400 font-normal italic">_________________</span>
@@ -1194,7 +1201,7 @@ export default function TeacherDutyManager({
                         </td>
 
                         {/* Invigilator 2 Dropdown: ONLY FREE TEACHERS + CURRENTLY SELECTED */}
-                        <td className="px-4 py-2.5 print:px-2 print:border-r print:border-slate-300">
+                        <td className="px-4 py-2.5 print:border print:border-black print:text-black print:py-1">
                           <div className="no-print">
                             <select
                               value={t2Id || ''}
@@ -1227,11 +1234,11 @@ export default function TeacherDutyManager({
                               </optgroup>
                             </select>
                           </div>
-                          <div className="hidden print:block">
+                          <div className="hidden print:block leading-tight">
                             {t2 ? (
                               <div>
-                                <span className="font-bold text-slate-900 block">{t2.name}</span>
-                                <span className="text-[9px] text-slate-600 block">{t2.designation} • {t2.subject}</span>
+                                <span className="font-bold text-black block">{t2.name}</span>
+                                <span className="text-[9px] text-slate-700 block">{t2.designation}{t2.subject ? ` • ${t2.subject}` : ''}</span>
                               </div>
                             ) : isLarge ? (
                               <span className="text-slate-400 font-normal italic">_________________</span>
@@ -1242,7 +1249,7 @@ export default function TeacherDutyManager({
                         </td>
 
                         {/* Signature Column */}
-                        <td className="px-3 py-2.5 text-center print:px-2">
+                        <td className="px-3 py-2.5 text-center print:border print:border-black print:py-1">
                           <span className="text-slate-400 print:text-slate-700 text-[11px] italic font-serif">
                             _________________
                           </span>
@@ -1254,8 +1261,8 @@ export default function TeacherDutyManager({
               </table>
             </div>
 
-            {/* Reliever / Flying Squad Section with Dynamic Add/Remove and Preset Buttons */}
-            <div className="p-4 bg-amber-50/70 border-t border-amber-200/90 print:bg-slate-50 print:border-slate-400 text-xs">
+            {/* Reliever / Flying Squad Section for Screen */}
+            <div className="p-4 bg-amber-50/70 border-t border-amber-200/90 print:hidden text-xs">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-amber-200/60">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 bg-amber-200 text-amber-900 font-black rounded text-[10px] uppercase tracking-wider">
@@ -1330,6 +1337,32 @@ export default function TeacherDutyManager({
               </div>
             </div>
 
+            {/* In Print: Clean Formal Reliever Section */}
+            <div className="hidden print:block border-t-2 border-black p-2.5 bg-slate-50 print-avoid-break">
+              <div className="font-bold text-[11px] text-black mb-1.5 flex items-center justify-between">
+                <span>🛡️ रिलीवर / उड़नदस्ता (Reliever & Flying Squad) — राउंड ड्यूटी व आकस्मिक रिलीविंग:</span>
+                <span>कुल: {(currentAllocation.relievers || []).length} शिक्षक</span>
+              </div>
+              {(currentAllocation.relievers || []).length === 0 ? (
+                <div className="text-slate-500 italic text-[10px]">कोई रिलीवर शिक्षक नामित नहीं</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                  {(currentAllocation.relievers || []).map((tid, rIdx) => {
+                    const t = teacherMap[tid];
+                    if (!t) return null;
+                    return (
+                      <div key={tid} className="flex items-center justify-between border-b border-black/40 pb-0.5">
+                        <span className="font-bold text-black">
+                          {rIdx + 1}. {t.name} <span className="font-normal text-slate-700">({t.designation})</span>
+                        </span>
+                        <span className="text-slate-700 text-[10px] italic">ह०: ________________</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* LIVE DYNAMIC FREE TEACHERS CARD (नीचे स्वतः अपडेट होने वाले मुक्त शिक्षक) */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 no-print">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-200">
@@ -1385,23 +1418,23 @@ export default function TeacherDutyManager({
           </div>
 
           {/* Official Signatures for Printout */}
-          <div className="hidden print:flex items-end justify-between pt-12 pb-2 px-6 text-xs font-bold text-slate-800">
+          <div className="hidden print:flex items-end justify-between pt-8 pb-2 px-6 text-xs font-bold text-black print-avoid-break">
             <div className="text-center space-y-1">
-              <div className="w-36 border-t border-slate-800"></div>
-              <span>ह० परीक्षा प्रभारी</span>
+              <div className="w-40 border-t-2 border-black"></div>
+              <span className="text-black font-bold">ह० परीक्षा प्रभारी</span>
               {inchargeTeachers.length > 0 && (
-                <div className="text-[10px] text-slate-700 font-semibold">
+                <div className="text-[10px] text-black font-semibold">
                   ({inchargeTeachers.map((t) => t.name).join(' / ')})
                 </div>
               )}
             </div>
             <div className="text-center space-y-1">
-              <div className="w-36 border-t border-slate-800"></div>
-              <span>ह० वितरण लिपिक / स्ट्रांग रूम</span>
+              <div className="w-40 border-t-2 border-black"></div>
+              <span className="text-black font-bold">ह० वितरण लिपिक / स्ट्रांग रूम</span>
             </div>
             <div className="text-center space-y-1">
-              <div className="w-36 border-t border-slate-800"></div>
-              <span>ह० प्रधानाचार्य (सील सहित)</span>
+              <div className="w-40 border-t-2 border-black"></div>
+              <span className="text-black font-bold">ह० प्रधानाचार्य (सील सहित)</span>
             </div>
           </div>
         </div>

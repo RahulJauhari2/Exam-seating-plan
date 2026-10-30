@@ -336,21 +336,21 @@ export async function fetchTeachersAPI() {
       headers: { 'Content-Type': 'application/json' },
     });
     const data = await res.json();
-    return data.success ? data.data : [];
-  } catch {
-    return [];
+    return data;
+  } catch (error) {
+    return { success: false, data: [], message: error.message };
   }
 }
 
 export async function createTeacherAPI(teacherData) {
   const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   try {
     const res = await fetch(`${API_BASE_URL}/teachers`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify(teacherData),
     });
     return await res.json();
@@ -361,13 +361,13 @@ export async function createTeacherAPI(teacherData) {
 
 export async function updateTeacherAPI(id, teacherData) {
   const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   try {
     const res = await fetch(`${API_BASE_URL}/teachers/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify(teacherData),
     });
     return await res.json();
@@ -378,13 +378,13 @@ export async function updateTeacherAPI(id, teacherData) {
 
 export async function deleteTeacherAPI(id) {
   const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   try {
     const res = await fetch(`${API_BASE_URL}/teachers/${id}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
     });
     return await res.json();
   } catch (error) {
@@ -394,13 +394,13 @@ export async function deleteTeacherAPI(id) {
 
 export async function bulkImportTeachersAPI(teachers, strategy = "merge") {
   const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   try {
     const res = await fetch(`${API_BASE_URL}/teachers/bulk-import`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify({ teachers, strategy }),
     });
     return await res.json();

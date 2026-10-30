@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
-import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI } from './services/api';
+import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchTeachersAPI } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
@@ -105,6 +105,17 @@ export default function App() {
 
   // Teacher Staff & Invigilation Duty State
   const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
+
+  // Sync teachers from MongoDB on app mount
+  useEffect(() => {
+    fetchTeachersAPI()
+      .then((res) => {
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setTeachers(res.data.map((t) => ({ ...t, id: t._id ? t._id.toString() : t.id })));
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [dutyRoster, setDutyRoster] = useState(() => {
     try {
       const saved = localStorage.getItem('exam_duty_roster_v1');
