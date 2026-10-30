@@ -56,15 +56,7 @@ export const DEFAULT_TEACHERS = [
     mobile: '83******10',
     isPresent: true
   },
-  {
-    id: 't7',
-    name: 'श्री ब्रह्मा धर मिश्रा',
-    englishName: 'MR. BRAHMA DHAR MISHRA',
-    designation: 'प्रवक्ता (Lecturer)',
-    subject: '',
-    mobile: '99******67',
-    isPresent: true
-  },
+
   {
     id: 't8',
     name: 'श्री जंग बहादुर सिंह',
