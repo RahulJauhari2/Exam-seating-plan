@@ -67,6 +67,15 @@ const TeacherSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Exam Incharge / Duty Exemption configuration
+    isExamIncharge: {
+      type: Boolean,
+      default: false,
+    },
+    exemptDuty: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

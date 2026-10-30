@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
-import { saveDutyRosterToDB } from '../services/api';
+import { saveDutyRosterToDB, updateTeacherAPI } from '../services/api';
 import { exportTeachersToExcel } from '../utils/excelExport';
 import { useAuth } from '../context/AuthContext';
 
@@ -137,12 +137,18 @@ export default function TeacherDutyManager({
     return set;
   }, [otherShiftAllocation]);
 
-  // Available / Free teachers for CURRENT shift (Not assigned anywhere in this shift and isPresent !== false)
+  // Exam Committee / Incharges (Exempt from room duties)
+  const inchargeTeachers = useMemo(() => {
+    return teachers.filter((t) => t.isExamIncharge);
+  }, [teachers]);
+
+  // Available / Free teachers for CURRENT shift (Not assigned anywhere in this shift and isPresent !== false and NOT incharge/exempt)
   // Sorted: Fresh teachers (no duty in other shift) come FIRST!
   const freeTeachers = useMemo(() => {
     return teachers
       .filter((t) => {
         if (t.isPresent === false) return false;
+        if (t.isExamIncharge || t.exemptDuty) return false;
         return !currentlyAssignedIds.has(String(t.id));
       })
       .sort((a, b) => {
@@ -186,7 +192,7 @@ export default function TeacherDutyManager({
       });
     }
 
-    const availableTeachers = teachers.filter((t) => t.isPresent !== false);
+    const availableTeachers = teachers.filter((t) => t.isPresent !== false && !t.isExamIncharge && !t.exemptDuty);
     if (availableTeachers.length === 0) {
       alert('कोई भी शिक्षक उपस्थित नहीं है। कृपया स्टाफ सूची में शिक्षकों की उपस्थिति चेक करें।');
       return;
@@ -264,7 +270,7 @@ export default function TeacherDutyManager({
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
   const handleAllocateBothShifts = () => {
-    const available = teachers.filter((t) => t.isPresent !== false);
+    const available = teachers.filter((t) => t.isPresent !== false && !t.isExamIncharge && !t.exemptDuty);
     if (available.length < activeRooms.length) {
       alert(`कुल उपस्थित शिक्षक (${available.length}) कमरों की संख्या (${activeRooms.length}) से कम हैं!`);
       return;
@@ -510,6 +516,81 @@ export default function TeacherDutyManager({
 
     return () => clearTimeout(timer);
   }, [dutyRoster, examDetails?.examName, activeShift]);
+
+
+  // Toggle Exam Incharge status (Exempt from room duties)
+  const handleToggleIncharge = async (teacherId) => {
+    const targetTeacher = teachers.find((t) => t.id === teacherId);
+    if (!targetTeacher) return;
+    const newStatus = !targetTeacher.isExamIncharge;
+
+    setTeachers((prev) =>
+      prev.map((t) =>
+        t.id === teacherId
+          ? { ...t, isExamIncharge: newStatus, exemptDuty: newStatus ? true : t.exemptDuty }
+          : t
+      )
+    );
+
+    const idToUpdate = targetTeacher._id || targetTeacher.id;
+    if (idToUpdate) {
+      try {
+        await updateTeacherAPI(idToUpdate, {
+          isExamIncharge: newStatus,
+          exemptDuty: newStatus ? true : targetTeacher.exemptDuty,
+        });
+      } catch (err) {
+        console.error('Failed to sync incharge status:', err);
+      }
+    }
+  };
+
+  // Automatically purge Exam Incharges from any room assignment in dutyRoster
+  useEffect(() => {
+    if (!dutyRoster || Object.keys(dutyRoster).length === 0) return;
+    const inchargeIds = new Set(
+      teachers.filter((t) => t.isExamIncharge || t.exemptDuty).map((t) => String(t.id))
+    );
+    if (inchargeIds.size === 0) return;
+
+    let modified = false;
+    const newRoster = { ...dutyRoster };
+
+    Object.keys(newRoster).forEach((key) => {
+      const alloc = newRoster[key];
+      if (!alloc) return;
+
+      let allocChanged = false;
+      const rooms = { ...(alloc.rooms || {}) };
+
+      Object.keys(rooms).forEach((rId) => {
+        const rm = rooms[rId];
+        if (rm?.invigilator1 && inchargeIds.has(String(rm.invigilator1))) {
+          rooms[rId] = { ...rooms[rId], invigilator1: null };
+          allocChanged = true;
+        }
+        if (rm?.invigilator2 && inchargeIds.has(String(rm.invigilator2))) {
+          rooms[rId] = { ...rooms[rId], invigilator2: null };
+          allocChanged = true;
+        }
+      });
+
+      let relievers = alloc.relievers || [];
+      if (relievers.some((id) => inchargeIds.has(String(id)))) {
+        relievers = relievers.filter((id) => !inchargeIds.has(String(id)));
+        allocChanged = true;
+      }
+
+      if (allocChanged) {
+        newRoster[key] = { ...alloc, rooms, relievers };
+        modified = true;
+      }
+    });
+
+    if (modified) {
+      setDutyRoster(newRoster);
+    }
+  }, [teachers]);
 
   // Toggle teacher presence (Leave / Active)
   const handleTogglePresence = (teacherId) => {
@@ -836,6 +917,51 @@ export default function TeacherDutyManager({
             </div>
           </div>
 
+
+          {/* Exam Control Room & Incharge Banner */}
+          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-3.5 sm:p-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs print:border print:border-slate-400 print:rounded-none print:py-1.5 print:my-1.5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0 print:hidden shadow-xs">
+                🎯
+              </div>
+              <div>
+                <div className="text-[11px] font-black text-purple-950 uppercase tracking-wide">
+                  कंट्रोल रूम एवं परीक्षा संचालन समिति (Exam Control Room & Committee)
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  {inchargeTeachers.length > 0 ? (
+                    inchargeTeachers.map((t) => (
+                      <span
+                        key={t.id}
+                        className="px-2.5 py-0.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-purple-950 shadow-2xs print:border-none print:p-0 print:text-black"
+                      >
+                        ⭐ {t.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">कोई परीक्षा प्रभारी नामित नहीं</span>
+                  )}
+                  <span className="text-[10px] text-purple-700 font-bold bg-purple-100/70 px-2 py-0.5 rounded print:hidden">
+                    [कक्ष निरीक्षक ड्यूटी से पूर्णतः मुक्त]
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="no-print flex items-center gap-2">
+              {canEditTeacher && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('staff')}
+                  className="px-3 py-1.5 bg-white hover:bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+                >
+                  <span>प्रभारी बदलें / स्टाफ सूची</span>
+                  <span>→</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Allocation Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print:border print:border-slate-400 print:shadow-none print:rounded-none">
             <div className="overflow-x-auto print:overflow-visible">
@@ -1134,6 +1260,11 @@ export default function TeacherDutyManager({
             <div className="text-center space-y-1">
               <div className="w-36 border-t border-slate-800"></div>
               <span>ह० परीक्षा प्रभारी</span>
+              {inchargeTeachers.length > 0 && (
+                <div className="text-[10px] text-slate-700 font-semibold">
+                  ({inchargeTeachers.map((t) => t.name).join(' / ')})
+                </div>
+              )}
             </div>
             <div className="text-center space-y-1">
               <div className="w-36 border-t border-slate-800"></div>
@@ -1333,6 +1464,7 @@ export default function TeacherDutyManager({
                       <th className="py-2 px-2">पदनाम व विषय</th>
                       <th className="py-2 px-2 text-center">कुल ड्यूटी</th>
                       <th className="py-2 px-2 text-center">स्थिति</th>
+                      <th className="py-2 px-2 text-center">परीक्षा प्रभारी / ड्यूटी छूट</th>
                       {canEditTeacher && <th className="py-2 px-2 text-center w-20">कार्य</th>}
                     </tr>
                   </thead>
@@ -1397,7 +1529,7 @@ export default function TeacherDutyManager({
                                 className="w-full px-2 py-1 text-xs border rounded bg-white"
                               />
                             </td>
-                            <td colSpan="2" className="py-2 px-2 text-center text-slate-400 text-[10px]">
+                            <td colSpan="3" className="py-2 px-2 text-center text-slate-400 text-[10px]">
                               एडिट मोड
                             </td>
                             <td className="py-2 px-2 text-center">
@@ -1466,6 +1598,28 @@ export default function TeacherDutyManager({
                             >
                               {t.isPresent !== false ? 'उपस्थित' : 'अवकाश'}
                             </button>
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            {canEditTeacher ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleIncharge(t.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
+                                  t.isExamIncharge
+                                    ? 'bg-purple-100 text-purple-900 border border-purple-300 hover:bg-purple-200'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200'
+                                }`}
+                                title={t.isExamIncharge ? 'परीक्षा प्रभारी (ड्यूटी मुक्त)' : 'परीक्षा प्रभारी नामित करने के लिए क्लिक करें'}
+                              >
+                                {t.isExamIncharge ? '⭐ परीक्षा प्रभारी' : 'सामान्य ड्यूटी'}
+                              </button>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                t.isExamIncharge ? 'bg-purple-100 text-purple-900' : 'text-slate-400'
+                              }`}>
+                                {t.isExamIncharge ? '⭐ प्रभारी' : '—'}
+                              </span>
+                            )}
                           </td>
                           {canEditTeacher && (
                             <td className="py-2 px-2 text-center">
