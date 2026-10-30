@@ -253,20 +253,34 @@ export default function App() {
   const handleToggleAbsent = async (toggleData) => {
     // Optimistic local UI update
     const { rollNo, isAbsent } = toggleData;
+    const numRoll = Number(rollNo) || rollNo;
+    const strRoll = String(rollNo);
+
     setAbsentStudents((prev) => {
       const copy = { ...prev };
-      if (isAbsent) copy[rollNo] = true;
-      else delete copy[rollNo];
+      if (isAbsent) {
+        copy[numRoll] = true;
+        copy[strRoll] = true;
+      } else {
+        delete copy[numRoll];
+        delete copy[strRoll];
+      }
       return copy;
     });
 
-    setLiveAbsentees((prev) => ({
-      ...prev,
-      [rollNo]: {
-        ...prev[rollNo],
-        ...toggleData,
-      },
-    }));
+    setLiveAbsentees((prev) => {
+      const copy = { ...prev };
+      if (isAbsent) {
+        const record = { ...copy[numRoll], ...copy[strRoll], ...toggleData, isAbsent: true };
+        copy[numRoll] = record;
+        copy[strRoll] = record;
+      } else {
+        const record = { ...copy[numRoll], ...copy[strRoll], ...toggleData, isAbsent: false };
+        copy[numRoll] = record;
+        copy[strRoll] = record;
+      }
+      return copy;
+    });
 
     // Send to backend API
     try {

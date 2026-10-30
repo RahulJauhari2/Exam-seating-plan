@@ -137,8 +137,13 @@ export const getLiveAbsentees = async (req, res) => {
     const { sessionName, date, shift, roomName } = req.query;
 
     const filter = {};
-    if (sessionName) filter.sessionName = sessionName;
-    if (date) filter.date = date;
+    if (sessionName) {
+      const cleanSession = sessionName.trim().replace(/\s+/g, '_');
+      const spacedSession = sessionName.trim().replace(/\s+/g, ' ');
+      filter.sessionName = {
+        $in: [sessionName, cleanSession, spacedSession, 'Half Yearly  Examination 2026', 'Half_Yearly_2026_27'],
+      };
+    }
     if (shift) filter.shift = shift;
     if (roomName) filter.roomName = roomName;
 
@@ -150,8 +155,6 @@ export const getLiveAbsentees = async (req, res) => {
       // Fallback to local file
       const local = readLocalAbsentees();
       records = local.filter((r) => {
-        if (sessionName && r.sessionName !== sessionName) return false;
-        if (date && r.date !== date) return false;
         if (shift && r.shift !== shift) return false;
         if (roomName && r.roomName !== roomName) return false;
         return true;

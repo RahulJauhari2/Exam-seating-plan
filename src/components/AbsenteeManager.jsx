@@ -78,8 +78,8 @@ export default function AbsenteeManager({
     let found = false;
     let foundRoom = '';
     rooms.forEach((r) => {
-      r.students.forEach((s) => {
-        if (s.rollNo.toString() === roll) {
+      r.students?.forEach((s) => {
+        if (s.rollNo?.toString() === roll) {
           found = true;
           foundRoom = r.roomName;
         }
@@ -119,7 +119,7 @@ export default function AbsenteeManager({
     const roomAbsentRolls = [];
 
     room.students.forEach((s) => {
-      if (absentStudents[s.rollNo.toString()]) {
+      if (absentStudents[s.rollNo.toString()] || absentStudents[s.rollNo]) {
         roomAbsentRolls.push({
           rollNo: s.rollNo,
           className: s.className,
@@ -307,7 +307,7 @@ export default function AbsenteeManager({
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
               {currentRoomData.students.map((st) => {
-                const isAbsent = Boolean(absentStudents[st.rollNo.toString()]);
+                const isAbsent = Boolean(absentStudents[st.rollNo.toString()] || absentStudents[st.rollNo]);
                 return (
                   <button
                     key={st.id}

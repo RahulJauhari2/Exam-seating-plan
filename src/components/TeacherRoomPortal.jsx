@@ -170,6 +170,18 @@ export default function TeacherRoomPortal({
     );
   }, [roomStudents]);
 
+  // Centralized safe absentee checker
+  const isStudentAbsent = (rollNo) => {
+    if (rollNo === undefined || rollNo === null) return false;
+    const num = Number(rollNo);
+    const str = String(rollNo);
+    return Boolean(
+      (liveAbsentees[rollNo] && liveAbsentees[rollNo].isAbsent) ||
+      (liveAbsentees[str] && liveAbsentees[str].isAbsent) ||
+      (!isNaN(num) && liveAbsentees[num] && liveAbsentees[num].isAbsent)
+    );
+  };
+
   // Filtered Students for Flat or Grouped display
   const filteredClassGroups = useMemo(() => {
     return classGroupedStudents
@@ -180,7 +192,7 @@ export default function TeacherRoomPortal({
       .map((grp) => {
         let list = grp.students;
         if (filterOnlyAbsent) {
-          list = list.filter((st) => !!liveAbsentees[st.rollNo]?.isAbsent);
+          list = list.filter((st) => isStudentAbsent(st.rollNo));
         }
         if (searchTerm.trim()) {
           const term = searchTerm.toLowerCase().trim();
@@ -200,7 +212,7 @@ export default function TeacherRoomPortal({
   const classWiseAbsentSummary = useMemo(() => {
     return classGroupedStudents.map((grp) => {
       const total = grp.students.length;
-      const absentList = grp.students.filter((st) => !!liveAbsentees[st.rollNo]?.isAbsent);
+      const absentList = grp.students.filter((st) => isStudentAbsent(st.rollNo));
       const absentCount = absentList.length;
       const presentCount = total - absentCount;
 
@@ -219,28 +231,32 @@ export default function TeacherRoomPortal({
 
   // Total Statistics
   const totalStudents = roomStudents.length;
-  const absentCount = roomStudents.filter((st) => liveAbsentees[st.rollNo]?.isAbsent).length;
+  const absentCount = roomStudents.filter((st) => isStudentAbsent(st.rollNo)).length;
   const presentCount = totalStudents - absentCount;
 
   // 1-Click Absent Toggle Handler
   const handleToggle = async (student) => {
-    const currentIsAbsent = !!liveAbsentees[student.rollNo]?.isAbsent;
+    if (!student || !student.rollNo) return;
+    const roll = Number(student.rollNo) || student.rollNo;
+    const currentIsAbsent = isStudentAbsent(student.rollNo);
     const newStatus = !currentIsAbsent;
 
     setTogglingRoll(student.rollNo);
 
     try {
       await onToggleAbsent({
-        rollNo: student.rollNo,
+        rollNo: roll,
         isAbsent: newStatus,
-        roomName: selectedRoomName,
-        sessionName: examSession?.sessionName || 'Half_Yearly_2026_27',
-        date: activeDate,
-        shift: activeShift,
+        roomName: student.roomName || selectedRoomName || currentRoom?.roomName || 'Room 01',
+        sessionName: examSession?.sessionName || 'Half Yearly  Examination 2026',
+        date: activeDate || new Date().toISOString().split('T')[0],
+        shift: activeShift || 'shift_1',
         studentName: student.name || '',
         className: student.className || '',
         section: student.section || '',
       });
+    } catch (err) {
+      console.error('Toggle absent error in TeacherRoomPortal:', err);
     } finally {
       setTogglingRoll(null);
     }
@@ -535,7 +551,7 @@ export default function TeacherRoomPortal({
               </div>
             ) : (
               filteredClassGroups.map((grp) => {
-                const classAbsentCount = grp.students.filter((st) => !!liveAbsentees[st.rollNo]?.isAbsent).length;
+                const classAbsentCount = grp.students.filter((st) => isStudentAbsent(st.rollNo)).length;
                 const classPresentCount = grp.students.length - classAbsentCount;
 
                 return (
@@ -574,35 +590,46 @@ export default function TeacherRoomPortal({
                     {/* Students Grid strictly sorted by Roll Number ASC */}
                     <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       {grp.students.map((st) => {
-                        const isAbsent = !!liveAbsentees[st.rollNo]?.isAbsent;
-                        const isToggling = togglingRoll === st.rollNo;
+                        const roll = Number(st.rollNo) || st.rollNo;
+                        const isAbsent = isStudentAbsent(st.rollNo);
+                        const isToggling = togglingRoll === st.rollNo || togglingRoll === roll;
 
                         return (
                           <div
                             key={`${st.rollNo}-${st.benchNumber}`}
-                            className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-2 shadow-2xs ${
+                            onClick={() => !isToggling && handleToggle(st)}
+                            className={`p-3 rounded-xl border-2 transition-all flex items-center justify-between gap-2 shadow-2xs cursor-pointer select-none active:scale-[0.99] ${
                               isAbsent
-                                ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/50'
-                                : 'bg-slate-50/60 hover:bg-slate-100/80 border-slate-200'
+                                ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-400/50 shadow-sm'
+                                : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
                             }`}
                           >
                             {/* Student Info */}
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-base font-black text-slate-900 font-mono tracking-tight">
-                                  {st.rollNo}
+                                  #{st.rollNo}
                                 </span>
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
-                                  बेंच #{st.benchNumber} ({st.side.includes('Left') ? 'L' : 'R'})
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  बेंच #{st.benchNumber} ({st.side?.includes('Left') ? 'L' : 'R'})
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
+                                    isAbsent
+                                      ? 'bg-rose-600 text-white'
+                                      : 'bg-emerald-600 text-white'
+                                  }`}
+                                >
+                                  {isAbsent ? 'ABSENT' : 'PRESENT'}
                                 </span>
                               </div>
 
-                              <div className="text-xs font-bold text-slate-800 truncate mt-0.5">
+                              <div className="text-xs font-bold text-slate-800 truncate mt-1">
                                 {st.name || 'परीक्षार्थी'}
                               </div>
 
                               <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                                {st.subject || 'सामान्य विषय'}
+                                {st.className} {st.section ? `(${st.section})` : ''} • {st.subject || 'सामान्य विषय'}
                               </div>
 
                               {isAbsent && (
@@ -616,7 +643,10 @@ export default function TeacherRoomPortal({
                             {/* 1-Tap Toggle Button */}
                             <button
                               type="button"
-                              onClick={() => handleToggle(st)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggle(st);
+                              }}
                               disabled={isToggling}
                               className={`px-3 py-2 rounded-xl font-black text-[11px] shadow-sm transition-all flex items-center gap-1 active:scale-95 cursor-pointer shrink-0 ${
                                 isAbsent
@@ -629,12 +659,12 @@ export default function TeacherRoomPortal({
                               ) : isAbsent ? (
                                 <>
                                   <UserCheck className="w-3.5 h-3.5" />
-                                  <span>उपस्थित</span>
+                                  <span>उपस्थित करें</span>
                                 </>
                               ) : (
                                 <>
                                   <UserX className="w-3.5 h-3.5" />
-                                  <span>अनुपस्थित</span>
+                                  <span>अनुपस्थित करें</span>
                                 </>
                               )}
                             </button>
@@ -812,8 +842,8 @@ export default function TeacherRoomPortal({
                     {col.benches.map((bench) => {
                       const left = bench.leftSeat;
                       const right = bench.rightSeat;
-                      const leftIsAbsent = left ? !!liveAbsentees[left.rollNo]?.isAbsent : false;
-                      const rightIsAbsent = right ? !!liveAbsentees[right.rollNo]?.isAbsent : false;
+                      const leftIsAbsent = left ? isStudentAbsent(left.rollNo) : false;
+                      const rightIsAbsent = right ? isStudentAbsent(right.rollNo) : false;
 
                       return (
                         <div
