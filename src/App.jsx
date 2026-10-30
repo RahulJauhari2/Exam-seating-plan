@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
-import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchTeachersAPI } from './services/api';
+import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchTeachersAPI, loadExamSessionFromDB } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
@@ -137,6 +137,20 @@ export default function App() {
       console.error('Error saving duty roster to localStorage', e);
     }
   }, [dutyRoster]);
+
+  // Sync dutyRoster from MongoDB on app mount and when shift/examName changes
+  useEffect(() => {
+    loadExamSessionFromDB(examDetails.examName || 'Half Yearly  Examination 2026', activeShift)
+      .then((res) => {
+        if (res && res.success && res.data && res.data.dutyRoster && Object.keys(res.data.dutyRoster).length > 0) {
+          setDutyRoster((prev) => ({
+            ...prev,
+            ...res.data.dutyRoster,
+          }));
+        }
+      })
+      .catch(() => {});
+  }, [examDetails.examName, activeShift]);
 
   // Active view tab — default to 'student-home' for welcoming student storytelling portal
   const [activeTab, setActiveTab] = useState('student-home');
@@ -567,6 +581,7 @@ export default function App() {
                 }}
                 activeDate={examDetails.date}
                 activeShift={activeShift}
+                teachers={teachers}
                 liveAbsentees={liveAbsentees}
                 onToggleAbsent={handleToggleAbsent}
                 onLogout={logout}

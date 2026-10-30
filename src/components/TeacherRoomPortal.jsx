@@ -30,6 +30,7 @@ export default function TeacherRoomPortal({
   examSession,
   activeDate,
   activeShift,
+  teachers = [],
   liveAbsentees = {},
   onToggleAbsent,
   onLogout,
@@ -51,16 +52,43 @@ export default function TeacherRoomPortal({
   const assignedRoomDefault = useMemo(() => {
     if (!currentUser || rooms.length === 0) return rooms[0]?.roomName || 'Room 01';
 
-    // Search across duty roster for teacher's ID or name
-    const teacherId = currentUser.assignedTeacherId || currentUser.id;
+    // Find teacher in teachers directory by mobile, id, teacherCode, or name
+    const teacherRec = (teachers || []).find(
+      (t) =>
+        (t.mobile && currentUser.phone && t.mobile.trim() === currentUser.phone.trim()) ||
+        (t.id && currentUser.assignedTeacherId && String(t.id) === String(currentUser.assignedTeacherId)) ||
+        (t._id && currentUser.assignedTeacherId && String(t._id) === String(currentUser.assignedTeacherId)) ||
+        (t.teacherCode && currentUser.assignedTeacherId && t.teacherCode.toLowerCase() === String(currentUser.assignedTeacherId).toLowerCase()) ||
+        (t.name && currentUser.name && t.name.trim() === currentUser.name.trim())
+    );
+
+    // Set of all possible identifier strings for this teacher
+    const teacherIdSet = new Set();
+    if (currentUser.assignedTeacherId) teacherIdSet.add(String(currentUser.assignedTeacherId));
+    if (currentUser.id) teacherIdSet.add(String(currentUser.id));
+    if (currentUser.phone) teacherIdSet.add(String(currentUser.phone));
+    if (teacherRec) {
+      if (teacherRec.id) teacherIdSet.add(String(teacherRec.id));
+      if (teacherRec._id) teacherIdSet.add(String(teacherRec._id));
+      if (teacherRec.teacherCode) {
+        teacherIdSet.add(String(teacherRec.teacherCode));
+        teacherIdSet.add(String(teacherRec.teacherCode).toLowerCase());
+      }
+      if (teacherRec.mobile) teacherIdSet.add(String(teacherRec.mobile));
+      if (teacherRec.name) teacherIdSet.add(String(teacherRec.name).trim());
+    }
+
+    // Search across duty roster
     for (const [key, alloc] of Object.entries(dutyRoster)) {
       if (alloc && alloc.rooms) {
         for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
+          const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
+          const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
           if (
-            (dInfo.invigilator1 && String(dInfo.invigilator1) === String(teacherId)) ||
-            (dInfo.invigilator2 && String(dInfo.invigilator2) === String(teacherId))
+            (inv1 && teacherIdSet.has(inv1)) ||
+            (inv2 && teacherIdSet.has(inv2))
           ) {
-            const foundRoom = rooms.find((r) => r.roomId === rId || r.roomName === rId);
+            const foundRoom = rooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
             if (foundRoom) return foundRoom.roomName;
           }
         }
@@ -69,7 +97,7 @@ export default function TeacherRoomPortal({
 
     // Default to first room
     return rooms[0]?.roomName || 'Room 01';
-  }, [currentUser, dutyRoster, rooms]);
+  }, [currentUser, dutyRoster, rooms, teachers]);
 
   const [selectedRoomName, setSelectedRoomName] = useState(assignedRoomDefault);
 

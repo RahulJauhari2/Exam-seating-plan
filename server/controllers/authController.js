@@ -64,6 +64,9 @@ export const seedInitialUsers = async () => {
       const cleanPhone = (t.mobile || t.phone || '').trim();
       if (!cleanPhone) continue;
 
+      const teacherRec = await Teacher.findOne({ mobile: cleanPhone });
+      const targetTeacherId = teacherRec ? teacherRec._id.toString() : t.id;
+
       await User.updateOne(
         { phone: cleanPhone },
         {
@@ -74,7 +77,7 @@ export const seedInitialUsers = async () => {
             phone: cleanPhone,
             pin: defaultPinHash,
             password: defaultPinHash,
-            assignedTeacherId: t.id,
+            assignedTeacherId: targetTeacherId,
             active: true,
           },
         },
