@@ -271,86 +271,89 @@ export default function MainGateNotice({ seatingResult, examDetails }) {
           })}
         </div>
 
-        {/* Master Consolidated Table - Forces a clean new page on print */}
-        <div className="mt-6 sm:mt-8 border-2 border-slate-900 rounded-xl overflow-hidden page-break-before page-break-after">
-          {/* Print Header for Master Consolidated Notice when starting on a new page */}
-          <div className="hidden print:block text-center pb-3 border-b-2 border-slate-900 mb-3">
-            <h2 className="text-base font-black text-slate-900 uppercase">
-              {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
-            </h2>
-            <p className="text-xs font-bold text-indigo-900">
-              {examDetails.examName || 'Annual Examination 2026'}
-            </p>
-            <div className="text-[10px] text-slate-600 mt-0.5">
-              दिनांक: {examDetails.date || ''} • समय: {examDetails.timeRange || ''}
+        {/* Master Consolidated Notice Container - Starts cleanly on a new page and keeps table + signatures together */}
+        <div className="mt-6 sm:mt-8 page-break-before break-inside-avoid">
+          {/* Border Box for Master Table */}
+          <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
+            {/* Print Header for Master Consolidated Notice when starting on a new page */}
+            <div className="hidden print:block text-center pt-2 pb-2.5 border-b-2 border-slate-900 bg-slate-50">
+              <h2 className="text-base font-black text-slate-900 uppercase">
+                {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
+              </h2>
+              <p className="text-xs font-bold text-indigo-900">
+                {examDetails.examName || 'Annual Examination 2026'}
+              </p>
+              <div className="text-[10px] text-slate-600 mt-0.5">
+                दिनांक: {examDetails.date || ''} • समय: {examDetails.timeRange || ''}
+              </div>
+            </div>
+
+            <div className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 text-center font-bold text-xs uppercase tracking-wider">
+              🏛️ संपूर्ण परीक्षा केंद्र सारांश (Master Consolidated Notice)
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[520px]">
+                <thead className="bg-slate-200 text-slate-900 font-extrabold border-b border-slate-300">
+                  <tr>
+                    <th className="px-2.5 py-2 border-r border-slate-300 text-center w-10">क्र.</th>
+                    <th className="px-3 py-2 border-r border-slate-300">कमरा / हॉल नं.</th>
+                    <th className="px-3 py-2 border-r border-slate-300">कक्षा व सेक्शन</th>
+                    <th className="px-3 py-2 border-r border-slate-300">विषय</th>
+                    <th className="px-3 py-2 border-r border-slate-300 text-center">रोल नंबर (From - To)</th>
+                    <th className="px-3 py-2 text-center">संख्या</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {masterGateNotice.map((row, idx) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-2.5 py-1.5 text-center text-slate-500 font-medium border-r border-slate-300">
+                        {idx + 1}
+                      </td>
+                      <td className="px-3 py-1.5 font-bold text-slate-900 border-r border-slate-300">
+                        {row.roomName}
+                      </td>
+                      <td className="px-3 py-1.5 font-bold border-r border-slate-300">
+                        Class {row.className} - {row.section}
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-600 border-r border-slate-300">
+                        {row.subject && !row.subject.startsWith('UP Board') ? row.subject : 'All Subjects'}
+                      </td>
+                      <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-900 border-r border-slate-300">
+                        {row.rangeText}
+                      </td>
+                      <td className="px-3 py-1.5 text-center font-bold text-indigo-700">
+                        {row.totalStudents}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-200 border-t-2 border-slate-900 font-extrabold text-slate-900">
+                  <tr>
+                    <td colSpan="5" className="px-4 py-2 text-right border-r border-slate-300">
+                      कुल उपस्थित होने वाले छात्र (Grand Total):
+                    </td>
+                    <td className="px-4 py-2 text-center font-black text-sm text-indigo-900">
+                      {totalSeated} छात्र
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
 
-          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 text-center font-bold text-xs uppercase tracking-wider">
-            🏛️ संपूर्ण परीक्षा केंद्र सारांश (Master Consolidated Notice)
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[520px]">
-              <thead className="bg-slate-200 text-slate-900 font-extrabold border-b border-slate-300">
-                <tr>
-                  <th className="px-2.5 py-2 border-r border-slate-300 text-center w-10">क्र.</th>
-                  <th className="px-3 py-2 border-r border-slate-300">कमरा / हॉल नं.</th>
-                  <th className="px-3 py-2 border-r border-slate-300">कक्षा व सेक्शन</th>
-                  <th className="px-3 py-2 border-r border-slate-300">विषय</th>
-                  <th className="px-3 py-2 border-r border-slate-300 text-center">रोल नंबर (From - To)</th>
-                  <th className="px-3 py-2 text-center">संख्या</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {masterGateNotice.map((row, idx) => (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="px-2.5 py-1.5 text-center text-slate-500 font-medium border-r border-slate-300">
-                      {idx + 1}
-                    </td>
-                    <td className="px-3 py-1.5 font-bold text-slate-900 border-r border-slate-300">
-                      {row.roomName}
-                    </td>
-                    <td className="px-3 py-1.5 font-bold border-r border-slate-300">
-                      Class {row.className} - {row.section}
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-600 border-r border-slate-300">
-                      {row.subject && !row.subject.startsWith('UP Board') ? row.subject : 'All Subjects'}
-                    </td>
-                    <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-900 border-r border-slate-300">
-                      {row.rangeText}
-                    </td>
-                    <td className="px-3 py-1.5 text-center font-bold text-indigo-700">
-                      {row.totalStudents}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-slate-200 border-t-2 border-slate-900 font-extrabold text-slate-900">
-                <tr>
-                  <td colSpan="5" className="px-4 py-2 text-right border-r border-slate-300">
-                    कुल उपस्थित होने वाले छात्र (Grand Total):
-                  </td>
-                  <td className="px-4 py-2 text-center font-black text-sm text-indigo-900">
-                    {totalSeated} छात्र
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        {/* Footer Notes */}
-        <div className="mt-6 pt-4 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600">
-          <div>
-            <p className="font-semibold text-slate-800">महत्वपूर्ण निर्देश (Instructions):</p>
-            <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-500 mt-1">
-              <li>छात्र गेट नोटिस में अपना रोल नंबर देखकर ही अपने निर्धारित कक्ष में जाएं।</li>
-              <li>एक बेंच पर दो छात्र बैठेंगे (दोनों अलग-अलग कक्षा के होंगे)।</li>
-            </ul>
-          </div>
-          <div className="mt-4 sm:mt-0 text-center sm:text-right">
-            <div className="w-36 h-8 border-b border-dashed border-slate-400 mx-auto sm:ml-auto"></div>
-            <p className="text-[11px] font-bold text-slate-700 mt-1">हस्ताक्षर केंद्राध्यक्ष / प्रधानाचार्य</p>
+          {/* Footer Notes & Signatures - Attached directly to Master Consolidated Notice */}
+          <div className="mt-4 pt-3 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 break-inside-avoid">
+            <div>
+              <p className="font-semibold text-slate-800">महत्वपूर्ण निर्देश (Instructions):</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-500 mt-1">
+                <li>छात्र गेट नोटिस में अपना रोल नंबर देखकर ही अपने निर्धारित कक्ष में जाएं।</li>
+                <li>एक बेंच पर दो छात्र बैठेंगे (दोनों अलग-अलग कक्षा के होंगे)।</li>
+              </ul>
+            </div>
+            <div className="mt-4 sm:mt-0 text-center sm:text-right">
+              <div className="w-36 h-8 border-b border-dashed border-slate-400 mx-auto sm:ml-auto"></div>
+              <p className="text-[11px] font-bold text-slate-700 mt-1">हस्ताक्षर केंद्राध्यक्ष / प्रधानाचार्य</p>
+            </div>
           </div>
         </div>
 
