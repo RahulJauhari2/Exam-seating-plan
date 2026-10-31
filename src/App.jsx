@@ -70,7 +70,17 @@ export default function App() {
   const { currentUser, isAuthenticated, isTeacher, canAccessAllRooms, logout } = useAuth();
 
   // Active shift state: 'shift_1' (9th-12th) or 'shift_2' (6th-8th)
-  const [activeShift, setActiveShift] = useState('shift_1');
+  // Smart initialization: reads saved preference, otherwise defaults based on afternoon time (>= 12:00 PM -> shift_2)
+  const initialShift = (() => {
+    try {
+      const saved = localStorage.getItem('exam_active_shift');
+      if (saved === 'shift_1' || saved === 'shift_2') return saved;
+    } catch {}
+    return new Date().getHours() >= 12 ? 'shift_2' : 'shift_1';
+  })();
+
+  const [activeShift, setActiveShift] = useState(initialShift);
+  const initialDefaultData = initialShift === 'shift_2' ? DEFAULT_SHIFT_2 : DEFAULT_SHIFT_1;
 
   // Absent students state: { [rollNo]: true }
   const [absentStudents, setAbsentStudents] = useState({});
@@ -96,15 +106,15 @@ export default function App() {
 
   // Exam details state (Defaults to Today's date dynamically)
   const [examDetails, setExamDetails] = useState({
-    schoolName: DEFAULT_SHIFT_1.schoolName,
-    examName: DEFAULT_SHIFT_1.examName,
-    timeRange: DEFAULT_SHIFT_1.timeRange,
+    schoolName: initialDefaultData.schoolName,
+    examName: initialDefaultData.examName,
+    timeRange: initialDefaultData.timeRange,
     date: new Date().toISOString().split('T')[0],
   });
 
   // Dynamic Classes & Rooms
-  const [classes, setClasses] = useState(DEFAULT_SHIFT_1.classes);
-  const [rooms, setRooms] = useState(DEFAULT_SHIFT_1.rooms);
+  const [classes, setClasses] = useState(initialDefaultData.classes);
+  const [rooms, setRooms] = useState(initialDefaultData.rooms);
 
   // Teacher Staff & Invigilation Duty State
   const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
@@ -368,6 +378,9 @@ export default function App() {
   // Handle Shift switch
   const handleShiftChange = (newShift) => {
     setActiveShift(newShift);
+    try {
+      localStorage.setItem('exam_active_shift', newShift);
+    } catch {}
     if (newShift === 'shift_1') {
       setClasses(DEFAULT_SHIFT_1.classes);
       setRooms(DEFAULT_SHIFT_1.rooms);
@@ -666,6 +679,7 @@ export default function App() {
                 }}
                 activeDate={examDetails.date}
                 activeShift={activeShift}
+                handleShiftChange={handleShiftChange}
                 teachers={teachers}
                 liveAbsentees={liveAbsentees}
                 bCopyRecords={bCopyRecords}

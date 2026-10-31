@@ -37,6 +37,7 @@ export default function TeacherRoomPortal({
   examSession,
   activeDate,
   activeShift,
+  handleShiftChange,
   teachers = [],
   liveAbsentees = {},
   bCopyRecords = {},
@@ -183,8 +184,14 @@ export default function TeacherRoomPortal({
       if (teacherRec.name) teacherIdSet.add(String(teacherRec.name).trim());
     }
 
-    // Search across duty roster
-    for (const [key, alloc] of Object.entries(dutyRoster)) {
+    // Search across duty roster prioritized by activeShift (e.g. d1_shift_2 when activeShift === 'shift_2')
+    const allKeys = Object.keys(dutyRoster);
+    const activeShiftKeys = allKeys.filter((k) => k.endsWith(activeShift) || k.includes(activeShift));
+    const otherKeys = allKeys.filter((k) => !activeShiftKeys.includes(k));
+    const searchOrder = [...activeShiftKeys, ...otherKeys];
+
+    for (const key of searchOrder) {
+      const alloc = dutyRoster[key];
       if (alloc && alloc.rooms) {
         for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
           const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
@@ -202,7 +209,7 @@ export default function TeacherRoomPortal({
 
     // Default to first room
     return rooms[0]?.roomName || 'Room 01';
-  }, [currentUser, dutyRoster, rooms, teachers]);
+  }, [currentUser, dutyRoster, rooms, teachers, activeShift]);
 
   const [selectedRoomName, setSelectedRoomName] = useState(assignedRoomDefault);
 
@@ -210,7 +217,7 @@ export default function TeacherRoomPortal({
     if (assignedRoomDefault) {
       setSelectedRoomName(assignedRoomDefault);
     }
-  }, [assignedRoomDefault]);
+  }, [assignedRoomDefault, activeShift]);
 
   // Current active room object
   const currentRoom = useMemo(() => {
@@ -476,39 +483,31 @@ export default function TeacherRoomPortal({
               <span className={`block text-[10px] font-bold uppercase tracking-wider ${
                 canAccessAllRooms ? 'text-blue-700' : 'text-emerald-800'
               }`}>
-                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : '🔒 आपका आवंटित परीक्षा कक्ष:'}
+                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : 'आवंटित परीक्षा कक्ष:'}
               </span>
-              {!canAccessAllRooms && (
-                <span className="text-[9px] font-black bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded">
-                  ड्यूटी लॉक
-                </span>
-              )}
+              <span className="text-[9px] font-black bg-blue-200 text-blue-900 px-1.5 py-0.2 rounded" title="आपकी आवंटित ड्यूटी">
+                ड्यूटी: {assignedRoomDefault}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : 'text-emerald-700'}`} />
-              {canAccessAllRooms ? (
-                <select
-                  value={selectedRoomName}
-                  onChange={(e) => {
-                    setSelectedRoomName(e.target.value);
-                    setSelectedClassFilter('all');
-                  }}
-                  className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
-                >
-                  {rooms.map((rm) => (
+              <MapPin className="w-4 h-4 shrink-0 text-blue-600" />
+              <select
+                value={selectedRoomName}
+                onChange={(e) => {
+                  setSelectedRoomName(e.target.value);
+                  setSelectedClassFilter('all');
+                }}
+                className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
+              >
+                {rooms.map((rm) => {
+                  const isAssigned = rm.roomName === assignedRoomDefault;
+                  return (
                     <option key={rm.roomId || rm.roomName} value={rm.roomName}>
-                      {rm.roomName} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
+                      {rm.roomName} {isAssigned ? '⭐ (आपकी ड्यूटी)' : ''} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
                     </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="w-full bg-white border border-emerald-300 rounded-lg py-1 px-2 text-xs font-black text-emerald-950 flex items-center justify-between">
-                  <span>{currentRoom ? currentRoom.roomName : selectedRoomName}</span>
-                  <span className="text-[10px] font-bold text-emerald-700">
-                    ({currentRoom?.benchesCount || 20} बेंच • {currentRoom?.seatedCount || 0} छात्र)
-                  </span>
-                </div>
-              )}
+                  );
+                })}
+              </select>
             </div>
           </div>
 
@@ -525,13 +524,42 @@ export default function TeacherRoomPortal({
 
           {/* Shift */}
           <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5">
-            <span className="text-amber-700 block text-[10px] font-bold uppercase tracking-wider">
-              परीक्षा पाली (Shift)
-            </span>
-            <span className="text-xs sm:text-sm font-black text-amber-950 flex items-center gap-1.5 mt-1">
-              <Clock className="w-4 h-4 text-amber-600" />
-              {activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-amber-800 block text-[10px] font-bold uppercase tracking-wider">
+                परीक्षा पाली (Shift)
+              </span>
+              <span className="text-[10px] text-amber-700 font-bold">
+                {activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              <button
+                type="button"
+                onClick={() => handleShiftChange && handleShiftChange('shift_1')}
+                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  activeShift === 'shift_1'
+                    ? 'bg-amber-800 text-white shadow-xs'
+                    : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'
+                }`}
+                title="सुबह की पाली (9वीं - 12वीं)"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Shift 1 (सुबह)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleShiftChange && handleShiftChange('shift_2')}
+                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  activeShift === 'shift_2'
+                    ? 'bg-amber-800 text-white shadow-xs'
+                    : 'text-amber-900 hover:bg-amber-100 border border-amber-300'
+                }`}
+                title="दोपहर की पाली (6वीं - 8वीं)"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Shift 2 (दोपहर)</span>
+              </button>
+            </div>
           </div>
 
           {/* Attendance Stats & Copy Meter */}
