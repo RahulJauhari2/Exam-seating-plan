@@ -23,7 +23,11 @@ import {
   GraduationCap,
   ClipboardList,
   Printer,
-  Info
+  Info,
+  Copy,
+  Check,
+  DoorOpen,
+  Star
 } from 'lucide-react';
 
 export default function TeacherRoomPortal({
@@ -43,8 +47,85 @@ export default function TeacherRoomPortal({
   const [filterOnlyAbsent, setFilterOnlyAbsent] = useState(false);
   const [togglingRoll, setTogglingRoll] = useState(null);
 
+  const [summaryScope, setSummaryScope] = useState('school'); // 'school' (all classes for class teachers) | 'room'
+  const [copiedClassKey, setCopiedClassKey] = useState(null);
+
   // Available room objects from seatingResult
   const rooms = examSession?.rooms || [];
+
+  // Flatten all students across all rooms in the exam session
+  const allSchoolStudents = useMemo(() => {
+    const list = [];
+    rooms.forEach((r) => {
+      (r.students || []).forEach((st) => {
+        list.push({
+          ...st,
+          roomName: r.roomName || r.name,
+          roomId: r.roomId || r.id,
+        });
+      });
+    });
+    return list;
+  }, [rooms]);
+
+  // School-wide Class-Wise Absent Summary (For all Class Teachers)
+  const schoolWideClassAbsentSummary = useMemo(() => {
+    const map = {};
+    allSchoolStudents.forEach((st) => {
+      const classKey = `${st.className || ''}_${st.section || ''}`.trim() || 'Other';
+      if (!map[classKey]) {
+        const classTeacher = (teachers || []).find(
+          (t) =>
+            String(t.assignedClass || '').trim() === String(st.className || '').trim() &&
+            (!t.assignedSection || String(t.assignedSection || '').trim().toUpperCase() === String(st.section || '').trim().toUpperCase())
+        );
+
+        map[classKey] = {
+          classKey,
+          className: st.className || 'कक्षा',
+          section: st.section || '',
+          displayName: `कक्षा ${st.className || ''}${st.section ? ` - सेक्शन ${st.section}` : ''}`,
+          classTeacherName: classTeacher ? classTeacher.name : '',
+          classTeacherId: classTeacher ? classTeacher.id : '',
+          total: 0,
+          presentCount: 0,
+          absentCount: 0,
+          absentStudents: [],
+        };
+      }
+
+      map[classKey].total++;
+      const isAbsent = isStudentAbsent(st.rollNo);
+      if (isAbsent) {
+        map[classKey].absentCount++;
+        map[classKey].absentStudents.push(st);
+      } else {
+        map[classKey].presentCount++;
+      }
+    });
+
+    return Object.values(map).sort((a, b) => {
+      const numA = parseInt(a.className, 10) || 0;
+      const numB = parseInt(b.className, 10) || 0;
+      if (numA !== numB) return numA - numB;
+      return (a.section || '').localeCompare(b.section || '');
+    });
+  }, [allSchoolStudents, liveAbsentees, teachers]);
+
+  // WhatsApp absentee message copy handler for Class Teachers
+  const handleCopyClassAbsent = (cls) => {
+    const absentListText = cls.absentStudents.length > 0
+      ? cls.absentStudents.map((st, i) => `${i + 1}. रोल #${st.rollNo} - ${st.name || 'परीक्षार्थी'} (${st.roomName || selectedRoomName || 'कमरा'}, बेंच #${st.benchNumber || '—'})`).join('\n')
+      : '✅ सभी छात्र उपस्थित हैं (निरंक)';
+
+    const text = `*${examSession?.sessionName || 'ए.बी.वी.आई.सी. मीरांपुर कटरा'}*\n*कक्षा-वार अनुपस्थिति रिपोर्ट (Class Absentee List)*\n📅 दिनांक: ${activeDate || ''} | पाली: ${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}\n🎓 कक्षा: ${cls.displayName}${cls.classTeacherName ? `\n👨‍🏫 कक्षाध्यापक: ${cls.classTeacherName}` : ''}\n----------------------------------\n👥 कुल नामांकित: ${cls.total}\n✅ उपस्थित: ${cls.presentCount}\n❌ अनुपस्थित: ${cls.absentCount}\n----------------------------------\n*अनुपस्थित छात्र सूची:*\n${absentListText}\n----------------------------------\n_रिपोर्ट समय: ${new Date().toLocaleTimeString('hi-IN')}_`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopiedClassKey(cls.classKey);
+      setTimeout(() => setCopiedClassKey(null), 3000);
+    }
+  };
 
   // 1. Identify teacher's assigned room from dutyRoster
   const dutyRoster = examSession?.dutyRoster || {};
@@ -684,25 +765,23 @@ export default function TeacherRoomPortal({
         {/* ======================================================== */}
         {viewMode === 'absent-summary' && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-5">
+            {/* Header Banner */}
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
               <div>
                 <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
                   <ClipboardList className="w-5 h-5 text-rose-600" />
-                  कक्षा-वार अनुपस्थिति पत्रक (Class-wise Absentee Register)
+                  कक्षा-वार अनुपस्थिति पत्रक (Class-Wise Absentee Register)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  कमरा: <strong className="text-slate-800">{selectedRoomName}</strong> • परीक्षा तिथि: <strong>{activeDate}</strong> • पाली: <strong>{activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</strong>
+                  परीक्षा तिथि: <strong className="text-slate-800">{activeDate}</strong> • पाली: <strong>{activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</strong>
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-black text-xs">
-                  कुल अनुपस्थित: {absentCount} छात्र
-                </span>
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   प्रिंट करें
@@ -710,85 +789,189 @@ export default function TeacherRoomPortal({
               </div>
             </div>
 
-            {/* Summary Cards per Class */}
-            <div className="space-y-4">
-              {classWiseAbsentSummary.map((clsSummary) => (
-                <div
-                  key={clsSummary.classKey}
-                  className={`p-4 rounded-2xl border transition-all ${
-                    clsSummary.absentCount > 0
-                      ? 'bg-rose-50/50 border-rose-200'
-                      : 'bg-emerald-50/40 border-emerald-200'
+            {/* Scope Toggle: All Classes (Class Teacher View) vs Current Room */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSummaryScope('school')}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    summaryScope === 'school'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="w-5 h-5 text-indigo-700" />
-                      <span className="font-black text-sm text-slate-900">
-                        {clsSummary.displayName}
-                      </span>
-                    </div>
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>संपूर्ण विद्यालय कक्षा-वार रिपोर्ट (All Classes)</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    summaryScope === 'school' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {schoolWideClassAbsentSummary.length} कक्षाएं
+                  </span>
+                </button>
 
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-slate-600">
-                        आवंटित छात्र: <strong>{clsSummary.total}</strong>
-                      </span>
-                      <span className="text-emerald-700 font-bold">
-                        उपस्थित: <strong>{clsSummary.presentCount}</strong>
-                      </span>
-                      <span className={`font-black px-2 py-0.5 rounded-lg ${
-                        clsSummary.absentCount > 0
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      }`}>
-                        अनुपस्थित: {clsSummary.absentCount}
-                      </span>
-                    </div>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setSummaryScope('room')}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    summaryScope === 'room'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <DoorOpen className="w-3.5 h-3.5" />
+                  <span>केवल कमरा #{selectedRoomName} की कक्षाएं</span>
+                </button>
+              </div>
 
-                  {/* Absent Roll Numbers List */}
-                  <div className="mt-3">
-                    {clsSummary.absentCount === 0 ? (
-                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>इस कक्षा के सभी परीक्षार्थी उपस्थित हैं (No Absentees)।</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <span className="text-[11px] font-bold text-rose-900 block">
-                          अनुपस्थित परीक्षार्थियों के रोल नंबर (Roll Numbers):
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {clsSummary.absentStudents.map((st) => (
-                            <div
-                              key={st.rollNo}
-                              className="px-3 py-1.5 bg-white border-2 border-rose-400 rounded-xl shadow-xs flex items-center gap-2 text-xs"
-                            >
-                              <span className="font-mono font-black text-rose-900 text-sm">
-                                #{st.rollNo}
+              <div className="text-[11px] text-slate-500 font-normal px-2">
+                {summaryScope === 'school'
+                  ? '💡 कक्षाध्यापक अपनी पूरी कक्षा की अनुपस्थिति देख व व्हाट्सएप पर साझा कर सकते हैं'
+                  : `कमरे में बैठे ${classWiseAbsentSummary.length} कक्षाओं के छात्र`}
+              </div>
+            </div>
+
+            {/* Summary Cards per Class */}
+            <div className="space-y-4">
+              {(summaryScope === 'school' ? schoolWideClassAbsentSummary : classWiseAbsentSummary).map((clsSummary) => {
+                const isMyAssignedClass = (teachers || []).some((t) => {
+                  const isUser = (t.mobile && currentUser?.phone && t.mobile.trim() === currentUser?.phone.trim()) ||
+                                 (t.id && currentUser?.assignedTeacherId && String(t.id) === String(currentUser?.assignedTeacherId));
+                  return isUser && String(t.assignedClass || '').trim() === String(clsSummary.className || '').trim();
+                });
+
+                return (
+                  <div
+                    key={clsSummary.classKey}
+                    className={`rounded-2xl border-2 transition-all overflow-hidden ${
+                      clsSummary.absentCount > 0
+                        ? 'bg-white border-rose-300 shadow-sm ring-1 ring-rose-200'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    {/* Class Card Header */}
+                    <div className={`p-3 sm:px-4 flex flex-wrap items-center justify-between gap-2 ${
+                      isMyAssignedClass
+                        ? 'bg-gradient-to-r from-amber-600 via-amber-700 to-indigo-950 text-white'
+                        : clsSummary.absentCount > 0
+                        ? 'bg-gradient-to-r from-rose-950 via-slate-900 to-slate-950 text-white'
+                        : 'bg-slate-900 text-white'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-amber-400 shrink-0" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-black text-sm sm:text-base text-white">
+                              {clsSummary.displayName}
+                            </h3>
+                            {isMyAssignedClass && (
+                              <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-yellow-400 text-slate-950 flex items-center gap-1 shadow-xs">
+                                <Star className="w-3 h-3 fill-slate-950" />
+                                आपकी कक्षा
                               </span>
-                              <span className="font-semibold text-slate-700">
-                                {st.name}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                (बेंच #{st.benchNumber})
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleToggle(st)}
-                                className="ml-1 px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold"
-                                title="उपस्थित करें"
-                              >
-                                उपस्थित करें
-                              </button>
-                            </div>
-                          ))}
+                            )}
+                          </div>
+                          {clsSummary.classTeacherName && (
+                            <span className="text-[11px] text-amber-200 block">
+                              कक्षाध्यापक: {clsSummary.classTeacherName}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    )}
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-slate-300 text-xs font-bold px-2 py-0.5 rounded bg-white/10">
+                          नामांकित: {clsSummary.total}
+                        </span>
+                        <span className="text-emerald-300 text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/30">
+                          उपस्थित: {clsSummary.presentCount}
+                        </span>
+                        <span className={`font-black text-xs px-2.5 py-0.5 rounded-lg ${
+                          clsSummary.absentCount > 0
+                            ? 'bg-rose-600 text-white animate-pulse'
+                            : 'bg-emerald-950 text-emerald-300'
+                        }`}>
+                          अनुपस्थित: {clsSummary.absentCount}
+                        </span>
+
+                        {/* WhatsApp Copy button for Class Teachers */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyClassAbsent(clsSummary)}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-xs cursor-pointer ml-1"
+                          title="व्हाट्सएप पर शेयर करने हेतु कॉपी करें"
+                        >
+                          {copiedClassKey === clsSummary.classKey ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-white" />
+                              <span>कॉपी हो गया!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Smartphone className="w-3.5 h-3.5" />
+                              <span>व्हाट्सएप कॉपी</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Absent Roll Numbers List */}
+                    <div className="p-3 sm:p-4">
+                      {clsSummary.absentCount === 0 ? (
+                        <div className="text-xs font-bold text-emerald-700 flex items-center gap-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>इस कक्षा के सभी परीक्षार्थी उपस्थित हैं (No Absentees)।</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-black text-rose-900 block">
+                            अनुपस्थित परीक्षार्थियों के रोल नंबर (Roll Numbers):
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {clsSummary.absentStudents.map((st) => (
+                              <div
+                                key={`${st.rollNo}-${st.roomName || ''}`}
+                                className="px-3 py-2 bg-rose-50 border-2 border-rose-300 rounded-xl shadow-xs flex items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-mono font-black text-rose-900 text-sm">
+                                      #{st.rollNo}
+                                    </span>
+                                    {st.roomName && (
+                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                                        {st.roomName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="font-semibold text-slate-800 truncate mt-0.5">
+                                    {st.name || 'परीक्षार्थी'}
+                                  </div>
+                                  {st.benchNumber && (
+                                    <div className="text-[10px] text-slate-500 font-mono">
+                                      बेंच #{st.benchNumber}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggle(st)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs cursor-pointer active:scale-95 shrink-0"
+                                  title="उपस्थित करें"
+                                >
+                                  उपस्थित करें
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

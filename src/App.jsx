@@ -591,6 +591,7 @@ export default function App() {
                 absentStudents={absentStudents}
                 setAbsentStudents={setAbsentStudents}
                 onToggleAbsent={handleToggleAbsent}
+                teachers={teachers}
               />
             )
           )}
