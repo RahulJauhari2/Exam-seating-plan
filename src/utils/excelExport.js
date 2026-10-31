@@ -111,7 +111,8 @@ export function exportAbsenteeListToExcel(data, examDetails) {
       'सेक्शन (Section)': cls.section,
       'कक्षाध्यापक (Class Teacher)': cls.classTeacherName || '—',
       'कुल नामांकित (Total)': cls.totalStudents,
-      'उपस्थित (Present)': cls.presentCount,
+      'उपस्थित / A-कॉपी (Present / A-Copy)': cls.presentCount,
+      'पूरक B-कॉपी (B-Copy)': cls.bCopiesCount || 0,
       'अनुपस्थित (Absent)': cls.absentCount,
       'अनुपस्थित रोल नंबर (Absent Rolls)': cls.absentStudents.map((s) => `#${s.rollNo}`).join(', ') || 'निरंक',
     }));
@@ -125,7 +126,8 @@ export function exportAbsenteeListToExcel(data, examDetails) {
       'क्र. (S.No)': idx + 1,
       'कमरा (Room)': rm.roomName,
       'कुल आबंटित (Seated)': rm.totalSeated,
-      'उपस्थित (Present)': rm.presentCount,
+      'उपस्थित / A-कॉपी (Present / A-Copy)': rm.presentCount,
+      'पूरक B-कॉपी (B-Copy)': rm.bCopiesCount || 0,
       'अनुपस्थित (Absent)': rm.absentCount,
       'अनुपस्थित रोल नंबर (Absent Rolls)': rm.absentRollsText || 'निरंक',
     }));

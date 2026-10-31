@@ -9,6 +9,7 @@ import examRoutes from '../server/routes/examRoutes.js';
 import authRoutes from '../server/routes/authRoutes.js';
 import absenteeRoutes from '../server/routes/absenteeRoutes.js';
 import teacherRoutes from '../server/routes/teacherRoutes.js';
+import copyRoutes from '../server/routes/copyRoutes.js';
 import { seedInitialUsers } from '../server/controllers/authController.js';
 
 dotenv.config();
@@ -64,6 +65,7 @@ app.use('/api', examRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/absentees', absenteeRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/copies', copyRoutes);
 
 // Root health check
 app.get('/', (req, res) => {

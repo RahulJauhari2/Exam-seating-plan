@@ -27,7 +27,10 @@ import {
   Copy,
   Check,
   DoorOpen,
-  Star
+  Star,
+  BookOpen,
+  Plus,
+  Minus
 } from 'lucide-react';
 
 export default function TeacherRoomPortal({
@@ -36,7 +39,9 @@ export default function TeacherRoomPortal({
   activeShift,
   teachers = [],
   liveAbsentees = {},
+  bCopyRecords = {},
   onToggleAbsent,
+  onUpdateBCopy,
   onLogout,
   onSwitchToAdminView,
 }) {
@@ -372,6 +377,43 @@ export default function TeacherRoomPortal({
     return { columns, maxRows };
   };
 
+  // Helper to get B-Copies Count for any student
+  const getStudentBCopies = (rollNo) => {
+    if (rollNo === undefined || rollNo === null) return 0;
+    const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
+    return Number(rec?.bCopiesCount) || 0;
+  };
+
+  // Total B-copies in current room
+  const totalRoomBCopies = useMemo(() => {
+    return roomStudents.reduce((sum, st) => {
+      if (isStudentAbsent(st.rollNo)) return sum;
+      return sum + getStudentBCopies(st.rollNo);
+    }, 0);
+  }, [roomStudents, bCopyRecords, liveAbsentees]);
+
+  // Handle B-Copy +1 or -1
+  const handleUpdateStudentBCopy = async (student, delta) => {
+    if (!student || !student.rollNo) return;
+    const roll = Number(student.rollNo) || student.rollNo;
+    const currentCount = getStudentBCopies(roll);
+    const newCount = Math.max(0, currentCount + delta);
+
+    if (onUpdateBCopy) {
+      await onUpdateBCopy({
+        rollNo: roll,
+        bCopiesCount: newCount,
+        roomName: student.roomName || selectedRoomName || currentRoom?.roomName || 'Room 01',
+        sessionName: examSession?.sessionName || 'Half Yearly  Examination 2026',
+        date: activeDate || new Date().toISOString().split('T')[0],
+        shift: activeShift || 'shift_1',
+        studentName: student.name || '',
+        className: student.className || '',
+        section: student.section || '',
+      });
+    }
+  };
+
   const { columns, maxRows } = useMemo(() => getRoomColumns(currentRoom), [currentRoom]);
 
   return (
@@ -492,17 +534,20 @@ export default function TeacherRoomPortal({
             </span>
           </div>
 
-          {/* Attendance Stats */}
+          {/* Attendance Stats & Copy Meter */}
           <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5">
             <span className="text-emerald-700 block text-[10px] font-bold uppercase tracking-wider">
-              कक्ष उपस्थिति (Live Count)
+              उपस्थिति व कॉपी खपत (Live)
             </span>
-            <div className="text-xs font-black mt-1 flex items-center justify-between">
-              <span className="text-emerald-800">
-                उपस्थित: <strong className="text-sm">{presentCount}</strong>
+            <div className="text-xs font-black mt-1 flex items-center justify-between gap-1 flex-wrap">
+              <span className="text-emerald-800" title="1 A-कॉपी प्रति उपस्थित छात्र">
+                A-कॉपी: <strong className="text-sm">{presentCount}</strong>
+              </span>
+              <span className="text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded" title="वितरित पूरक B-कॉपियां">
+                B-कॉपी: <strong className="text-sm">{totalRoomBCopies}</strong>
               </span>
               <span className="text-rose-700">
-                अनुपस्थित: <strong className="text-sm">{absentCount}</strong>
+                अनु.: <strong className="text-sm">{absentCount}</strong>
               </span>
             </div>
           </div>
@@ -713,10 +758,42 @@ export default function TeacherRoomPortal({
                                 {st.className} {st.section ? `(${st.section})` : ''} • {st.subject || 'सामान्य विषय'}
                               </div>
 
-                              {isAbsent && (
+                              {isAbsent ? (
                                 <div className="text-[10px] font-bold text-rose-600 mt-1 flex items-center gap-1">
                                   <UserX className="w-3 h-3" />
                                   अनुपस्थित (ABSENT)
+                                </div>
+                              ) : (
+                                <div className="mt-1.5 pt-1 border-t border-slate-100 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-blue-50 text-blue-800 border border-blue-200">
+                                    📘 A-कॉपी: 1
+                                  </span>
+                                  {getStudentBCopies(st.rollNo) > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-500 text-white animate-pulse">
+                                      📙 B: +{getStudentBCopies(st.rollNo)}
+                                    </span>
+                                  )}
+                                  <div className="ml-auto flex items-center gap-1">
+                                    {getStudentBCopies(st.rollNo) > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateStudentBCopy(st, -1)}
+                                        className="w-5 h-5 rounded bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                        title="B-कॉपी घटाएं (-1)"
+                                      >
+                                        -
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateStudentBCopy(st, 1)}
+                                      className="px-2 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black flex items-center gap-0.5 shadow-xs cursor-pointer active:scale-95"
+                                      title="पूरक उत्तर पुस्तिका B-कॉपी दें (+1)"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>B-कॉपी (+1)</span>
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1083,6 +1160,27 @@ export default function TeacherRoomPortal({
                                   <div className="text-[10px] text-slate-500 truncate">
                                     {left.className} {left.section ? `(${left.section})` : ''} • {left.subject}
                                   </div>
+
+                                  {!leftIsAbsent && (
+                                    <div className="mt-1 flex items-center justify-between text-[10px] font-bold" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
+                                        A:1
+                                      </span>
+                                      {getStudentBCopies(left.rollNo) > 0 && (
+                                        <span className="text-white bg-amber-500 px-1 py-0.2 rounded font-black">
+                                          B:+{getStudentBCopies(left.rollNo)}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateStudentBCopy(left, 1)}
+                                        className="px-1.5 py-0.2 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
+                                        title="+ B-कॉपी दें"
+                                      >
+                                        +B
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="mt-2 pt-1 border-t border-slate-200/60 text-[10px] font-bold text-center">
@@ -1142,6 +1240,27 @@ export default function TeacherRoomPortal({
                                   <div className="text-[10px] text-slate-500 truncate">
                                     {right.className} {right.section ? `(${right.section})` : ''} • {right.subject}
                                   </div>
+
+                                  {!rightIsAbsent && (
+                                    <div className="mt-1 flex items-center justify-between text-[10px] font-bold" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
+                                        A:1
+                                      </span>
+                                      {getStudentBCopies(right.rollNo) > 0 && (
+                                        <span className="text-white bg-amber-500 px-1 py-0.2 rounded font-black">
+                                          B:+{getStudentBCopies(right.rollNo)}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateStudentBCopy(right, 1)}
+                                        className="px-1.5 py-0.2 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
+                                        title="+ B-कॉपी दें"
+                                      >
+                                        +B
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="mt-2 pt-1 border-t border-slate-200/60 text-[10px] font-bold text-center">

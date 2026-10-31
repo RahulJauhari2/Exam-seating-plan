@@ -29,7 +29,9 @@ export default function AbsenteeManager({
   absentStudents = {}, 
   setAbsentStudents,
   onToggleAbsent,
-  teachers = []
+  teachers = [],
+  bCopyRecords = {},
+  onUpdateBCopy
 }) {
   const { rooms = [] } = seatingResult;
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.roomId || 'all');
@@ -40,6 +42,18 @@ export default function AbsenteeManager({
   const [filterOnlyAbsentClasses, setFilterOnlyAbsentClasses] = useState(false);
   const [copiedClassKey, setCopiedClassKey] = useState(null);
   const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise'
+
+  // Helper to fetch B-copies for a student
+  const getStudentBCopies = (rollNo) => {
+    const rollStr = String(rollNo);
+    const rec = bCopyRecords[rollStr] || bCopyRecords[Number(rollNo)];
+    return rec?.bCopiesCount || 0;
+  };
+
+  // Center-wide total B-copies
+  const totalCenterBCopies = useMemo(() => {
+    return Object.values(bCopyRecords || {}).reduce((sum, rec) => sum + (rec?.bCopiesCount || 0), 0);
+  }, [bCopyRecords]);
 
   // Toggle single student absent status (Synchronized to Backend & MongoDB)
   const toggleAbsent = async (rollNo) => {
@@ -134,6 +148,7 @@ export default function AbsenteeManager({
     return rooms.map((room) => {
       const totalSeated = room.seatedCount || (room.students ? room.students.length : 0);
       const roomAbsentRolls = [];
+      let roomBCopies = 0;
 
       (room.students || []).forEach((s) => {
         if (absentStudents[s.rollNo?.toString()] || absentStudents[s.rollNo]) {
@@ -147,6 +162,7 @@ export default function AbsenteeManager({
             roomName: room.roomName,
           });
         }
+        roomBCopies += getStudentBCopies(s.rollNo);
       });
 
       const absentCount = roomAbsentRolls.length;
@@ -159,12 +175,13 @@ export default function AbsenteeManager({
         totalSeated,
         presentCount,
         absentCount,
+        bCopiesCount: roomBCopies,
         absentRolls: roomAbsentRolls,
         absentRollsText,
         students: room.students || [],
       };
     });
-  }, [rooms, absentStudents]);
+  }, [rooms, absentStudents, bCopyRecords]);
 
   // 2. Flatten all Seated Students across the entire center
   const allSeatedStudents = useMemo(() => {
@@ -204,6 +221,7 @@ export default function AbsenteeManager({
           totalStudents: 0,
           presentCount: 0,
           absentCount: 0,
+          bCopiesCount: 0,
           students: [],
           absentStudents: [],
         };
@@ -211,6 +229,9 @@ export default function AbsenteeManager({
 
       map[classKey].totalStudents++;
       map[classKey].students.push(st);
+
+      const stBCopies = getStudentBCopies(st.rollNo);
+      map[classKey].bCopiesCount += stBCopies;
 
       const isAbsent = Boolean(absentStudents[st.rollNo?.toString()] || absentStudents[st.rollNo]);
       if (isAbsent) {
@@ -228,7 +249,7 @@ export default function AbsenteeManager({
       if (numA !== numB) return numA - numB;
       return (a.section || '').localeCompare(b.section || '');
     });
-  }, [allSeatedStudents, absentStudents, teachers]);
+  }, [allSeatedStudents, absentStudents, teachers, bCopyRecords]);
 
   // 4. Flat list of all absent students
   const flatAbsentStudents = useMemo(() => {
@@ -280,7 +301,7 @@ export default function AbsenteeManager({
       ? cls.absentStudents.map((st, i) => `${i + 1}. रोल #${st.rollNo} - ${st.name || 'परीक्षार्थी'} (${st.roomName}, बेंच #${st.benchNumber || '—'})`).join('\n')
       : '✅ सभी परीक्षार्थी उपस्थित हैं (निरंक)';
 
-    const text = `*${examDetails.schoolName || 'ए.बी.वी.आई.सी. मीरांपुर कटरा'}*\n*कक्षा-वार अनुपस्थिति रिपोर्ट (Class Absentee List)*\n📅 दिनांक: ${examDetails.date || ''} | समय: ${examDetails.timeRange || ''}\n🎓 कक्षा: ${cls.displayName}${cls.classTeacherName ? `\n👨‍🏫 कक्षाध्यापक: ${cls.classTeacherName}` : ''}\n----------------------------------\n👥 कुल छात्र: ${cls.totalStudents}\n✅ उपस्थित: ${cls.presentCount}\n❌ अनुपस्थित: ${cls.absentCount}\n----------------------------------\n*अनुपस्थित छात्र सूची:*\n${absentListText}\n----------------------------------\n_रिपोर्ट समय: ${new Date().toLocaleTimeString('hi-IN')}_`;
+    const text = `*${examDetails.schoolName || 'ए.बी.वी.आई.सी. मीरांपुर कटरा'}*\n*कक्षा-वार अनुपस्थिति व कॉपी रिपोर्ट (Class Absentee & Copy List)*\n📅 दिनांक: ${examDetails.date || ''} | समय: ${examDetails.timeRange || ''}\n🎓 कक्षा: ${cls.displayName}${cls.classTeacherName ? `\n👨‍🏫 कक्षाध्यापक: ${cls.classTeacherName}` : ''}\n----------------------------------\n👥 कुल छात्र: ${cls.totalStudents}\n✅ उपस्थित ('A' कॉपियां): ${cls.presentCount}\n📙 पूरक 'B' कॉपियां: ${cls.bCopiesCount || 0}\n❌ अनुपस्थित: ${cls.absentCount}\n----------------------------------\n*अनुपस्थित छात्र सूची:*\n${absentListText}\n----------------------------------\n_रिपोर्ट समय: ${new Date().toLocaleTimeString('hi-IN')}_`;
 
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(text);
@@ -299,11 +320,11 @@ export default function AbsenteeManager({
               <UserX className="w-5 h-5" />
             </span>
             <h2 className="text-base sm:text-lg font-black text-slate-800">
-              कक्षा एवं कमरा-वार अनुपस्थित छात्र प्रबंधन (Exam Absentee System)
+              कक्षा एवं कमरा-वार अनुपस्थित व उत्तर-पुस्तिका प्रबंधन (Attendance & Copy System)
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            कक्षाध्यापक (Class Teacher) अपनी कक्षा की रिपोर्ट देखें एवं परीक्षा प्रभारी कमरा अनुसार पत्रक प्रिंट करें
+            कक्षाध्यापक (Class Teacher) अपनी कक्षा की रिपोर्ट देखें एवं परीक्षा प्रभारी कमरा अनुसार पत्रक व कॉपी विवरण प्रिंट करें
           </p>
         </div>
 
@@ -353,15 +374,20 @@ export default function AbsenteeManager({
       </div>
 
       {/* Summary Scoreboard (No Print) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 no-print">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 no-print">
         <div className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-sm">
           <span className="text-[11px] font-bold text-slate-500 uppercase">कुल आबंटित छात्र</span>
           <p className="text-xl font-black text-slate-900 mt-1">{totalAllocated}</p>
         </div>
 
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl shadow-sm">
-          <span className="text-[11px] font-bold text-emerald-700 uppercase">कुल उपस्थित छात्र</span>
+          <span className="text-[11px] font-bold text-emerald-700 uppercase">उपस्थित ('A' कॉपियां)</span>
           <p className="text-xl font-black text-emerald-800 mt-1">{totalPresent}</p>
+        </div>
+
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
+          <span className="text-[11px] font-bold text-amber-800 uppercase">कुल 'B' पूरक कॉपियां</span>
+          <p className="text-xl font-black text-amber-900 mt-1">{totalCenterBCopies}</p>
         </div>
 
         <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl shadow-sm">
@@ -536,6 +562,9 @@ export default function AbsenteeManager({
                       <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold">
                         उपस्थित: {cls.presentCount}
                       </span>
+                      <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold">
+                        'B' कॉपी: {cls.bCopiesCount || 0}
+                      </span>
                       <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black ${
                         cls.absentCount > 0
                           ? 'bg-rose-500 text-white animate-pulse'
@@ -656,12 +685,15 @@ export default function AbsenteeManager({
             </div>
 
             {currentRoomData && selectedRoomId !== 'all' && (
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-xs flex-wrap">
                 <span className="px-2.5 py-1 bg-slate-100 rounded-lg font-bold text-slate-700">
                   आबंटित: {currentRoomData.totalSeated}
                 </span>
                 <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold">
-                  उपस्थित: {currentRoomData.presentCount}
+                  उपस्थित ('A'): {currentRoomData.presentCount}
+                </span>
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-900 rounded-lg font-bold">
+                  'B' कॉपी: {currentRoomData.bCopiesCount || 0}
                 </span>
                 <span className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg font-black">
                   अनुपस्थित: {currentRoomData.absentCount}
@@ -706,8 +738,13 @@ export default function AbsenteeManager({
                         )}
                       </div>
 
-                      <div className="font-mono font-black text-sm text-slate-900">
-                        #{st.rollNo}
+                      <div className="font-mono font-black text-sm text-slate-900 flex items-center justify-between">
+                        <span>#{st.rollNo}</span>
+                        {getStudentBCopies(st.rollNo) > 0 && (
+                          <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 border border-amber-300 rounded text-[9px] font-bold">
+                            +{getStudentBCopies(st.rollNo)} B
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-[11px] font-bold text-slate-800 truncate mt-0.5">
@@ -759,27 +796,28 @@ export default function AbsenteeManager({
             {/* Class-Wise Master Table */}
             <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[620px]">
+                <table className="w-full text-left text-xs border-collapse min-w-[660px]">
                   <thead className="bg-slate-900 text-white font-extrabold uppercase text-[11px]">
                     <tr>
-                      <th className="px-2.5 py-2.5 border-r border-slate-700 w-10 text-center">क्र.</th>
+                      <th className="px-2 py-2.5 border-r border-slate-700 w-10 text-center">क्र.</th>
                       <th className="px-3 py-2.5 border-r border-slate-700 w-28">कक्षा व वर्ग</th>
-                      <th className="px-3 py-2.5 border-r border-slate-700 w-44">कक्षाध्यापक का नाम</th>
-                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-16">नामांकित</th>
-                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-16">उपस्थित</th>
-                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-16 font-black text-amber-300">
+                      <th className="px-3 py-2.5 border-r border-slate-700 w-36">कक्षाध्यापक का नाम</th>
+                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-14">नामांकित</th>
+                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-16">उपस्थित ('A')</th>
+                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-14 bg-amber-950/60 text-amber-300">'B' कॉपी</th>
+                      <th className="px-2 py-2.5 border-r border-slate-700 text-center w-16 font-black text-rose-300">
                         अनुपस्थित
                       </th>
                       <th className="px-3 py-2.5 border-r border-slate-700">
                         अनुपस्थित परीक्षार्थियों के रोल नंबर व नाम (कमरा सहित)
                       </th>
-                      <th className="px-3 py-2.5 w-28 text-center">कक्षाध्यापक हस्ताक्षर</th>
+                      <th className="px-3 py-2.5 w-24 text-center">कक्षाध्यापक हस्ताक्षर</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {classWiseSummary.map((row, idx) => (
                       <tr key={row.classKey} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                        <td className="px-2.5 py-2 text-center font-bold text-slate-500 border-r border-slate-200">
+                        <td className="px-2 py-2 text-center font-bold text-slate-500 border-r border-slate-200">
                           {idx + 1}
                         </td>
                         <td className="px-3 py-2 font-black text-slate-900 border-r border-slate-200 whitespace-nowrap">
@@ -793,6 +831,9 @@ export default function AbsenteeManager({
                         </td>
                         <td className="px-2 py-2 text-center font-bold text-emerald-700 border-r border-slate-200">
                           {row.presentCount}
+                        </td>
+                        <td className="px-2 py-2 text-center font-black text-amber-800 border-r border-slate-200 bg-amber-50/40">
+                          {row.bCopiesCount > 0 ? row.bCopiesCount : '—'}
                         </td>
                         <td className="px-2 py-2 text-center font-black text-rose-700 border-r border-slate-200 text-sm">
                           {row.absentCount > 0 ? row.absentCount : '0'}
@@ -830,11 +871,14 @@ export default function AbsenteeManager({
                       <td className="px-2 py-2.5 text-center border-r border-slate-300 text-sm text-emerald-800">
                         {totalPresent}
                       </td>
+                      <td className="px-2 py-2.5 text-center border-r border-slate-300 text-sm text-amber-900 font-black">
+                        {totalCenterBCopies}
+                      </td>
                       <td className="px-2 py-2.5 text-center border-r border-slate-300 text-sm text-rose-800 font-black">
                         {totalAbsent}
                       </td>
                       <td colSpan="2" className="px-3 py-2.5 text-slate-700 font-bold text-[11px]">
-                        कुल अनुपस्थित छात्र: {totalAbsent} (कक्षाध्यापक रजिस्टर में दर्ज करें)
+                        'A' मुख्य कॉपियां: {totalPresent} | पूरक 'B' कॉपियां: {totalCenterBCopies} | अनुपस्थित: {totalAbsent}
                       </td>
                     </tr>
                   </tfoot>
@@ -889,14 +933,15 @@ export default function AbsenteeManager({
             {/* Room-Wise Master Table */}
             <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[560px]">
+                <table className="w-full text-left text-xs border-collapse min-w-[660px]">
                   <thead className="bg-slate-900 text-white font-extrabold uppercase text-[11px]">
                     <tr>
                       <th className="px-3 py-2.5 border-r border-slate-700 w-12 text-center">क्र.</th>
                       <th className="px-3 py-2.5 border-r border-slate-700">कमरा / हॉल का नाम</th>
-                      <th className="px-3 py-2.5 border-r border-slate-700 text-center">आबंटित</th>
-                      <th className="px-3 py-2.5 border-r border-slate-700 text-center">उपस्थित</th>
-                      <th className="px-3 py-2.5 border-r border-slate-700 text-center font-black text-amber-300">
+                      <th className="px-2.5 py-2.5 border-r border-slate-700 text-center w-16">आबंटित</th>
+                      <th className="px-2.5 py-2.5 border-r border-slate-700 text-center w-20">उपस्थित ('A')</th>
+                      <th className="px-2.5 py-2.5 border-r border-slate-700 text-center w-16 bg-amber-950/60 text-amber-300">'B' कॉपी</th>
+                      <th className="px-2.5 py-2.5 border-r border-slate-700 text-center w-20 font-black text-rose-300">
                         अनुपस्थित
                       </th>
                       <th className="px-3 py-2.5 border-r border-slate-700">
@@ -916,13 +961,16 @@ export default function AbsenteeManager({
                           <td className="px-3 py-2 font-black text-slate-900 border-r border-slate-200">
                             {row.roomName}
                           </td>
-                          <td className="px-3 py-2 text-center font-bold text-slate-700 border-r border-slate-200">
+                          <td className="px-2.5 py-2 text-center font-bold text-slate-700 border-r border-slate-200">
                             {row.totalSeated}
                           </td>
-                          <td className="px-3 py-2 text-center font-bold text-emerald-700 border-r border-slate-200">
+                          <td className="px-2.5 py-2 text-center font-bold text-emerald-700 border-r border-slate-200">
                             {row.presentCount}
                           </td>
-                          <td className="px-3 py-2 text-center font-black text-rose-700 border-r border-slate-200 text-sm">
+                          <td className="px-2.5 py-2 text-center font-black text-amber-800 border-r border-slate-200 bg-amber-50/40">
+                            {row.bCopiesCount > 0 ? row.bCopiesCount : '—'}
+                          </td>
+                          <td className="px-2.5 py-2 text-center font-black text-rose-700 border-r border-slate-200 text-sm">
                             {row.absentCount > 0 ? row.absentCount : '0'}
                           </td>
                           <td className="px-3 py-2 font-mono font-bold border-r border-slate-200">
@@ -953,17 +1001,20 @@ export default function AbsenteeManager({
                       <td colSpan="2" className="px-4 py-2.5 text-right border-r border-slate-300">
                         संपूर्ण केंद्र महायोग (Grand Total):
                       </td>
-                      <td className="px-3 py-2.5 text-center border-r border-slate-300 text-sm">
+                      <td className="px-2.5 py-2.5 text-center border-r border-slate-300 text-sm">
                         {totalAllocated}
                       </td>
-                      <td className="px-3 py-2.5 text-center border-r border-slate-300 text-sm text-emerald-800">
+                      <td className="px-2.5 py-2.5 text-center border-r border-slate-300 text-sm text-emerald-800">
                         {totalPresent}
                       </td>
-                      <td className="px-3 py-2.5 text-center border-r border-slate-300 text-sm text-rose-800 font-black">
+                      <td className="px-2.5 py-2.5 text-center border-r border-slate-300 text-sm text-amber-900 font-black">
+                        {totalCenterBCopies}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-center border-r border-slate-300 text-sm text-rose-800 font-black">
                         {totalAbsent}
                       </td>
-                      <td colSpan="2" className="px-3 py-2.5 text-slate-600 font-semibold text-[11px]">
-                        कुल अनुपस्थित छात्र: {totalAbsent}
+                      <td colSpan="2" className="px-3 py-2.5 text-slate-700 font-semibold text-[11px]">
+                        'A' मुख्य कॉपियां: {totalPresent} | 'B' पूरक कॉपियां: {totalCenterBCopies} | अनुपस्थित: {totalAbsent}
                       </td>
                     </tr>
                   </tfoot>

@@ -6,6 +6,7 @@ import examRoutes from './routes/examRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import absenteeRoutes from './routes/absenteeRoutes.js';
 import teacherRoutes from './routes/teacherRoutes.js';
+import copyRoutes from './routes/copyRoutes.js';
 import { seedInitialUsers } from './controllers/authController.js';
 
 dotenv.config();
@@ -27,6 +28,7 @@ app.use('/api', examRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/absentees', absenteeRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/copies', copyRoutes);
 
 // Root test endpoint
 app.get('/', (req, res) => {

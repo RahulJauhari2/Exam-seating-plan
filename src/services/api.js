@@ -326,6 +326,50 @@ export async function resetAbsenteesAPI(params) {
 }
 
 // ----------------------------------------------------------------------
+// Answer Book (A-Copy & B-Copy) Management APIs
+// ----------------------------------------------------------------------
+
+/**
+ * Fetch live copies map for the active session, shift, and date
+ */
+export async function fetchLiveCopiesAPI(params = {}) {
+  try {
+    const searchParams = new URLSearchParams();
+    if (params.sessionName) searchParams.append('sessionName', params.sessionName);
+    if (params.shift) searchParams.append('shift', params.shift);
+    if (params.roomName) searchParams.append('roomName', params.roomName);
+
+    const res = await fetch(`${API_BASE_URL}/copies?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, copyMap: {}, count: 0, totalBCopies: 0 };
+  }
+}
+
+/**
+ * Record or update student's B-Copies or A-copy number
+ */
+export async function updateStudentCopiesAPI(payload) {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE_URL}/copies/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+// ----------------------------------------------------------------------
 // Teacher Management APIs
 // ----------------------------------------------------------------------
 

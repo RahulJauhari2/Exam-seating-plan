@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
-import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchTeachersAPI, loadExamSessionFromDB } from './services/api';
+import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchLiveCopiesAPI, updateStudentCopiesAPI, fetchTeachersAPI, loadExamSessionFromDB } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
@@ -77,6 +77,9 @@ export default function App() {
 
   // Live absentee records map from server: { [rollNo]: record }
   const [liveAbsentees, setLiveAbsentees] = useState({});
+
+  // Live Answer Book B-Copy records map: { [rollNo]: { bCopiesCount, bCopyNumbers, aCopyNumber } }
+  const [bCopyRecords, setBCopyRecords] = useState({});
 
   // Live Toast Notification
   const [liveNotification, setLiveNotification] = useState(null);
@@ -234,11 +237,29 @@ export default function App() {
       }
     };
 
+    const pollCopies = async () => {
+      try {
+        const res = await fetchLiveCopiesAPI({
+          sessionName: examDetails.examName,
+          shift: activeShift,
+        });
+        if (isSubscribed && res && res.success && res.copyMap) {
+          setBCopyRecords(res.copyMap);
+        }
+      } catch (err) {
+        // Silent catch
+      }
+    };
+
     // Initial fetch immediately
     pollLiveAbsentees();
+    pollCopies();
 
     // Polling interval
-    const interval = setInterval(pollLiveAbsentees, 2500);
+    const interval = setInterval(() => {
+      pollLiveAbsentees();
+      pollCopies();
+    }, 2500);
 
     return () => {
       isSubscribed = false;
@@ -248,6 +269,34 @@ export default function App() {
       previousAbsentCount.current = 0;
     };
   }, [examDetails.examName, examDetails.date, activeShift, isTeacher]);
+
+  // Handle Answer Book B-Copy update from Teacher Room Portal or Admin
+  const handleUpdateBCopy = async (copyData) => {
+    const { rollNo, bCopiesCount } = copyData;
+    const numRoll = Number(rollNo) || rollNo;
+    const strRoll = String(rollNo);
+    const count = Math.max(0, Number(bCopiesCount) || 0);
+
+    // Optimistic local update
+    setBCopyRecords((prev) => {
+      const copy = { ...prev };
+      if (count > 0) {
+        const record = { ...copy[numRoll], ...copy[strRoll], ...copyData, bCopiesCount: count };
+        copy[numRoll] = record;
+        copy[strRoll] = record;
+      } else {
+        delete copy[numRoll];
+        delete copy[strRoll];
+      }
+      return copy;
+    });
+
+    try {
+      return await updateStudentCopiesAPI(copyData);
+    } catch (err) {
+      console.error('Update B-copy error:', err);
+    }
+  };
 
   // Handle absent toggle from Teacher Room Portal or Admin Absentee Manager
   const handleToggleAbsent = async (toggleData) => {
@@ -561,6 +610,7 @@ export default function App() {
               seatingResult={seatingResult}
               examDetails={examDetails}
               absentStudents={absentStudents}
+              bCopyRecords={bCopyRecords}
             />
           )}
 
@@ -592,6 +642,8 @@ export default function App() {
                 setAbsentStudents={setAbsentStudents}
                 onToggleAbsent={handleToggleAbsent}
                 teachers={teachers}
+                bCopyRecords={bCopyRecords}
+                onUpdateBCopy={handleUpdateBCopy}
               />
             )
           )}
@@ -616,7 +668,9 @@ export default function App() {
                 activeShift={activeShift}
                 teachers={teachers}
                 liveAbsentees={liveAbsentees}
+                bCopyRecords={bCopyRecords}
                 onToggleAbsent={handleToggleAbsent}
+                onUpdateBCopy={handleUpdateBCopy}
                 onLogout={logout}
                 onSwitchToAdminView={() => setActiveTab('main-gate')}
               />
