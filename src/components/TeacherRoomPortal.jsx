@@ -55,6 +55,25 @@ export default function TeacherRoomPortal({
   const [summaryScope, setSummaryScope] = useState('school'); // 'school' (all classes for class teachers) | 'room'
   const [copiedClassKey, setCopiedClassKey] = useState(null);
 
+  // Centralized safe absentee checker (declared before useMemo hooks)
+  const isStudentAbsent = (rollNo) => {
+    if (rollNo === undefined || rollNo === null) return false;
+    const num = Number(rollNo);
+    const str = String(rollNo);
+    return Boolean(
+      (liveAbsentees[rollNo] && liveAbsentees[rollNo].isAbsent) ||
+      (liveAbsentees[str] && liveAbsentees[str].isAbsent) ||
+      (!isNaN(num) && liveAbsentees[num] && liveAbsentees[num].isAbsent)
+    );
+  };
+
+  // Helper to get B-Copies Count for any student (declared before useMemo hooks)
+  const getStudentBCopies = (rollNo) => {
+    if (rollNo === undefined || rollNo === null) return 0;
+    const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
+    return Number(rec?.bCopiesCount) || 0;
+  };
+
   // Available room objects from seatingResult
   const rooms = examSession?.rooms || [];
 
@@ -256,18 +275,6 @@ export default function TeacherRoomPortal({
     );
   }, [roomStudents]);
 
-  // Centralized safe absentee checker
-  const isStudentAbsent = (rollNo) => {
-    if (rollNo === undefined || rollNo === null) return false;
-    const num = Number(rollNo);
-    const str = String(rollNo);
-    return Boolean(
-      (liveAbsentees[rollNo] && liveAbsentees[rollNo].isAbsent) ||
-      (liveAbsentees[str] && liveAbsentees[str].isAbsent) ||
-      (!isNaN(num) && liveAbsentees[num] && liveAbsentees[num].isAbsent)
-    );
-  };
-
   // Filtered Students for Flat or Grouped display
   const filteredClassGroups = useMemo(() => {
     return classGroupedStudents
@@ -375,13 +382,6 @@ export default function TeacherRoomPortal({
 
     const maxRows = Math.max(...split, 1);
     return { columns, maxRows };
-  };
-
-  // Helper to get B-Copies Count for any student
-  const getStudentBCopies = (rollNo) => {
-    if (rollNo === undefined || rollNo === null) return 0;
-    const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
-    return Number(rec?.bCopiesCount) || 0;
   };
 
   // Total B-copies in current room
