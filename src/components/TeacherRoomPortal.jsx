@@ -232,7 +232,7 @@ export default function TeacherRoomPortal({
     if (assignedRoomDefault) {
       setSelectedRoomName(assignedRoomDefault);
     }
-  }, [assignedRoomDefault, activeShift]);
+  }, [assignedRoomDefault, activeShift, canAccessAllRooms]);
 
   // Current active room object
   const currentRoom = useMemo(() => {
@@ -500,29 +500,43 @@ export default function TeacherRoomPortal({
               }`}>
                 {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : 'आवंटित परीक्षा कक्ष:'}
               </span>
-              <span className="text-[9px] font-black bg-blue-200 text-blue-900 px-1.5 py-0.2 rounded" title="आपकी आवंटित ड्यूटी">
-                ड्यूटी: {assignedRoomDefault}
+              <span className="text-[9px] font-black bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded" title="आपकी आवंटित ड्यूटी">
+                {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : '🔒 ड्यूटी लॉक'}
               </span>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <MapPin className="w-4 h-4 shrink-0 text-blue-600" />
-              <select
-                value={selectedRoomName}
-                onChange={(e) => {
-                  setSelectedRoomName(e.target.value);
-                  setSelectedClassFilter('all');
-                }}
-                className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
-              >
-                {rooms.map((rm) => {
-                  const isAssigned = rm.roomName === assignedRoomDefault;
-                  return (
-                    <option key={rm.roomId || rm.roomName} value={rm.roomName}>
-                      {rm.roomName} {isAssigned ? '⭐ (आपकी ड्यूटी)' : ''} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
-                    </option>
-                  );
-                })}
-              </select>
+              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : 'text-emerald-700'}`} />
+              {canAccessAllRooms ? (
+                <select
+                  value={selectedRoomName}
+                  onChange={(e) => {
+                    setSelectedRoomName(e.target.value);
+                    setSelectedClassFilter('all');
+                  }}
+                  className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
+                >
+                  {rooms.map((rm) => {
+                    const isAssigned = rm.roomName === assignedRoomDefault;
+                    return (
+                      <option key={rm.roomId || rm.roomName} value={rm.roomName}>
+                        {rm.roomName} {isAssigned ? '⭐ (आपकी ड्यूटी)' : ''} ({rm.benchesCount || 20} बेंच • {rm.seatedCount || 0} छात्र)
+                      </option>
+                    );
+                  })}
+                </select>
+              ) : (
+                <div className="w-full bg-white border border-emerald-400 rounded-lg py-1.5 px-2 text-xs font-black text-emerald-950 flex items-center justify-between shadow-2xs">
+                  <span className="flex items-center gap-1">
+                    <span>{assignedRoomDefault}</span>
+                    <span className="text-[10px] text-emerald-700 font-bold">
+                      ({currentRoom?.benchesCount || 20} बेंच • {currentRoom?.seatedCount || 0} छात्र)
+                    </span>
+                  </span>
+                  <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                    🔒 केवल आपका कक्ष
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -533,7 +547,7 @@ export default function TeacherRoomPortal({
             </span>
             <span className="text-xs sm:text-sm font-black text-purple-950 flex items-center gap-1.5 mt-1">
               <Calendar className="w-4 h-4 text-purple-600" />
-              {activeDate || 'आज'}
+              {activeDate === '2026-11-02' ? '02-11-2026 (सोमवार)' : activeDate || '02-11-2026'}
             </span>
           </div>
 
