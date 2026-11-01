@@ -96,6 +96,17 @@ export default function App() {
   const previousAbsentCount = useRef(0);
   // Tracks roll numbers already shown in alert — prevents repeat toasts on same student
   const knownAbsentRolls = useRef(new Set());
+  const isInitialPoll = useRef(true);
+
+  // Reset live attendance and toast memory when date or shift changes so all students start fresh as PRESENT
+  useEffect(() => {
+    setAbsentStudents({});
+    setLiveAbsentees({});
+    knownAbsentRolls.current = new Set();
+    previousAbsentCount.current = 0;
+    isInitialPoll.current = true;
+    setLiveNotification(null);
+  }, [examDetails.date, activeShift]);
 
   // Mobile drawer state
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -208,27 +219,42 @@ export default function App() {
           shift: activeShift,
         });
 
-        if (isSubscribed && res && res.success && res.absenteeMap) {
-          setLiveAbsentees(res.absenteeMap);
+        if (isSubscribed && res && res.success) {
+          const map = res.absenteeMap || {};
+          setLiveAbsentees(map);
 
           // Build absentStudents lookup: { [rollNo]: true }
           const newAbsentLookup = {};
           let newlyMarkedAbsent = null;
 
-          Object.values(res.absenteeMap).forEach((rec) => {
+          Object.values(map).forEach((rec) => {
             if (rec.isAbsent) {
               newAbsentLookup[rec.rollNo] = true;
-              // Only alert if this roll number has NOT been alerted before (ref-based, no stale closure)
-              if (!knownAbsentRolls.current.has(String(rec.rollNo))) {
-                newlyMarkedAbsent = rec;
+
+              if (isInitialPoll.current) {
+                // On initial poll for this date/shift, mark all existing absentees as already known
+                // so no toast notifications are triggered for historical or existing records!
+                knownAbsentRolls.current.add(String(rec.rollNo));
+              } else if (!knownAbsentRolls.current.has(String(rec.rollNo))) {
+                // Only alert if record belongs to the CURRENT active date!
+                const isCurrentDate =
+                  !rec.date ||
+                  rec.date === examDetails.date ||
+                  (examDetails.date && examDetails.date.includes(rec.date)) ||
+                  (rec.date && rec.date.includes(examDetails.date));
+
+                if (isCurrentDate) {
+                  newlyMarkedAbsent = rec;
+                  knownAbsentRolls.current.add(String(rec.rollNo));
+                } else {
+                  knownAbsentRolls.current.add(String(rec.rollNo));
+                }
               }
             }
           });
 
-          // Show live notification toast only for truly NEW absent student
-          if (newlyMarkedAbsent && previousAbsentCount.current > 0 && !isTeacher) {
-            // Mark this roll as known so future polls don't re-alert
-            knownAbsentRolls.current.add(String(newlyMarkedAbsent.rollNo));
+          // Show live notification toast only for truly NEW absent student marked on CURRENT active date
+          if (!isInitialPoll.current && newlyMarkedAbsent && !isTeacher) {
             setLiveNotification({
               rollNo: newlyMarkedAbsent.rollNo,
               roomName: newlyMarkedAbsent.roomName,
@@ -239,6 +265,7 @@ export default function App() {
             setTimeout(() => setLiveNotification(null), 5000);
           }
 
+          isInitialPoll.current = false;
           previousAbsentCount.current = Object.keys(newAbsentLookup).length;
           setAbsentStudents(newAbsentLookup);
         }
@@ -277,6 +304,7 @@ export default function App() {
       // Reset known absent set when session or shift changes
       knownAbsentRolls.current = new Set();
       previousAbsentCount.current = 0;
+      isInitialPoll.current = true;
     };
   }, [examDetails.examName, examDetails.date, activeShift, isTeacher]);
 

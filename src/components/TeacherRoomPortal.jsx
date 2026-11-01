@@ -62,11 +62,14 @@ export default function TeacherRoomPortal({
     if (rollNo === undefined || rollNo === null) return false;
     const num = Number(rollNo);
     const str = String(rollNo);
-    return Boolean(
-      (liveAbsentees[rollNo] && liveAbsentees[rollNo].isAbsent) ||
-      (liveAbsentees[str] && liveAbsentees[str].isAbsent) ||
-      (!isNaN(num) && liveAbsentees[num] && liveAbsentees[num].isAbsent)
-    );
+    const rec = liveAbsentees[rollNo] || liveAbsentees[str] || (!isNaN(num) && liveAbsentees[num]);
+    if (!rec || !rec.isAbsent) return false;
+    // Strictly verify record date matches current active date
+    if (activeDate && rec.date) {
+      const match = rec.date === activeDate || activeDate.includes(rec.date) || rec.date.includes(activeDate);
+      if (!match) return false;
+    }
+    return true;
   };
 
   // Helper to get B-Copies Count for any student (declared before useMemo hooks)

@@ -145,7 +145,25 @@ export const getLiveAbsentees = async (req, res) => {
         $in: [sessionName, cleanSession, spacedSession, 'Half Yearly  Examination 2026', 'Half_Yearly_2026_27'],
       };
     }
-    if (date && date !== 'all') filter.date = date;
+    if (date && date !== 'all') {
+      const dateVariations = [date];
+      if (date.includes('-')) {
+        const parts = date.split('-');
+        if (parts[0].length === 4) {
+          // 2026-11-02 -> 02-11-2026, 02-11-26
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0].slice(2)}`);
+        } else if (parts[2].length === 4) {
+          // 02-11-2026 -> 2026-11-02
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        } else if (parts[2].length === 2) {
+          // 02-11-26 -> 2026-11-02, 02-11-2026
+          dateVariations.push(`20${parts[2]}-${parts[1]}-${parts[0]}`);
+          dateVariations.push(`${parts[0]}-${parts[1]}-20${parts[2]}`);
+        }
+      }
+      filter.date = { $in: dateVariations };
+    }
     if (shift && shift !== 'all') filter.shift = shift;
     if (roomName && roomName !== 'all') filter.roomName = roomName;
 
@@ -157,7 +175,10 @@ export const getLiveAbsentees = async (req, res) => {
       // Fallback to local file
       const local = readLocalAbsentees();
       records = local.filter((r) => {
-        if (date && date !== 'all' && r.date !== date) return false;
+        if (date && date !== 'all') {
+          const dateMatches = r.date === date || (r.date && r.date.includes(date)) || (date && date.includes(r.date));
+          if (!dateMatches) return false;
+        }
         if (shift && shift !== 'all' && r.shift !== shift) return false;
         if (roomName && roomName !== 'all' && r.roomName !== roomName) return false;
         return true;
