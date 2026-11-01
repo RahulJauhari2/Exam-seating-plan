@@ -176,6 +176,26 @@ export async function saveDutyRosterToDB(sessionName, shift, dutyRoster) {
 }
 
 // ----------------------------------------------------------------------
+// Evaluation Allotment & Locks API
+// ----------------------------------------------------------------------
+
+export async function saveEvaluationAllotmentAPI(sessionName, shift, evaluationAllotment, marksLocks) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/allotment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionName, activeShift: shift, evaluationAllotment, marksLocks }),
+    });
+    return await res.json();
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+    };
+  }
+}
+
+// ----------------------------------------------------------------------
 // RBAC Auth APIs
 // ----------------------------------------------------------------------
 

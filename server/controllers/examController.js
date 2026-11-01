@@ -426,3 +426,81 @@ export const saveDutyRoster = async (req, res) => {
     });
   }
 };
+
+// 8. Save or Update Evaluation Allotment & Locks in MongoDB
+export const saveEvaluationAllotment = async (req, res) => {
+  try {
+    const { sessionName, activeShift = 'shift_1', evaluationAllotment = {}, marksLocks = {} } = req.body;
+
+    if (!sessionName) {
+      return res.status(400).json({
+        success: false,
+        message: 'सत्र का नाम आवश्यक है (sessionName is required)',
+      });
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      let target = await ExamSession.findOne({ sessionName, activeShift });
+      if (!target) {
+        target = await ExamSession.findOne({
+          activeShift,
+          $or: [
+            { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+            { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+          ],
+        });
+      }
+      const actualName = target ? target.sessionName : sessionName;
+      const updatedSession = await ExamSession.findOneAndUpdate(
+        { sessionName: actualName, activeShift },
+        {
+          $set: { evaluationAllotment, marksLocks },
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        storage: 'mongodb',
+        message: `कॉपी मूल्यांकन आवंटन सत्र '${actualName}' (${activeShift}) हेतु MongoDB में सुरक्षित हुआ!`,
+        data: {
+          evaluationAllotment: updatedSession.evaluationAllotment || {},
+          marksLocks: updatedSession.marksLocks || {},
+        },
+      });
+    }
+
+    // Local Fallback
+    const localData = readLocalSessions();
+    const key = `${sessionName}_${activeShift}`;
+    if (!localData[key]) {
+      localData[key] = {
+        sessionName,
+        activeShift,
+        classes: [],
+        rooms: [],
+        evaluationAllotment,
+        marksLocks,
+        createdAt: new Date().toISOString(),
+      };
+    } else {
+      localData[key].evaluationAllotment = evaluationAllotment;
+      localData[key].marksLocks = marksLocks;
+      localData[key].updatedAt = new Date().toISOString();
+    }
+    writeLocalSessions(localData);
+
+    return res.status(200).json({
+      success: true,
+      storage: 'local_fallback',
+      message: `कॉपी आवंटन सुरक्षित हुआ (लोकल बैकअप)।`,
+      data: { evaluationAllotment, marksLocks },
+    });
+  } catch (error) {
+    console.error('Error saving evaluation allotment:', error);
+    return res.status(500).json({
+      success: false,
+      message: `कॉपी आवंटन सुरक्षित करने में त्रुटि: ${error.message}`,
+    });
+  }
+};

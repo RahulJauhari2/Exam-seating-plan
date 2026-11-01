@@ -6,7 +6,8 @@ import {
   getSessionByName, 
   deleteSession,
   saveMarks,
-  saveDutyRoster
+  saveDutyRoster,
+  saveEvaluationAllotment
 } from '../controllers/examController.js';
 
 const router = express.Router();
@@ -25,5 +26,8 @@ router.post('/marks', saveMarks);
 
 // Duty Roster endpoint
 router.post('/duty-roster', saveDutyRoster);
+
+// Evaluation Allotment & Locks endpoint
+router.post('/allotment', saveEvaluationAllotment);
 
 export default router;

@@ -1,5 +1,5 @@
 import { useAuth } from '../context/AuthContext';
-import { saveMarksToDB } from '../services/api';
+import { saveMarksToDB, saveEvaluationAllotmentAPI } from '../services/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Lock,
@@ -55,7 +55,12 @@ export default function ResultMarksheetManager({
   activeShift = 'shift_1',
   examDetails = {},
   seatingResult,
-  teachers = []
+  teachers = [],
+  evaluationAllotment: parentEvaluationAllotment,
+  setEvaluationAllotment: parentSetEvaluationAllotment,
+  marksLocks: parentMarksLocks,
+  setMarksLocks: parentSetMarksLocks,
+  initialTarget = null,
 }) {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'principal' || currentUser?.role === 'coordinator' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -65,6 +70,9 @@ export default function ResultMarksheetManager({
   // Storage key for locks
   const STORAGE_KEY_LOCKS = 'dynamic_exam_marks_locks_v1';
   const [marksLocks, setMarksLocks] = useState(() => {
+    if (parentMarksLocks && Object.keys(parentMarksLocks).length > 0) {
+      return parentMarksLocks;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOCKS);
       return saved ? JSON.parse(saved) : {};
@@ -76,6 +84,9 @@ export default function ResultMarksheetManager({
   // Storage key for Evaluation Allotment (Teacher -> Class Subject)
   const STORAGE_KEY_ALLOTMENT = 'dynamic_exam_evaluation_allotment_v1';
   const [evaluationAllotment, setEvaluationAllotment] = useState(() => {
+    if (parentEvaluationAllotment && Object.keys(parentEvaluationAllotment).length > 0) {
+      return parentEvaluationAllotment;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ALLOTMENT);
       return saved ? JSON.parse(saved) : {};
@@ -83,6 +94,19 @@ export default function ResultMarksheetManager({
       return {};
     }
   });
+
+  // Synchronize from parent / MongoDB if updated
+  useEffect(() => {
+    if (parentEvaluationAllotment && Object.keys(parentEvaluationAllotment).length > 0) {
+      setEvaluationAllotment(parentEvaluationAllotment);
+    }
+  }, [parentEvaluationAllotment]);
+
+  useEffect(() => {
+    if (parentMarksLocks && Object.keys(parentMarksLocks).length > 0) {
+      setMarksLocks(parentMarksLocks);
+    }
+  }, [parentMarksLocks]);
 
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [cloudSaveMessage, setCloudSaveMessage] = useState('');
@@ -95,6 +119,9 @@ export default function ResultMarksheetManager({
     } catch (e) {
       console.error('Failed to save marks locks', e);
     }
+    if (parentSetMarksLocks) {
+      parentSetMarksLocks(marksLocks);
+    }
   }, [marksLocks]);
 
   useEffect(() => {
@@ -102,6 +129,9 @@ export default function ResultMarksheetManager({
       localStorage.setItem(STORAGE_KEY_ALLOTMENT, JSON.stringify(evaluationAllotment));
     } catch (e) {
       console.error('Failed to save evaluation allotment', e);
+    }
+    if (parentSetEvaluationAllotment) {
+      parentSetEvaluationAllotment(evaluationAllotment);
     }
   }, [evaluationAllotment]);
   // Navigation tabs inside result manager
@@ -273,26 +303,40 @@ export default function ResultMarksheetManager({
     return list;
   }, [classes, activeShift, subjectConfig, evaluationAllotment, marksLocks, marksData]);
 
+  // Robust Phone & Name normalizers for teacher matching
+  const normalizePhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  const cleanName = (n) => String(n || '').replace(/^(श्री|श्रीमती|डॉ०|डॉ\.|डा०|डा\.|shri|mr|mrs|dr)\s+/i, '').trim().toLowerCase();
+
   // Evaluator's own assigned bundles when logged in as teacher
   const myAssignedBundles = useMemo(() => {
     if (!currentUser) return [];
-    const uName = (currentUser.name || '').trim().toLowerCase();
-    const uPhone = (currentUser.phone || '').trim();
+    const uPhone = normalizePhone(currentUser.phone || currentUser.mobile || '');
+    const uName = cleanName(currentUser.name || '');
     const uId = String(currentUser.assignedTeacherId || currentUser.id || currentUser._id || '');
 
     return allSchoolBundles.filter((b) => {
       if (!b.allotment) return false;
-      const tName = (b.assignedTeacherName || '').trim().toLowerCase();
-      const tPhone = (b.assignedTeacherPhone || '').trim();
+      const tPhone = normalizePhone(b.assignedTeacherPhone || '');
+      const tName = cleanName(b.assignedTeacherName || '');
       const tId = String(b.assignedTeacherId || '');
 
       return (
-        (uPhone && tPhone && (uPhone.includes(tPhone) || tPhone.includes(uPhone))) ||
+        (uPhone && tPhone && uPhone === tPhone) ||
         (uId && tId && uId === tId) ||
         (uName && tName && (uName.includes(tName) || tName.includes(uName)))
       );
     });
   }, [allSchoolBundles, currentUser]);
+
+  // If navigated from TeacherRoomPortal with a specific target subject
+  useEffect(() => {
+    if (initialTarget && initialTarget.grade) {
+      setSelectedGrade(String(initialTarget.grade).trim());
+      if (initialTarget.section) setSelectedSection(String(initialTarget.section).toUpperCase().trim());
+      if (initialTarget.subject) setSelectedSubject(String(initialTarget.subject).trim());
+      setActiveSubTab('marks-entry');
+    }
+  }, [initialTarget]);
 
   // Available distinct grades from classes in current state
   const availableGrades = useMemo(() => {
@@ -487,17 +531,16 @@ export default function ResultMarksheetManager({
     };
     setMarksLocks(updated);
 
-    if (nowLocked) {
-      setIsCloudSaving(true);
-      try {
-        await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
-        setCloudSaveMessage('डेटा लॉक एवं सुरक्षित किया गया!');
-        setTimeout(() => setCloudSaveMessage(''), 4000);
-      } catch (err) {
-        console.error('Error saving locked marks to MongoDB:', err);
-      } finally {
-        setIsCloudSaving(false);
-      }
+    setIsCloudSaving(true);
+    try {
+      await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      await saveEvaluationAllotmentAPI(examDetails?.examName || 'Half_Yearly_2026_27', activeShift, evaluationAllotment, updated);
+      setCloudSaveMessage('डेटा लॉक एवं सुरक्षित किया गया!');
+      setTimeout(() => setCloudSaveMessage(''), 4000);
+    } catch (err) {
+      console.error('Error saving locked marks to MongoDB:', err);
+    } finally {
+      setIsCloudSaving(false);
     }
   };
 
@@ -519,6 +562,7 @@ export default function ResultMarksheetManager({
     setIsCloudSaving(true);
     try {
       await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      await saveEvaluationAllotmentAPI(examDetails?.examName || 'Half_Yearly_2026_27', activeShift, evaluationAllotment, updated);
       setCloudSaveMessage('अंक सफलतापूर्वक सबमिट व लॉक किए गए!');
       setTimeout(() => setCloudSaveMessage(''), 4000);
       alert('अंक सफलतापूर्वक सबमिट और लॉक कर दिए गए हैं!');
@@ -546,6 +590,7 @@ export default function ResultMarksheetManager({
     setIsCloudSaving(true);
     try {
       await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      await saveEvaluationAllotmentAPI(examDetails?.examName || 'Half_Yearly_2026_27', activeShift, evaluationAllotment, updated);
       setCloudSaveMessage('विषय अनलॉक किया गया!');
       setTimeout(() => setCloudSaveMessage(''), 3000);
     } catch (err) {
@@ -556,27 +601,32 @@ export default function ResultMarksheetManager({
   };
 
   // Teacher Assignment Handler (by Admin)
-  const handleAssignTeacher = (bundleKey, teacherId) => {
+  const handleAssignTeacher = async (bundleKey, teacherId) => {
     if (!isAdmin) return;
     const tObj = teachers.find((t) => String(t._id || t.id || t.teacherCode) === String(teacherId));
-    setEvaluationAllotment((prev) => {
-      const updated = { ...prev };
-      if (tObj) {
-        updated[bundleKey] = {
-          teacherId: tObj._id ? tObj._id.toString() : tObj.id,
-          teacherName: tObj.name,
-          teacherPhone: tObj.mobile || tObj.phone || '',
-          assignedAt: new Date().toISOString(),
-        };
-      } else {
-        delete updated[bundleKey];
-      }
-      return updated;
-    });
+    const updated = { ...evaluationAllotment };
+    if (tObj) {
+      updated[bundleKey] = {
+        teacherId: tObj._id ? tObj._id.toString() : tObj.id,
+        teacherName: tObj.name,
+        teacherPhone: tObj.mobile || tObj.phone || '',
+        assignedAt: new Date().toISOString(),
+      };
+    } else {
+      delete updated[bundleKey];
+    }
+    setEvaluationAllotment(updated);
+
+    // Save to MongoDB Atlas immediately
+    try {
+      await saveEvaluationAllotmentAPI(examDetails?.examName || 'Half_Yearly_2026_27', activeShift, updated, marksLocks);
+    } catch (err) {
+      console.error('Error saving allotment to MongoDB:', err);
+    }
   };
 
   // Smart 1-click Auto Allot
-  const handleAutoAllotTeachers = () => {
+  const handleAutoAllotTeachers = async () => {
     if (!teachers || teachers.length === 0) {
       alert('कोई शिक्षक सूची उपलब्ध नहीं है।');
       return;
@@ -585,33 +635,39 @@ export default function ResultMarksheetManager({
       return;
     }
 
-    setEvaluationAllotment((prev) => {
-      const newAllotment = { ...prev };
-      let assignedCount = 0;
+    const newAllotment = { ...evaluationAllotment };
+    let assignedCount = 0;
 
-      allSchoolBundles.forEach((b, idx) => {
-        if (!newAllotment[b.key]) {
-          const subUpper = b.subject.toUpperCase();
-          const matchedTeacher = teachers.find((t) => {
-            const tSub = (t.subject || '').toUpperCase();
-            return tSub && (subUpper.includes(tSub) || tSub.includes(subUpper));
-          }) || teachers[idx % teachers.length];
+    allSchoolBundles.forEach((b, idx) => {
+      if (!newAllotment[b.key]) {
+        const subUpper = b.subject.toUpperCase();
+        const matchedTeacher = teachers.find((t) => {
+          const tSub = (t.subject || '').toUpperCase();
+          return tSub && (subUpper.includes(tSub) || tSub.includes(subUpper));
+        }) || teachers[idx % teachers.length];
 
-          if (matchedTeacher) {
-            newAllotment[b.key] = {
-              teacherId: matchedTeacher._id ? matchedTeacher._id.toString() : matchedTeacher.id,
-              teacherName: matchedTeacher.name,
-              teacherPhone: matchedTeacher.mobile || matchedTeacher.phone || '',
-              assignedAt: new Date().toISOString(),
-            };
-            assignedCount++;
-          }
+        if (matchedTeacher) {
+          newAllotment[b.key] = {
+            teacherId: matchedTeacher._id ? matchedTeacher._id.toString() : matchedTeacher.id,
+            teacherName: matchedTeacher.name,
+            teacherPhone: matchedTeacher.mobile || matchedTeacher.phone || '',
+            assignedAt: new Date().toISOString(),
+          };
+          assignedCount++;
         }
-      });
-
-      alert(`सफलतापूर्वक ${assignedCount} विषय बंडलों का शिक्षकों को आवंटन किया गया!`);
-      return newAllotment;
+      }
     });
+
+    setEvaluationAllotment(newAllotment);
+
+    // Save to MongoDB Atlas immediately
+    try {
+      await saveEvaluationAllotmentAPI(examDetails?.examName || 'Half_Yearly_2026_27', activeShift, newAllotment, marksLocks);
+    } catch (err) {
+      console.error('Error saving auto allotment to MongoDB:', err);
+    }
+
+    alert(`सफलतापूर्वक ${assignedCount} विषय बंडलों का शिक्षकों को आवंटन किया गया और डेटाबेस में सुरक्षित हो गया!`);
   };
 
   // Export Allotment Report to Excel

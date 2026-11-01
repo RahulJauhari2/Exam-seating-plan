@@ -87,6 +87,8 @@ const ExamSessionSchema = new mongoose.Schema(
     dutyRoster: { type: mongoose.Schema.Types.Mixed, default: {} },
     marksData: { type: mongoose.Schema.Types.Mixed, default: {} },
     subjectConfig: { type: mongoose.Schema.Types.Mixed, default: {} },
+    evaluationAllotment: { type: mongoose.Schema.Types.Mixed, default: {} },
+    marksLocks: { type: mongoose.Schema.Types.Mixed, default: {} },
     notes: { type: String, default: '' },
   },
   {

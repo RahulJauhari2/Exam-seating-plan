@@ -95,6 +95,8 @@ export const ExamSessionValidationSchema = z.object({
   dutyRoster: z.record(z.string(), z.any()).optional().default({}),
   marksData: MarksDataValidationSchema.optional().default({}),
   subjectConfig: SubjectConfigValidationSchema.optional().default({}),
+  evaluationAllotment: z.record(z.string(), z.any()).optional().default({}),
+  marksLocks: z.record(z.string(), z.any()).optional().default({}),
   notes: z.string().optional().default(''),
 });
 

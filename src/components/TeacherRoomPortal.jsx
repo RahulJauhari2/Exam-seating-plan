@@ -31,7 +31,9 @@ import {
   Star,
   BookOpen,
   Plus,
-  Minus
+  Minus,
+  ChevronRight,
+  Lock
 } from 'lucide-react';
 
 export default function TeacherRoomPortal({
@@ -47,6 +49,9 @@ export default function TeacherRoomPortal({
   onLogout,
   onSwitchToAdminView,
   onGoToEvaluation,
+  evaluationAllotment = {},
+  marksLocks = {},
+  classes = [],
 }) {
   const { currentUser, canAccessAllRooms } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,6 +84,59 @@ export default function TeacherRoomPortal({
     const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
     return Number(rec?.bCopiesCount) || 0;
   };
+
+  // Robust Phone & Name normalizers for teacher matching
+  const normalizePhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  const cleanName = (n) => String(n || '').replace(/^(श्री|श्रीमती|डॉ०|डॉ\.|डा०|डा\.|shri|mr|mrs|dr)\s+/i, '').trim().toLowerCase();
+
+  // Find all assigned copy bundles for this teacher
+  const myAssignedEvaluationBundles = useMemo(() => {
+    if (!currentUser || !evaluationAllotment) return [];
+    const uPhone = normalizePhone(currentUser.phone || currentUser.mobile || '');
+    const uName = cleanName(currentUser.name || '');
+    const uId = String(currentUser.assignedTeacherId || currentUser.id || currentUser._id || '');
+
+    const bundles = [];
+    Object.entries(evaluationAllotment).forEach(([key, allot]) => {
+      if (!allot) return;
+      const tPhone = normalizePhone(allot.teacherPhone || '');
+      const tName = cleanName(allot.teacherName || '');
+      const tId = String(allot.teacherId || '');
+
+      const isMatch =
+        (uPhone && tPhone && uPhone === tPhone) ||
+        (uId && tId && uId === tId) ||
+        (uName && tName && (uName.includes(tName) || tName.includes(uName)));
+
+      if (isMatch) {
+        // key format is `${grade}_${section}_${subject}`
+        const parts = key.split('_');
+        const grade = parts[0] || '';
+        const section = parts[1] || '';
+        const subject = parts.slice(2).join('_') || '';
+
+        // Find class student count
+        const classObj = classes.find(
+          (c) => String(c.name).trim() === grade && String(c.section).toUpperCase().trim() === section.toUpperCase()
+        );
+        const totalCopies = classObj ? (Number(classObj.totalStudents) || (classObj.studentList ? classObj.studentList.length : 0) || 0) : 0;
+        const lock = marksLocks[key] || null;
+
+        bundles.push({
+          key,
+          grade,
+          section,
+          subject,
+          totalCopies,
+          isLocked: Boolean(lock?.isLocked),
+          lockedBy: lock?.lockedBy || '',
+          allotment: allot,
+        });
+      }
+    });
+
+    return bundles;
+  }, [currentUser, evaluationAllotment, marksLocks, classes]);
 
   // Available room objects from seatingResult
   const rooms = examSession?.rooms || [];
@@ -541,6 +599,76 @@ export default function TeacherRoomPortal({
             </button>
           </div>
         </div>
+
+        {/* Assigned Copy Checking Bundles Section for Teacher */}
+        {myAssignedEvaluationBundles.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 border border-indigo-200 rounded-2xl p-3.5 sm:p-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-black text-indigo-950 uppercase tracking-wide">
+                      आपकी आवंटित उत्तर पुस्तिकाएं (मूल्यांकन कार्य)
+                    </h3>
+                    <p className="text-[11px] text-indigo-700">
+                      प्रधानाचार्य / परीक्षा प्रभारी द्वारा आपको <strong>{myAssignedEvaluationBundles.length} विषय बंडल</strong> सौंपे गए हैं
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {myAssignedEvaluationBundles.map((b) => (
+                  <div
+                    key={b.key}
+                    className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs flex flex-col justify-between gap-2.5 hover:border-indigo-300 transition"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-100 text-slate-800 border border-slate-200">
+                          Class {b.grade}-{b.section}
+                        </span>
+                        <h4 className="text-sm font-black text-indigo-900 mt-1">
+                          {b.subject}
+                        </h4>
+                      </div>
+                      {b.isLocked ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shrink-0">
+                          <Lock className="w-3 h-3" /> सबमिट
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                          जांच बाकी
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                      <span className="text-slate-600 font-medium">
+                        कुल कॉपियां: <strong className="text-slate-900 font-bold">{b.totalCopies}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onGoToEvaluation) {
+                            onGoToEvaluation({ grade: b.grade, section: b.section, subject: b.subject });
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black flex items-center gap-1 shadow-xs transition cursor-pointer"
+                      >
+                        <span>अंक भरें</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Room & Shift Selection Bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">

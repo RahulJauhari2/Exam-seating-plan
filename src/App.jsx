@@ -149,6 +149,27 @@ export default function App() {
     }
   });
 
+  // Evaluation Allotment & Marks Locks synchronized with MongoDB
+  const [evaluationAllotment, setEvaluationAllotment] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dynamic_exam_evaluation_allotment_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [marksLocks, setMarksLocks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dynamic_exam_marks_locks_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [evaluationTarget, setEvaluationTarget] = useState(null);
+
   // Automatically persist dutyRoster changes locally so work is never lost
   useEffect(() => {
     try {
@@ -162,7 +183,7 @@ export default function App() {
     }
   }, [dutyRoster]);
 
-  // Primary: Load entire session (classes, rooms, examDetails, dutyRoster) directly from MongoDB as Single Source of Truth
+  // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
   useEffect(() => {
     loadExamSessionFromDB(examDetails.examName || 'Half_Yearly_2026_27', activeShift)
       .then((res) => {
@@ -188,6 +209,14 @@ export default function App() {
               ...prev,
               ...s.dutyRoster,
             }));
+          }
+          if (s.evaluationAllotment && Object.keys(s.evaluationAllotment).length > 0) {
+            setEvaluationAllotment(s.evaluationAllotment);
+            localStorage.setItem('dynamic_exam_evaluation_allotment_v1', JSON.stringify(s.evaluationAllotment));
+          }
+          if (s.marksLocks && Object.keys(s.marksLocks).length > 0) {
+            setMarksLocks(s.marksLocks);
+            localStorage.setItem('dynamic_exam_marks_locks_v1', JSON.stringify(s.marksLocks));
           }
         }
       })
@@ -716,7 +745,13 @@ export default function App() {
                 onUpdateBCopy={handleUpdateBCopy}
                 onLogout={logout}
                 onSwitchToAdminView={() => setActiveTab('main-gate')}
-                onGoToEvaluation={() => setActiveTab('result-marksheet')}
+                evaluationAllotment={evaluationAllotment}
+                marksLocks={marksLocks}
+                classes={classes}
+                onGoToEvaluation={(target) => {
+                  if (target) setEvaluationTarget(target);
+                  setActiveTab('result-marksheet');
+                }}
               />
             )
           )}
@@ -769,6 +804,11 @@ export default function App() {
                 examDetails={examDetails}
                 seatingResult={seatingResult}
                 teachers={teachers}
+                evaluationAllotment={evaluationAllotment}
+                setEvaluationAllotment={setEvaluationAllotment}
+                marksLocks={marksLocks}
+                setMarksLocks={setMarksLocks}
+                initialTarget={evaluationTarget}
               />
             )
           )}
