@@ -191,17 +191,20 @@ export default function ResultMarksheetManager({
     const subjectsSet = new Map();
 
     EXAM_TIMETABLE.forEach((day) => {
-      const shiftSubs = day[shift] || {};
-      const subsForGrade = shiftSubs[grade] || [];
-      subsForGrade.forEach((sub) => {
-        const sName = (sub.name || '').trim().toUpperCase();
-        if (sName && !subjectsSet.has(sName)) {
-          subjectsSet.set(sName, {
-            name: sName,
-            code: sub.code || '',
-            hindiName: sub.code && UP_BOARD_SUBJECT_CODES[sub.code] ? UP_BOARD_SUBJECT_CODES[sub.code].name : sName
-          });
-        }
+      // Check both shifts so all subjects for high school & inter remain available regardless of current active shift
+      ['shift_1', 'shift_2'].forEach((sh) => {
+        const shiftSubs = day[sh] || {};
+        const subsForGrade = shiftSubs[grade] || [];
+        subsForGrade.forEach((sub) => {
+          const sName = (sub.name || '').trim().toUpperCase();
+          if (sName && !subjectsSet.has(sName)) {
+            subjectsSet.set(sName, {
+              name: sName,
+              code: sub.code || '',
+              hindiName: sub.code && UP_BOARD_SUBJECT_CODES[sub.code] ? UP_BOARD_SUBJECT_CODES[sub.code].name : sName
+            });
+          }
+        });
       });
     });
 
@@ -224,19 +227,26 @@ export default function ResultMarksheetManager({
         subjectsSet.delete('COMPUTER');
       }
     } else if (['11', '12'].includes(grade)) {
-      if (section === 'A' || section === 'E') {
+      if (section === 'A') {
+        // Section A: Math stream
         subjectsSet.delete('BIOLOGY');
         subjectsSet.delete('ACCOUNTANCY');
         subjectsSet.delete('BUSS. STUDY');
       } else if (section === 'B') {
+        // Section B: Biology stream
         subjectsSet.delete('MATH');
         subjectsSet.delete('ACCOUNTANCY');
         subjectsSet.delete('BUSS. STUDY');
       } else if (section === 'C') {
+        // Section C: Commerce stream
         subjectsSet.delete('MATH');
         subjectsSet.delete('BIOLOGY');
         subjectsSet.delete('PHYSICS');
         subjectsSet.delete('CHEMISTRY');
+      } else if (section === 'E') {
+        // Section E: English Medium Science -> Has BIOLOGY, MATH, PHYSICS, CHEMISTRY, HINDI, ENGLISH
+        subjectsSet.delete('ACCOUNTANCY');
+        subjectsSet.delete('BUSS. STUDY');
       }
     }
 
