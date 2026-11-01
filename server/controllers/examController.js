@@ -205,10 +205,34 @@ export const getSessionByName = async (req, res) => {
         });
       }
 
+      // Convert mongoose doc to plain object if needed
+      const sessionObj = session.toObject ? session.toObject() : { ...session };
+
+      // Cross-Shift Fallback: If dutyRoster in this shift is empty, retrieve dutyRoster from any other active session
+      if (!sessionObj.dutyRoster || Object.keys(sessionObj.dutyRoster).length === 0) {
+        const altSession = await ExamSession.findOne({
+          dutyRoster: { $exists: true, $ne: {} },
+        }).sort({ updatedAt: -1 });
+        if (altSession && altSession.dutyRoster && Object.keys(altSession.dutyRoster).length > 0) {
+          sessionObj.dutyRoster = altSession.dutyRoster;
+        }
+      }
+
+      // Cross-Shift Fallback: If evaluationAllotment is empty, retrieve from any session with allotments
+      if (!sessionObj.evaluationAllotment || Object.keys(sessionObj.evaluationAllotment).length === 0) {
+        const altSession = await ExamSession.findOne({
+          evaluationAllotment: { $exists: true, $ne: {} },
+        }).sort({ updatedAt: -1 });
+        if (altSession && altSession.evaluationAllotment && Object.keys(altSession.evaluationAllotment).length > 0) {
+          sessionObj.evaluationAllotment = altSession.evaluationAllotment;
+          sessionObj.marksLocks = altSession.marksLocks || {};
+        }
+      }
+
       return res.json({
         success: true,
         storage: 'mongodb',
-        data: session,
+        data: sessionObj,
       });
     }
 
@@ -370,7 +394,6 @@ export const saveDutyRoster = async (req, res) => {
       let target = await ExamSession.findOne({ sessionName, activeShift });
       if (!target) {
         target = await ExamSession.findOne({
-          activeShift,
           $or: [
             { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
             { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } }
@@ -378,6 +401,21 @@ export const saveDutyRoster = async (req, res) => {
         });
       }
       const actualName = target ? target.sessionName : sessionName;
+
+      // Update ALL matching sessions for both shift_1 and shift_2 so duty roster is never lost regardless of which shift user views
+      await ExamSession.updateMany(
+        {
+          $or: [
+            { sessionName: actualName },
+            { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+            { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } }
+          ]
+        },
+        { 
+          $set: { dutyRoster } 
+        }
+      );
+
       const updatedSession = await ExamSession.findOneAndUpdate(
         { sessionName: actualName, activeShift },
         { 
@@ -389,27 +427,29 @@ export const saveDutyRoster = async (req, res) => {
       return res.status(200).json({
         success: true,
         storage: 'mongodb',
-        message: `सत्र '${actualName}' (${activeShift}) का ड्यूटी रोस्टर MongoDB में सुरक्षित हो गया!`,
+        message: `सत्र '${actualName}' का ड्यूटी रोस्टर MongoDB में सुरक्षित हो गया!`,
         data: updatedSession.dutyRoster,
       });
     }
 
-    // Local Fallback
+    // Local Fallback: update both shift keys
     const localData = readLocalSessions();
-    const key = `${sessionName}_${activeShift}`;
-    if (!localData[key]) {
-      localData[key] = {
-        sessionName,
-        activeShift,
-        classes: [],
-        rooms: [],
-        dutyRoster,
-        createdAt: new Date().toISOString(),
-      };
-    } else {
-      localData[key].dutyRoster = dutyRoster;
-      localData[key].updatedAt = new Date().toISOString();
-    }
+    ['shift_1', 'shift_2'].forEach((sh) => {
+      const k = `${sessionName}_${sh}`;
+      if (!localData[k]) {
+        localData[k] = {
+          sessionName,
+          activeShift: sh,
+          classes: [],
+          rooms: [],
+          dutyRoster,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        localData[k].dutyRoster = dutyRoster;
+        localData[k].updatedAt = new Date().toISOString();
+      }
+    });
     writeLocalSessions(localData);
 
     return res.status(200).json({
@@ -443,7 +483,6 @@ export const saveEvaluationAllotment = async (req, res) => {
       let target = await ExamSession.findOne({ sessionName, activeShift });
       if (!target) {
         target = await ExamSession.findOne({
-          activeShift,
           $or: [
             { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
             { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
@@ -451,6 +490,21 @@ export const saveEvaluationAllotment = async (req, res) => {
         });
       }
       const actualName = target ? target.sessionName : sessionName;
+
+      // Update ALL matching sessions for both shifts so evaluation allotment is synchronized
+      await ExamSession.updateMany(
+        {
+          $or: [
+            { sessionName: actualName },
+            { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+            { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } }
+          ]
+        },
+        {
+          $set: { evaluationAllotment, marksLocks },
+        }
+      );
+
       const updatedSession = await ExamSession.findOneAndUpdate(
         { sessionName: actualName, activeShift },
         {
@@ -470,24 +524,26 @@ export const saveEvaluationAllotment = async (req, res) => {
       });
     }
 
-    // Local Fallback
+    // Local Fallback: update both shift keys
     const localData = readLocalSessions();
-    const key = `${sessionName}_${activeShift}`;
-    if (!localData[key]) {
-      localData[key] = {
-        sessionName,
-        activeShift,
-        classes: [],
-        rooms: [],
-        evaluationAllotment,
-        marksLocks,
-        createdAt: new Date().toISOString(),
-      };
-    } else {
-      localData[key].evaluationAllotment = evaluationAllotment;
-      localData[key].marksLocks = marksLocks;
-      localData[key].updatedAt = new Date().toISOString();
-    }
+    ['shift_1', 'shift_2'].forEach((sh) => {
+      const k = `${sessionName}_${sh}`;
+      if (!localData[k]) {
+        localData[k] = {
+          sessionName,
+          activeShift: sh,
+          classes: [],
+          rooms: [],
+          evaluationAllotment,
+          marksLocks,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        localData[k].evaluationAllotment = evaluationAllotment;
+        localData[k].marksLocks = marksLocks;
+        localData[k].updatedAt = new Date().toISOString();
+      }
+    });
     writeLocalSessions(localData);
 
     return res.status(200).json({

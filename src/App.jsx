@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
-import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchLiveCopiesAPI, updateStudentCopiesAPI, fetchTeachersAPI, loadExamSessionFromDB } from './services/api';
+import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchLiveCopiesAPI, updateStudentCopiesAPI, fetchTeachersAPI, loadExamSessionFromDB, saveDutyRosterToDB } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
 // Lazy-load heavy components — improves mobile load time significantly
@@ -170,18 +170,27 @@ export default function App() {
 
   const [evaluationTarget, setEvaluationTarget] = useState(null);
 
-  // Automatically persist dutyRoster changes locally so work is never lost
+  // Automatically persist dutyRoster changes locally AND to MongoDB Atlas
   useEffect(() => {
     try {
       if (dutyRoster && Object.keys(dutyRoster).length > 0) {
         localStorage.setItem('exam_duty_roster_v1', JSON.stringify(dutyRoster));
+        // Auto-sync debounce to MongoDB so newly assigned duties are never lost
+        const timer = setTimeout(() => {
+          saveDutyRosterToDB(
+            examDetails?.examName || 'Half_Yearly_2026_27',
+            activeShift,
+            dutyRoster
+          ).catch(() => {});
+        }, 1200);
+        return () => clearTimeout(timer);
       } else {
         localStorage.removeItem('exam_duty_roster_v1');
       }
     } catch (e) {
       console.error('Error saving duty roster to localStorage', e);
     }
-  }, [dutyRoster]);
+  }, [dutyRoster, activeShift, examDetails?.examName]);
 
   // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
   useEffect(() => {
@@ -206,8 +215,8 @@ export default function App() {
           }
           if (s.dutyRoster && Object.keys(s.dutyRoster).length > 0) {
             setDutyRoster((prev) => ({
-              ...prev,
               ...s.dutyRoster,
+              ...prev,
             }));
           }
           if (s.evaluationAllotment && Object.keys(s.evaluationAllotment).length > 0) {
@@ -321,11 +330,12 @@ export default function App() {
     pollLiveAbsentees();
     pollCopies();
 
-    // Polling interval
+    // Polling interval (paused if mobile screen is locked or tab is hidden to save mobile data and battery)
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       pollLiveAbsentees();
       pollCopies();
-    }, 2500);
+    }, 4000);
 
     return () => {
       isSubscribed = false;

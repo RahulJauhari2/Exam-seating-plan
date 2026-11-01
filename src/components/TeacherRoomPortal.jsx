@@ -258,7 +258,15 @@ export default function TeacherRoomPortal({
     
     // Exact shift key for CURRENT active day & shift (e.g. d2_shift_1 or d2_shift_2)
     const exactKey = `${preferredDayId}_${activeShift}`;
-    const alloc = dutyRoster[exactKey];
+    let alloc = dutyRoster[exactKey];
+
+    // Fallback: If not found under exact day, check other day keys for this shift (e.g. d1 vs d2)
+    if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {
+      const altDayKey = preferredDayId === 'd2' ? `d1_${activeShift}` : `d2_${activeShift}`;
+      if (dutyRoster[altDayKey]?.rooms && Object.keys(dutyRoster[altDayKey].rooms).length > 0) {
+        alloc = dutyRoster[altDayKey];
+      }
+    }
 
     // If duty for this specific shift has not been created/published yet
     if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {

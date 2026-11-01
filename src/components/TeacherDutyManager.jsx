@@ -43,7 +43,25 @@ export default function TeacherDutyManager({
   setDutyRoster,
   examDetails
 }) {
-  const [selectedDateId, setSelectedDateId] = useState('d1');
+  const targetDayId = useMemo(() => {
+    if (examDetails?.date) {
+      const match = EXAM_TIMETABLE.find(
+        (d) => d.fullDate === examDetails.date || d.date === examDetails.date || examDetails.date.includes(d.date)
+      );
+      if (match) return match.id;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayMatch = EXAM_TIMETABLE.find((d) => d.fullDate === todayStr || d.date === todayStr);
+    return todayMatch ? todayMatch.id : 'd2';
+  }, [examDetails?.date]);
+
+  const [selectedDateId, setSelectedDateId] = useState(() => targetDayId);
+
+  useEffect(() => {
+    if (targetDayId) {
+      setSelectedDateId(targetDayId);
+    }
+  }, [targetDayId]);
 
   const [isImporting, setIsImporting] = useState(false);
 
@@ -280,13 +298,28 @@ export default function TeacherDutyManager({
       };
     });
 
-    setDutyRoster((prev) => ({
-      ...prev,
+    const updatedRoster = {
+      ...dutyRoster,
       [targetKey]: {
         rooms: roomAssignments,
         relievers: chosenRelievers,
       },
-    }));
+    };
+
+    setDutyRoster(updatedRoster);
+
+    // Immediate DB Sync to MongoDB Atlas so all devices get the duty roster right away
+    saveDutyRosterToDB(
+      examDetails?.examName || 'Half_Yearly_2026_27',
+      activeShift,
+      updatedRoster
+    ).then((res) => {
+      if (res && res.success) {
+        const timeStr = new Date().toLocaleTimeString('hi-IN');
+        setLastSavedTime(timeStr);
+        try { localStorage.setItem('duty_last_db_sync_time', timeStr); } catch {}
+      }
+    }).catch(() => {});
   };
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
@@ -367,11 +400,26 @@ export default function TeacherDutyManager({
     const k1 = `${selectedDay.id}_shift_1`;
     const k2 = `${selectedDay.id}_shift_2`;
 
-    setDutyRoster((prev) => ({
-      ...prev,
+    const updatedRoster = {
+      ...dutyRoster,
       [k1]: { rooms: s1Rooms, relievers: s1Relievers },
       [k2]: { rooms: s2Rooms, relievers: s2Relievers },
-    }));
+    };
+
+    setDutyRoster(updatedRoster);
+
+    // Immediate DB Sync for both shifts to MongoDB Atlas
+    saveDutyRosterToDB(
+      examDetails?.examName || 'Half_Yearly_2026_27',
+      activeShift,
+      updatedRoster
+    ).then((res) => {
+      if (res && res.success) {
+        const timeStr = new Date().toLocaleTimeString('hi-IN');
+        setLastSavedTime(timeStr);
+        try { localStorage.setItem('duty_last_db_sync_time', timeStr); } catch {}
+      }
+    }).catch(() => {});
 
     alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${poolShift1.length} शिक्षक\n• Shift 2 (दोपहर): ${poolShift2.length} फ्रेश शिक्षक (बिना किसी दोहराव के)`);
   };
@@ -384,11 +432,14 @@ export default function TeacherDutyManager({
     if (!window.confirm(`क्या आप ${selectedDay.date} (${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) का ड्यूटी डेटा खाली करना चाहते हैं?`)) {
       return;
     }
-    setDutyRoster((prev) => {
-      const next = { ...prev };
-      delete next[currentAllocKey];
-      return next;
-    });
+    const next = { ...dutyRoster };
+    delete next[currentAllocKey];
+    setDutyRoster(next);
+    saveDutyRosterToDB(
+      examDetails?.examName || 'Half_Yearly_2026_27',
+      activeShift,
+      next
+    ).catch(() => {});
   };
 
   // 2. Completely delete all test duty roster data (All dates & shifts) from state, localStorage & MongoDB Atlas
