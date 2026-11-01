@@ -153,11 +153,13 @@ export default function TeacherRoomPortal({
     }
   };
 
-  // 1. Identify teacher's assigned room from dutyRoster
+  // 1. Identify teacher's assigned room and duty status for the ACTIVE DAY & SHIFT
   const dutyRoster = examSession?.dutyRoster || {};
-  
-  const assignedRoomDefault = useMemo(() => {
-    if (!currentUser || rooms.length === 0) return rooms[0]?.roomName || 'Room 01';
+
+  const currentShiftDutyInfo = useMemo(() => {
+    if (!currentUser) {
+      return { hasDuty: false, isReliever: false, roomName: null, isRosterPublished: false, statusText: 'लॉगिन नहीं हैं' };
+    }
 
     // Find teacher in teachers directory by mobile, id, teacherCode, or name
     const teacherRec = (teachers || []).find(
@@ -169,7 +171,6 @@ export default function TeacherRoomPortal({
         (t.name && currentUser.name && t.name.trim() === currentUser.name.trim())
     );
 
-    // Set of all possible identifier strings for this teacher
     const teacherIdSet = new Set();
     if (currentUser.assignedTeacherId) teacherIdSet.add(String(currentUser.assignedTeacherId));
     if (currentUser.id) teacherIdSet.add(String(currentUser.id));
@@ -185,58 +186,99 @@ export default function TeacherRoomPortal({
       if (teacherRec.name) teacherIdSet.add(String(teacherRec.name).trim());
     }
 
-    // Search across duty roster prioritized by date (e.g. d2 on 02-11-26) and activeShift (e.g. shift_1)
-    const allKeys = Object.keys(dutyRoster);
-    
-    // Determine matching day from activeDate or latest day
+    // Determine target day ID: e.g. 'd2' for 02-11-26
     const matchedDay = (EXAM_TIMETABLE || []).find(
       (d) => d.fullDate === activeDate || d.date === activeDate || (activeDate && activeDate.includes(d.date))
     );
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDay = (EXAM_TIMETABLE || []).find((d) => d.fullDate === todayStr || d.date === todayStr);
-    const preferredDayId = matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (allKeys.some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
+    const preferredDayId = matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (Object.keys(dutyRoster).some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
+    
+    // Exact shift key for CURRENT active day & shift (e.g. d2_shift_1 or d2_shift_2)
     const exactKey = `${preferredDayId}_${activeShift}`;
+    const alloc = dutyRoster[exactKey];
 
-    const activeShiftKeys = allKeys
-      .filter((k) => k.endsWith(activeShift) || k.includes(activeShift))
-      .sort((a, b) => (a === exactKey ? -1 : b === exactKey ? 1 : b.localeCompare(a)));
-    const otherKeys = allKeys
-      .filter((k) => !activeShiftKeys.includes(k))
-      .sort((a, b) => b.localeCompare(a));
-    const searchOrder = [...activeShiftKeys, ...otherKeys];
+    // If duty for this specific shift has not been created/published yet
+    if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {
+      return {
+        hasDuty: false,
+        isReliever: false,
+        roomName: null,
+        isRosterPublished: false,
+        statusText: `${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
+      };
+    }
 
-    for (const key of searchOrder) {
-      const alloc = dutyRoster[key];
-      if (alloc && alloc.rooms) {
-        for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
-          const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
-          const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
-          if (
-            (inv1 && teacherIdSet.has(inv1)) ||
-            (inv2 && teacherIdSet.has(inv2))
-          ) {
-            const foundRoom = rooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
-            if (foundRoom) return foundRoom.roomName;
-          }
+    // Check if invigilator in any room for this shift
+    for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
+      const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
+      const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
+      if (
+        (inv1 && teacherIdSet.has(inv1)) ||
+        (inv2 && teacherIdSet.has(inv2))
+      ) {
+        const foundRoom = rooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
+        const rName = foundRoom ? foundRoom.roomName : rId;
+        return {
+          hasDuty: true,
+          isReliever: false,
+          roomName: rName,
+          role: inv1 && teacherIdSet.has(inv1) ? 'कक्ष निरीक्षक 1' : 'कक्ष निरीक्षक 2',
+          isRosterPublished: true,
+          statusText: rName,
+        };
+      }
+    }
+
+    // Check if reliever in this shift
+    if (alloc.relievers && Array.isArray(alloc.relievers)) {
+      for (const relId of alloc.relievers) {
+        if (teacherIdSet.has(String(relId))) {
+          return {
+            hasDuty: true,
+            isReliever: true,
+            roomName: null,
+            role: 'उड़नदस्ता / रिलीवर',
+            isRosterPublished: true,
+            statusText: 'उड़नदस्ता / रिलीवर ड्यूटी',
+          };
         }
       }
     }
 
-    // Default to first room
-    return rooms[0]?.roomName || 'Room 01';
+    // Duty roster is published for this shift, but teacher is off duty (निरंक)
+    return {
+      hasDuty: false,
+      isReliever: false,
+      roomName: null,
+      isRosterPublished: true,
+      statusText: 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)',
+    };
   }, [currentUser, dutyRoster, rooms, teachers, activeShift, activeDate]);
 
-  const [selectedRoomName, setSelectedRoomName] = useState(assignedRoomDefault);
+  const assignedRoomDefault = useMemo(() => {
+    if (canAccessAllRooms) {
+      return currentShiftDutyInfo.roomName || rooms[0]?.roomName || 'Room 01';
+    }
+    return currentShiftDutyInfo.roomName || null;
+  }, [canAccessAllRooms, currentShiftDutyInfo, rooms]);
+
+  const [selectedRoomName, setSelectedRoomName] = useState(() => {
+    return assignedRoomDefault || (canAccessAllRooms ? rooms[0]?.roomName || 'Room 01' : '');
+  });
 
   useEffect(() => {
-    if (assignedRoomDefault) {
-      setSelectedRoomName(assignedRoomDefault);
+    if (canAccessAllRooms) {
+      setSelectedRoomName(currentShiftDutyInfo.roomName || selectedRoomName || rooms[0]?.roomName || 'Room 01');
+    } else {
+      setSelectedRoomName(currentShiftDutyInfo.roomName || '');
     }
-  }, [assignedRoomDefault, activeShift, canAccessAllRooms]);
+  }, [currentShiftDutyInfo, canAccessAllRooms, activeShift, rooms]);
 
   // Current active room object
   const currentRoom = useMemo(() => {
-    return rooms.find((r) => r.roomName === selectedRoomName) || rooms[0] || null;
+    if (!selectedRoomName) return null;
+    return rooms.find((r) => r.roomName === selectedRoomName) || null;
   }, [rooms, selectedRoomName]);
 
   // Flatten all students in this room
@@ -492,20 +534,24 @@ export default function TeacherRoomPortal({
           <div className={`rounded-xl p-2.5 border ${
             canAccessAllRooms 
               ? 'bg-blue-50/80 border-blue-200' 
-              : 'bg-emerald-50/80 border-emerald-300'
+              : currentShiftDutyInfo.hasDuty
+                ? 'bg-emerald-50/80 border-emerald-300'
+                : 'bg-amber-50/80 border-amber-300'
           }`}>
             <div className="flex items-center justify-between">
               <span className={`block text-[10px] font-bold uppercase tracking-wider ${
-                canAccessAllRooms ? 'text-blue-700' : 'text-emerald-800'
+                canAccessAllRooms ? 'text-blue-700' : currentShiftDutyInfo.hasDuty ? 'text-emerald-800' : 'text-amber-800'
               }`}>
-                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : 'आवंटित परीक्षा कक्ष:'}
+                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : currentShiftDutyInfo.hasDuty ? 'आवंटित परीक्षा कक्ष:' : 'कक्ष ड्यूटी स्थिति:'}
               </span>
-              <span className="text-[9px] font-black bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded" title="आपकी आवंटित ड्यूटी">
-                {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : '🔒 ड्यूटी लॉक'}
+              <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                canAccessAllRooms ? 'bg-blue-200 text-blue-900' : currentShiftDutyInfo.hasDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+              }`} title="आपकी आवंटित ड्यूटी">
+                {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 ड्यूटी लॉक' : 'निरंक'}
               </span>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : 'text-emerald-700'}`} />
+              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : currentShiftDutyInfo.hasDuty ? 'text-emerald-700' : 'text-amber-700'}`} />
               {canAccessAllRooms ? (
                 <select
                   value={selectedRoomName}
@@ -524,7 +570,7 @@ export default function TeacherRoomPortal({
                     );
                   })}
                 </select>
-              ) : (
+              ) : currentShiftDutyInfo.hasDuty ? (
                 <div className="w-full bg-white border border-emerald-400 rounded-lg py-1.5 px-2 text-xs font-black text-emerald-950 flex items-center justify-between shadow-2xs">
                   <span className="flex items-center gap-1">
                     <span>{assignedRoomDefault}</span>
@@ -534,6 +580,13 @@ export default function TeacherRoomPortal({
                   </span>
                   <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
                     🔒 केवल आपका कक्ष
+                  </span>
+                </div>
+              ) : (
+                <div className="w-full bg-white border border-amber-300 rounded-lg py-1.5 px-2 text-xs font-black text-amber-950 flex items-center justify-between shadow-2xs">
+                  <span className="truncate">{currentShiftDutyInfo.statusText}</span>
+                  <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 shrink-0 ml-1">
+                    कोई कक्ष नहीं
                   </span>
                 </div>
               )}
@@ -611,15 +664,45 @@ export default function TeacherRoomPortal({
         </div>
 
         {/* Why multiple classes note */}
-        <div className="mt-3 p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-start gap-2 text-xs text-indigo-900">
-          <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <strong>नकल विहीन परीक्षा (Anti-Adjacent Pairing):</strong> इस कमरे में <strong>{roomClasses.map((c) => c.displayName).join(' एवं ')}</strong> के छात्र एक साथ अगल-बगल बेंच पर बैठे हैं। नीचे सूची को <strong>कक्षा-वार</strong> और <strong>रोल नंबर के बढ़ते क्रम</strong> में व्यवस्थित कर दिया गया है।
+        {currentRoom && roomClasses.length > 0 && (
+          <div className="mt-3 p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-start gap-2 text-xs text-indigo-900">
+            <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong>नकल विहीन परीक्षा (Anti-Adjacent Pairing):</strong> इस कमरे में <strong>{roomClasses.map((c) => c.displayName).join(' एवं ')}</strong> के छात्र एक साथ अगल-बगल बेंच पर बैठे हैं। नीचे सूची को <strong>कक्षा-वार</strong> और <strong>रोल नंबर के बढ़ते क्रम</strong> में व्यवस्थित कर दिया गया है।
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Main Container */}
+      {!canAccessAllRooms && !currentShiftDutyInfo.hasDuty ? (
+        <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-amber-200 shadow-sm p-6 sm:p-8 text-center my-8">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mb-4">
+            <Clock className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
+            {currentShiftDutyInfo.isRosterPublished
+              ? 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)'
+              : `${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 mb-5 max-w-md mx-auto leading-relaxed">
+            {currentShiftDutyInfo.isRosterPublished
+              ? `दिनांक ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} में आपको किसी कक्ष का प्रभार नहीं दिया गया है।`
+              : `कंट्रोल रूम द्वारा ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} की कक्ष ड्यूटी अभी जारी नहीं की गई है। जैसे ही ड्यूटी लगाई जाएगी, आपका कमरा यहाँ स्वतः दिखाई देगा।`}
+          </p>
+
+          <div className="inline-flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold">
+            <span>💡 दूसरी पाली देखने के लिए यहाँ क्लिक करें:</span>
+            <button
+              type="button"
+              onClick={() => handleShiftChange && handleShiftChange(activeShift === 'shift_1' ? 'shift_2' : 'shift_1')}
+              className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-black shadow-xs transition cursor-pointer"
+            >
+              {activeShift === 'shift_1' ? 'Shift 2 (दोपहर) देखें' : 'Shift 1 (सुबह) देखें'}
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="max-w-6xl mx-auto space-y-4">
         
         {/* View Mode Navigation Tabs */}
@@ -1350,25 +1433,28 @@ export default function TeacherRoomPortal({
           </div>
         )}
       </div>
+      )}
 
       {/* Floating Bottom Status Bar */}
-      <div className="fixed bottom-3 inset-x-3 max-w-xl mx-auto bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-30 border border-slate-800 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-            <span className="font-bold text-emerald-300">उपस्थित: {presentCount}</span>
+      {(canAccessAllRooms || currentShiftDutyInfo.hasDuty) && (
+        <div className="fixed bottom-3 inset-x-3 max-w-xl mx-auto bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-30 border border-slate-800 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              <span className="font-bold text-emerald-300">उपस्थित: {presentCount}</span>
+            </div>
+            <span className="text-slate-600">|</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse"></span>
+              <span className="font-bold text-rose-300">अनुपस्थित: {absentCount}</span>
+            </div>
           </div>
-          <span className="text-slate-600">|</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse"></span>
-            <span className="font-bold text-rose-300">अनुपस्थित: {absentCount}</span>
-          </div>
-        </div>
 
-        <div className="text-[11px] text-slate-400">
-          कमरा: <strong className="text-white">{selectedRoomName}</strong>
+          <div className="text-[11px] text-slate-400">
+            कमरा: <strong className="text-white">{selectedRoomName}</strong>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
