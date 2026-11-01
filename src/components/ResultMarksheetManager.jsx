@@ -156,43 +156,6 @@ export default function ResultMarksheetManager({
     }
   }, [subjectConfig]);
 
-  // Available distinct grades from classes in current state
-  const availableGrades = useMemo(() => {
-    const set = new Set();
-    classes.forEach((c) => {
-      if (c.name) set.add(String(c.name).trim());
-    });
-    return Array.from(set).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
-  }, [classes]);
-
-  // Set default grade on mount or shift change
-  useEffect(() => {
-    if (availableGrades.length > 0 && (!selectedGrade || !availableGrades.includes(selectedGrade))) {
-      setSelectedGrade(availableGrades[0]);
-    }
-  }, [availableGrades, selectedGrade]);
-
-  // Available sections for the selected grade
-  const availableSections = useMemo(() => {
-    const list = classes
-      .filter((c) => String(c.name).trim() === selectedGrade)
-      .map((c) => String(c.section).toUpperCase().trim());
-    return Array.from(new Set(list)).sort();
-  }, [classes, selectedGrade]);
-
-  useEffect(() => {
-    if (availableSections.length > 0 && (!selectedSection || !availableSections.includes(selectedSection))) {
-      setSelectedSection(availableSections[0]);
-    }
-  }, [availableSections, selectedSection]);
-
-  // Get active class entry object
-  const currentClassObj = useMemo(() => {
-    return classes.find(
-      (c) => String(c.name).trim() === selectedGrade && String(c.section).toUpperCase().trim() === selectedSection
-    );
-  }, [classes, selectedGrade, selectedSection]);
-
   // Helper to dynamically extract subjects for any grade & section
   const getSubjectsForGradeSection = (grade, section, shift = activeShift) => {
     const subjectsSet = new Map();
@@ -257,11 +220,6 @@ export default function ResultMarksheetManager({
     return Array.from(subjectsSet.values());
   };
 
-  // Dynamically extract subjects for the selected grade & section
-  const gradeSubjects = useMemo(() => {
-    return getSubjectsForGradeSection(selectedGrade, selectedSection, activeShift);
-  }, [selectedGrade, selectedSection, activeShift, subjectConfig]);
-
   // Comprehensive list of all evaluation bundles across all classes
   const allSchoolBundles = useMemo(() => {
     const list = [];
@@ -320,7 +278,7 @@ export default function ResultMarksheetManager({
     if (!currentUser) return [];
     const uName = (currentUser.name || '').trim().toLowerCase();
     const uPhone = (currentUser.phone || '').trim();
-    const uId = String(currentUser.assignedTeacherId || currentUser.id || '');
+    const uId = String(currentUser.assignedTeacherId || currentUser.id || currentUser._id || '');
 
     return allSchoolBundles.filter((b) => {
       if (!b.allotment) return false;
@@ -329,19 +287,104 @@ export default function ResultMarksheetManager({
       const tId = String(b.assignedTeacherId || '');
 
       return (
-        (uPhone && tPhone && uPhone === tPhone) ||
+        (uPhone && tPhone && (uPhone.includes(tPhone) || tPhone.includes(uPhone))) ||
         (uId && tId && uId === tId) ||
         (uName && tName && (uName.includes(tName) || tName.includes(uName)))
       );
     });
   }, [allSchoolBundles, currentUser]);
 
+  // Available distinct grades from classes in current state
+  const availableGrades = useMemo(() => {
+    const set = new Set();
+    classes.forEach((c) => {
+      if (c.name) set.add(String(c.name).trim());
+    });
+    return Array.from(set).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+  }, [classes]);
+
+  // Grades strictly displayed to the active user (Teacher only sees assigned classes)
+  const displayedGrades = useMemo(() => {
+    if (isAdmin) return availableGrades;
+    const set = new Set();
+    myAssignedBundles.forEach((b) => set.add(b.grade));
+    return Array.from(set).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+  }, [isAdmin, availableGrades, myAssignedBundles]);
+
+  // Set default grade on mount or change
+  useEffect(() => {
+    if (displayedGrades.length > 0 && (!selectedGrade || !displayedGrades.includes(selectedGrade))) {
+      setSelectedGrade(displayedGrades[0]);
+    } else if (displayedGrades.length === 0) {
+      setSelectedGrade('');
+    }
+  }, [displayedGrades, selectedGrade]);
+
+  // Available sections for the selected grade (All for Admin)
+  const availableSections = useMemo(() => {
+    const list = classes
+      .filter((c) => String(c.name).trim() === selectedGrade)
+      .map((c) => String(c.section).toUpperCase().trim());
+    return Array.from(new Set(list)).sort();
+  }, [classes, selectedGrade]);
+
+  // Sections strictly displayed to active user (Teacher only sees assigned sections)
+  const displayedSections = useMemo(() => {
+    if (isAdmin) return availableSections;
+    const set = new Set();
+    myAssignedBundles
+      .filter((b) => b.grade === selectedGrade)
+      .forEach((b) => set.add(b.section));
+    return Array.from(set).sort();
+  }, [isAdmin, availableSections, myAssignedBundles, selectedGrade]);
+
+  useEffect(() => {
+    if (displayedSections.length > 0 && (!selectedSection || !displayedSections.includes(selectedSection))) {
+      setSelectedSection(displayedSections[0]);
+    } else if (displayedSections.length === 0) {
+      setSelectedSection('');
+    }
+  }, [displayedSections, selectedSection]);
+
+  // Get active class entry object
+  const currentClassObj = useMemo(() => {
+    return classes.find(
+      (c) => String(c.name).trim() === selectedGrade && String(c.section).toUpperCase().trim() === selectedSection
+    );
+  }, [classes, selectedGrade, selectedSection]);
+
+  // Dynamically extract subjects for the selected grade & section (All for Admin)
+  const gradeSubjects = useMemo(() => {
+    return getSubjectsForGradeSection(selectedGrade, selectedSection, activeShift);
+  }, [selectedGrade, selectedSection, activeShift, subjectConfig]);
+
+  // Subjects strictly displayed to active user (Teacher only sees assigned subjects)
+  const displayedSubjects = useMemo(() => {
+    if (isAdmin) return gradeSubjects;
+    return myAssignedBundles
+      .filter((b) => b.grade === selectedGrade && b.section === selectedSection)
+      .map((b) => ({
+        name: b.subject,
+        code: '',
+        hindiName: b.hindiName || b.subject,
+      }));
+  }, [isAdmin, gradeSubjects, myAssignedBundles, selectedGrade, selectedSection]);
+
   // Set default subject on grade/section change
   useEffect(() => {
-    if (gradeSubjects.length > 0 && (!selectedSubject || !gradeSubjects.some((s) => s.name === selectedSubject))) {
-      setSelectedSubject(gradeSubjects[0].name);
+    if (displayedSubjects.length > 0 && (!selectedSubject || !displayedSubjects.some((s) => s.name === selectedSubject))) {
+      setSelectedSubject(displayedSubjects[0].name);
+    } else if (displayedSubjects.length === 0) {
+      setSelectedSubject('');
     }
-  }, [gradeSubjects, selectedSubject]);
+  }, [displayedSubjects, selectedSubject]);
+
+  // Enforce role-based tab restriction: regular teachers only access 'marks-entry'
+  useEffect(() => {
+    if (!isAdmin && activeSubTab !== 'marks-entry') {
+      setActiveSubTab('marks-entry');
+    }
+  }, [isAdmin, activeSubTab]);
 
   // Get max marks configuration for a specific subject
   const getSubjectMaxMarks = (subName) => {
@@ -614,6 +657,19 @@ export default function ResultMarksheetManager({
   // Update marks for a student in state
   const handleUpdateMarks = (studentKey, subjectName, field, value) => {
     if (isCurrentSubjectLocked && !isAdmin) return;
+
+    // Strict RBAC: regular teachers can only enter marks for their assigned bundles
+    if (!isAdmin) {
+      const sUpper = (subjectName || '').toUpperCase().trim();
+      const isAllowed = myAssignedBundles.some(
+        (b) => b.grade === selectedGrade && b.section === selectedSection && b.subject.toUpperCase() === sUpper
+      );
+      if (!isAllowed) {
+        alert('अनधिकृत: केवल अधिकृत शिक्षक ही इस विषय के अंक भर सकते हैं।');
+        return;
+      }
+    }
+
     const sName = subjectName.toUpperCase().trim();
     const cfg = getSubjectMaxMarks(sName);
     const maxVal = field === 'theory' ? cfg.maxTheory : cfg.maxPractical;
@@ -982,7 +1038,7 @@ export default function ResultMarksheetManager({
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
+          {/* Quick Action Buttons (Admin Only for full excel download) */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => window.print()}
@@ -991,154 +1047,174 @@ export default function ResultMarksheetManager({
               <Printer className="w-4 h-4" />
               <span>प्रिंट (Print)</span>
             </button>
+            {isAdmin && (
+              <button
+                onClick={handleExportToExcel}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>एक्सेल पंजी डाउनलोड</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* If teacher has no assigned bundles */}
+        {!isAdmin && myAssignedBundles.length === 0 ? (
+          <div className="mt-6 p-8 bg-amber-50/70 border border-amber-200 rounded-2xl text-center max-w-2xl mx-auto">
+            <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 shadow-xs">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-black text-amber-950">
+              कोई उत्तर पुस्तिका (कॉपी) आवंटित नहीं है
+            </h3>
+            <p className="text-xs text-amber-800 mt-2 leading-relaxed">
+              नमस्ते <strong>{currentUser?.name || 'शिक्षक'}</strong>! आपको अभी तक प्रधानाचार्य या एग्जाम कोऑर्डिनेटर द्वारा किसी कक्षा या विषय की कॉपी जांचने हेतु आवंटित नहीं की गई है।
+            </p>
+            <p className="text-[11px] text-amber-700/90 mt-2 font-medium">
+              जब प्रधानाचार्य / एडमिन आपको कॉपियां आवंटित करेंगे, केवल वही कक्षाएं और विषय आपके खाते में स्वतः दिखाई देंगे।
+            </p>
+          </div>
+        ) : (
+          /* Dynamic Class, Section & Subject Selector Bar */
+          <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
+            {/* Class Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                कक्षा (Class)
+              </label>
+              <select
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer transition-all"
+              >
+                {displayedGrades.map((g) => (
+                  <option key={g} value={g}>
+                    Class {g}th
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Section Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                सेक्शन (Section)
+              </label>
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer transition-all"
+              >
+                {displayedSections.map((sec) => (
+                  <option key={sec} value={sec}>
+                    Section {sec}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Subject Selector (for Marks Entry Tab) */}
+            {activeSubTab === 'marks-entry' && (
+              <div className="col-span-2 sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  प्रविष्टि हेतु विषय (Subject for Marks Entry)
+                </label>
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-indigo-50/70 hover:bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900 focus:outline-indigo-500 cursor-pointer transition-all"
+                >
+                  {displayedSubjects.map((sub) => (
+                    <option key={sub.name} value={sub.name}>
+                      {sub.name} {sub.hindiName && sub.hindiName !== sub.name ? `(${sub.hindiName})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Student Selector (for Marksheet Tab) */}
+            {activeSubTab === 'marksheet' && (
+              <div className="col-span-2 sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  छात्र चुनें (Select Student)
+                </label>
+                <select
+                  value={selectedStudentRoll}
+                  onChange={(e) => setSelectedStudentRoll(e.target.value)}
+                  disabled={bulkPrintMode}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer disabled:opacity-50"
+                >
+                  {studentsList.map((st) => (
+                    <option key={st.rollNo} value={st.rollNo}>
+                      Roll {st.rollNo} • {st.name} ({st.medium})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Info Badge */}
+            <div className="flex items-end pb-1">
+              <span className="text-xs font-medium text-slate-500">
+                कुल छात्र: <strong className="text-slate-800">{studentsList.length}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Module Sub-tabs - Only accessible for Principal / Admin */}
+        {isAdmin && (
+          <div className="mt-5 flex items-center gap-2 border-b border-slate-200 text-xs font-bold overflow-x-auto">
             <button
-              onClick={handleExportToExcel}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              onClick={() => setActiveSubTab('marks-entry')}
+              className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeSubTab === 'marks-entry'
+                  ? 'border-indigo-600 text-indigo-600 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
             >
-              <Download className="w-4 h-4" />
-              <span>एक्सेल पंजी डाउनलोड</span>
+              <Edit3 className="w-4 h-4" />
+              <span>1. अंक प्रविष्टि ग्रिड (Marks Entry)</span>
             </button>
-          </div>
-        </div>
 
-        {/* Dynamic Class, Section & Subject Selector Bar */}
-        <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
-          {/* Class Selector */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              कक्षा (Class)
-            </label>
-            <select
-              value={selectedGrade}
-              onChange={(e) => setSelectedGrade(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer transition-all"
+            <button
+              onClick={() => setActiveSubTab('result-sheet')}
+              className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeSubTab === 'result-sheet'
+                  ? 'border-indigo-600 text-indigo-600 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
             >
-              {availableGrades.map((g) => (
-                <option key={g} value={g}>
-                  Class {g}th
-                </option>
-              ))}
-            </select>
-          </div>
+              <FileText className="w-4 h-4" />
+              <span>2. कक्षा परीक्षाफल पंजी (Tabulation Register)</span>
+            </button>
 
-          {/* Section Selector */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              सेक्शन (Section)
-            </label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer transition-all"
+            <button
+              onClick={() => setActiveSubTab('marksheet')}
+              className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeSubTab === 'marksheet'
+                  ? 'border-indigo-600 text-indigo-600 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
             >
-              {availableSections.map((sec) => (
-                <option key={sec} value={sec}>
-                  Section {sec}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Award className="w-4 h-4" />
+              <span>3. छात्र अंकतालिका (Report Card / Marksheet)</span>
+            </button>
 
-          {/* Subject Selector (for Marks Entry Tab) */}
-          {activeSubTab === 'marks-entry' && (
-            <div className="col-span-2 sm:col-span-2">
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                प्रविष्टि हेतु विषय (Subject for Marks Entry)
-              </label>
-              <select
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                className="w-full px-3 py-2 bg-indigo-50/70 hover:bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900 focus:outline-indigo-500 cursor-pointer transition-all"
-              >
-                {gradeSubjects.map((sub) => (
-                  <option key={sub.name} value={sub.name}>
-                    {sub.name} {sub.hindiName && sub.hindiName !== sub.name ? `(${sub.hindiName})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+            <button
+              onClick={() => setActiveSubTab('config')}
+              className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeSubTab === 'config'
+                  ? 'border-indigo-600 text-indigo-600 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>4. पूर्णांक व सेटिंग्स (Subject Config)</span>
+            </button>
 
-          {/* Student Selector (for Marksheet Tab) */}
-          {activeSubTab === 'marksheet' && (
-            <div className="col-span-2 sm:col-span-2">
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                छात्र चुनें (Select Student)
-              </label>
-              <select
-                value={selectedStudentRoll}
-                onChange={(e) => setSelectedStudentRoll(e.target.value)}
-                disabled={bulkPrintMode}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-indigo-500 cursor-pointer disabled:opacity-50"
-              >
-                {studentsList.map((st) => (
-                  <option key={st.rollNo} value={st.rollNo}>
-                    Roll {st.rollNo} • {st.name} ({st.medium})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Info Badge */}
-          <div className="flex items-end pb-1">
-            <span className="text-xs font-medium text-slate-500">
-              कुल छात्र: <strong className="text-slate-800">{studentsList.length}</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Module Sub-tabs */}
-        <div className="mt-5 flex items-center gap-2 border-b border-slate-200 text-xs font-bold overflow-x-auto">
-          <button
-            onClick={() => setActiveSubTab('marks-entry')}
-            className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-              activeSubTab === 'marks-entry'
-                ? 'border-indigo-600 text-indigo-600 font-black'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>1. अंक प्रविष्टि ग्रिड (Marks Entry)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('result-sheet')}
-            className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-              activeSubTab === 'result-sheet'
-                ? 'border-indigo-600 text-indigo-600 font-black'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>2. कक्षा परीक्षाफल पंजी (Tabulation Register)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('marksheet')}
-            className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-              activeSubTab === 'marksheet'
-                ? 'border-indigo-600 text-indigo-600 font-black'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Award className="w-4 h-4" />
-            <span>3. छात्र अंकतालिका (Report Card / Marksheet)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('config')}
-            className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-              activeSubTab === 'config'
-                ? 'border-indigo-600 text-indigo-600 font-black'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>4. पूर्णांक व सेटिंग्स (Subject Config)</span>
-          </button>
-
-          {(isAdmin || canToggleLock) && (
             <button
               onClick={() => setActiveSubTab('allotment')}
               className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
@@ -1153,14 +1229,15 @@ export default function ResultMarksheetManager({
                 Master
               </span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* =========================================================================
           TAB 1: MARKS ENTRY GRID (अंक प्रविष्टि ग्रिड)
          ========================================================================= */}
       {activeSubTab === 'marks-entry' && (
+        !isAdmin && myAssignedBundles.length === 0 ? null : (
         <div className="space-y-4 no-print">
           {/* Admin Master Control Notice */}
           {isAdmin && (
@@ -1560,12 +1637,13 @@ export default function ResultMarksheetManager({
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* =========================================================================
           TAB 2: CLASS RESULT SHEET / TABULATION REGISTER (परीक्षाफल पंजी)
          ========================================================================= */}
-      {activeSubTab === 'result-sheet' && (
+      {isAdmin && activeSubTab === 'result-sheet' && (
         <div className="space-y-6">
           {/* Summary KPI Badges (No Print) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 no-print">
@@ -1757,7 +1835,7 @@ export default function ResultMarksheetManager({
       {/* =========================================================================
           TAB 3: STUDENT MARKSHEET / REPORT CARD (अंकतालिका)
          ========================================================================= */}
-      {activeSubTab === 'marksheet' && (
+      {isAdmin && activeSubTab === 'marksheet' && (
         <div className="space-y-6">
           {/* Marksheet Controls Bar (No Print) */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs no-print">
@@ -1986,7 +2064,7 @@ export default function ResultMarksheetManager({
       {/* =========================================================================
           TAB 4: CONFIGURATION & MAX MARKS (पूर्णांक व सेटिंग्स)
          ========================================================================= */}
-      {activeSubTab === 'config' && (
+      {isAdmin && activeSubTab === 'config' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 no-print">
           <div>
             <h3 className="text-base font-black text-slate-800">
@@ -2090,7 +2168,7 @@ export default function ResultMarksheetManager({
       {/* =========================================================================
           TAB 5: EVALUATION ALLOTMENT & LIVE TRACKING (कॉपी आवंटन व लाइव प्रगति)
          ========================================================================= */}
-      {activeSubTab === 'allotment' && (
+      {isAdmin && activeSubTab === 'allotment' && (
         <div className="space-y-5 no-print">
           {/* Header & Metrics Cards */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
