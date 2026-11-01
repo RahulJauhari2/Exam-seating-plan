@@ -54,10 +54,12 @@ export default function ResultMarksheetManager({
   classes = [],
   activeShift = 'shift_1',
   examDetails = {},
-  seatingResult
+  seatingResult,
+  teachers = []
 }) {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'principal' || currentUser?.role === 'coordinator' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isTeacher = currentUser?.role === 'teacher';
   const canToggleLock = isAdmin;
 
   // Storage key for locks
@@ -71,8 +73,21 @@ export default function ResultMarksheetManager({
     }
   });
 
+  // Storage key for Evaluation Allotment (Teacher -> Class Subject)
+  const STORAGE_KEY_ALLOTMENT = 'dynamic_exam_evaluation_allotment_v1';
+  const [evaluationAllotment, setEvaluationAllotment] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ALLOTMENT);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [cloudSaveMessage, setCloudSaveMessage] = useState('');
+  const [allotmentSearch, setAllotmentSearch] = useState('');
+  const [allotmentClassFilter, setAllotmentClassFilter] = useState('all');
 
   useEffect(() => {
     try {
@@ -81,6 +96,14 @@ export default function ResultMarksheetManager({
       console.error('Failed to save marks locks', e);
     }
   }, [marksLocks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ALLOTMENT, JSON.stringify(evaluationAllotment));
+    } catch (e) {
+      console.error('Failed to save evaluation allotment', e);
+    }
+  }, [evaluationAllotment]);
   // Navigation tabs inside result manager
   const [activeSubTab, setActiveSubTab] = useState('marks-entry'); // 'marks-entry', 'result-sheet', 'marksheet', 'config'
 
@@ -170,14 +193,13 @@ export default function ResultMarksheetManager({
     );
   }, [classes, selectedGrade, selectedSection]);
 
-  // Dynamically extract subjects for the selected grade & section
-  const gradeSubjects = useMemo(() => {
+  // Helper to dynamically extract subjects for any grade & section
+  const getSubjectsForGradeSection = (grade, section, shift = activeShift) => {
     const subjectsSet = new Map();
 
-    // 1. Check EXAM_TIMETABLE for this grade across all dates
     EXAM_TIMETABLE.forEach((day) => {
-      const shiftSubs = day[activeShift] || {};
-      const subsForGrade = shiftSubs[selectedGrade] || [];
+      const shiftSubs = day[shift] || {};
+      const subsForGrade = shiftSubs[grade] || [];
       subsForGrade.forEach((sub) => {
         const sName = (sub.name || '').trim().toUpperCase();
         if (sName && !subjectsSet.has(sName)) {
@@ -190,43 +212,34 @@ export default function ResultMarksheetManager({
       });
     });
 
-    // 2. Filter subjects relevant to section stream
-    // For 6th to 8th:
-    // - Section A: Computer
-    // - Section B: Commerce, Art
-    // - Section C: English Medium (Computer)
-    if (['6', '7', '8'].includes(selectedGrade)) {
-      if (selectedSection === 'A') {
+    if (['6', '7', '8'].includes(grade)) {
+      if (section === 'A' || section === 'C') {
         subjectsSet.delete('COMMERCE');
         subjectsSet.delete('ART');
-      } else if (selectedSection === 'B') {
-        // Section B has Commerce and Art, but not Computer
+      } else if (section === 'B') {
         subjectsSet.delete('COMPUTER');
-      } else if (selectedSection === 'C') {
-        subjectsSet.delete('COMMERCE');
-        subjectsSet.delete('ART');
       }
-    } else if (['9', '10'].includes(selectedGrade)) {
-      if (selectedSection === 'A' || selectedSection === 'E') {
+    } else if (['9', '10'].includes(grade)) {
+      if (section === 'A' || section === 'E') {
         subjectsSet.delete('COMMERCE');
         subjectsSet.delete('ART');
-      } else if (selectedSection === 'B') {
+      } else if (section === 'B') {
         subjectsSet.delete('COMMERCE');
         subjectsSet.delete('COMPUTER');
-      } else if (selectedSection === 'C') {
+      } else if (section === 'C') {
         subjectsSet.delete('ART');
         subjectsSet.delete('COMPUTER');
       }
-    } else if (['11', '12'].includes(selectedGrade)) {
-      if (selectedSection === 'A' || selectedSection === 'E') {
+    } else if (['11', '12'].includes(grade)) {
+      if (section === 'A' || section === 'E') {
         subjectsSet.delete('BIOLOGY');
         subjectsSet.delete('ACCOUNTANCY');
         subjectsSet.delete('BUSS. STUDY');
-      } else if (selectedSection === 'B') {
+      } else if (section === 'B') {
         subjectsSet.delete('MATH');
         subjectsSet.delete('ACCOUNTANCY');
         subjectsSet.delete('BUSS. STUDY');
-      } else if (selectedSection === 'C') {
+      } else if (section === 'C') {
         subjectsSet.delete('MATH');
         subjectsSet.delete('BIOLOGY');
         subjectsSet.delete('PHYSICS');
@@ -234,7 +247,6 @@ export default function ResultMarksheetManager({
       }
     }
 
-    // Also include any custom subjects configured in subjectConfig
     Object.keys(subjectConfig).forEach((customSub) => {
       const up = customSub.toUpperCase();
       if (!subjectsSet.has(up)) {
@@ -243,7 +255,86 @@ export default function ResultMarksheetManager({
     });
 
     return Array.from(subjectsSet.values());
+  };
+
+  // Dynamically extract subjects for the selected grade & section
+  const gradeSubjects = useMemo(() => {
+    return getSubjectsForGradeSection(selectedGrade, selectedSection, activeShift);
   }, [selectedGrade, selectedSection, activeShift, subjectConfig]);
+
+  // Comprehensive list of all evaluation bundles across all classes
+  const allSchoolBundles = useMemo(() => {
+    const list = [];
+    classes.forEach((c) => {
+      const g = String(c.name).trim();
+      const s = String(c.section).toUpperCase().trim();
+      const subs = getSubjectsForGradeSection(g, s, activeShift);
+      const studentCount = Number(c.totalStudents) || (c.studentList ? c.studentList.length : 0) || 0;
+
+      subs.forEach((sub) => {
+        const bKey = `${g}_${s}_${sub.name}`;
+        const allot = evaluationAllotment[bKey] || null;
+        const lock = marksLocks[bKey] || null;
+
+        let enteredCount = 0;
+        if (c.studentList && c.studentList.length > 0) {
+          c.studentList.forEach((st) => {
+            const roll = st.rollNo;
+            const m = marksData[`${g}_${s}_${roll}`]?.[sub.name];
+            if (m && (m.theory !== '' || m.practical !== '')) enteredCount++;
+          });
+        } else {
+          const start = Number(c.startRoll) || 1;
+          for (let i = 0; i < studentCount; i++) {
+            const roll = start + i;
+            const m = marksData[`${g}_${s}_${roll}`]?.[sub.name];
+            if (m && (m.theory !== '' || m.practical !== '')) enteredCount++;
+          }
+        }
+
+        list.push({
+          key: bKey,
+          grade: g,
+          section: s,
+          subject: sub.name,
+          hindiName: sub.hindiName || sub.name,
+          totalStudents: studentCount,
+          enteredCount,
+          progressPercent: studentCount > 0 ? Math.round((enteredCount / studentCount) * 100) : 0,
+          allotment: allot,
+          assignedTeacherName: allot?.teacherName || '',
+          assignedTeacherPhone: allot?.teacherPhone || '',
+          assignedTeacherId: allot?.teacherId || '',
+          isLocked: Boolean(lock?.isLocked),
+          lockedBy: lock?.lockedBy || '',
+          lockedAt: lock?.lockedAt || '',
+          roleLocked: lock?.role || (lock?.isLocked ? 'teacher' : ''),
+        });
+      });
+    });
+    return list;
+  }, [classes, activeShift, subjectConfig, evaluationAllotment, marksLocks, marksData]);
+
+  // Evaluator's own assigned bundles when logged in as teacher
+  const myAssignedBundles = useMemo(() => {
+    if (!currentUser) return [];
+    const uName = (currentUser.name || '').trim().toLowerCase();
+    const uPhone = (currentUser.phone || '').trim();
+    const uId = String(currentUser.assignedTeacherId || currentUser.id || '');
+
+    return allSchoolBundles.filter((b) => {
+      if (!b.allotment) return false;
+      const tName = (b.assignedTeacherName || '').trim().toLowerCase();
+      const tPhone = (b.assignedTeacherPhone || '').trim();
+      const tId = String(b.assignedTeacherId || '');
+
+      return (
+        (uPhone && tPhone && uPhone === tPhone) ||
+        (uId && tId && uId === tId) ||
+        (uName && tName && (uName.includes(tName) || tName.includes(uName)))
+      );
+    });
+  }, [allSchoolBundles, currentUser]);
 
   // Set default subject on grade/section change
   useEffect(() => {
@@ -328,11 +419,17 @@ export default function ResultMarksheetManager({
     }
   }, [studentsList, selectedStudentRoll]);
 
-  // Current subject lock status
+  // Current subject lock status & metadata
   const currentLockKey = `${selectedGrade}_${selectedSection}_${selectedSubject}`;
-  const isCurrentSubjectLocked = Boolean(marksLocks[currentLockKey]?.isLocked);
+  const currentLockInfo = marksLocks[currentLockKey] || null;
+  const isCurrentSubjectLocked = Boolean(currentLockInfo?.isLocked);
+  const isLockedByTeacher = isCurrentSubjectLocked && currentLockInfo?.role === 'teacher';
+  const isLockedByAdmin = isCurrentSubjectLocked && currentLockInfo?.role !== 'teacher';
 
-  // Toggle lock handler
+  // Current allotment info for the selected bundle
+  const currentBundleAllotment = evaluationAllotment[currentLockKey] || null;
+
+  // Toggle lock handler (Admin / Master)
   const handleToggleLock = async () => {
     if (!canToggleLock) return;
     const nowLocked = !isCurrentSubjectLocked;
@@ -341,6 +438,7 @@ export default function ResultMarksheetManager({
       [currentLockKey]: {
         isLocked: nowLocked,
         lockedBy: currentUser?.name || 'Admin',
+        role: 'admin',
         lockedAt: new Date().toISOString(),
       },
     };
@@ -358,6 +456,143 @@ export default function ResultMarksheetManager({
         setIsCloudSaving(false);
       }
     }
+  };
+
+  // Teacher Submit & Lock
+  const handleTeacherSubmitAndLock = async () => {
+    if (!window.confirm(`क्या आप कक्षा ${selectedGrade}-${selectedSection} के विषय [${selectedSubject}] के सभी प्राप्तांक सबमिट और लॉक करना चाहते हैं?\n\nलॉक होने के बाद आप इसमें कोई बदलाव नहीं कर सकेंगे (केवल प्रधानाचार्य ही संसोधन हेतु अनलॉक कर सकेंगे)।`)) {
+      return;
+    }
+    const updated = {
+      ...marksLocks,
+      [currentLockKey]: {
+        isLocked: true,
+        lockedBy: currentUser?.name || 'शिक्षक',
+        role: 'teacher',
+        lockedAt: new Date().toISOString(),
+      },
+    };
+    setMarksLocks(updated);
+    setIsCloudSaving(true);
+    try {
+      await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      setCloudSaveMessage('अंक सफलतापूर्वक सबमिट व लॉक किए गए!');
+      setTimeout(() => setCloudSaveMessage(''), 4000);
+      alert('अंक सफलतापूर्वक सबमिट और लॉक कर दिए गए हैं!');
+    } catch (err) {
+      console.error('Error saving locked marks to MongoDB:', err);
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  // Admin Unlock (to let teacher edit again)
+  const handleAdminUnlock = async () => {
+    if (!window.confirm(`क्या आप कक्षा ${selectedGrade}-${selectedSection} के विषय [${selectedSubject}] को संसोधन हेतु अनलॉक करना चाहते हैं?`)) {
+      return;
+    }
+    const updated = {
+      ...marksLocks,
+      [currentLockKey]: {
+        isLocked: false,
+        unlockedBy: currentUser?.name || 'Admin',
+        unlockedAt: new Date().toISOString(),
+      },
+    };
+    setMarksLocks(updated);
+    setIsCloudSaving(true);
+    try {
+      await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      setCloudSaveMessage('विषय अनलॉक किया गया!');
+      setTimeout(() => setCloudSaveMessage(''), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  // Teacher Assignment Handler (by Admin)
+  const handleAssignTeacher = (bundleKey, teacherId) => {
+    if (!isAdmin) return;
+    const tObj = teachers.find((t) => String(t._id || t.id || t.teacherCode) === String(teacherId));
+    setEvaluationAllotment((prev) => {
+      const updated = { ...prev };
+      if (tObj) {
+        updated[bundleKey] = {
+          teacherId: tObj._id ? tObj._id.toString() : tObj.id,
+          teacherName: tObj.name,
+          teacherPhone: tObj.mobile || tObj.phone || '',
+          assignedAt: new Date().toISOString(),
+        };
+      } else {
+        delete updated[bundleKey];
+      }
+      return updated;
+    });
+  };
+
+  // Smart 1-click Auto Allot
+  const handleAutoAllotTeachers = () => {
+    if (!teachers || teachers.length === 0) {
+      alert('कोई शिक्षक सूची उपलब्ध नहीं है।');
+      return;
+    }
+    if (!window.confirm('क्या आप उपलब्ध शिक्षकों के आधार पर सभी विषयों का 1-क्लिक ऑटो-आवंटन करना चाहते हैं?')) {
+      return;
+    }
+
+    setEvaluationAllotment((prev) => {
+      const newAllotment = { ...prev };
+      let assignedCount = 0;
+
+      allSchoolBundles.forEach((b, idx) => {
+        if (!newAllotment[b.key]) {
+          const subUpper = b.subject.toUpperCase();
+          const matchedTeacher = teachers.find((t) => {
+            const tSub = (t.subject || '').toUpperCase();
+            return tSub && (subUpper.includes(tSub) || tSub.includes(subUpper));
+          }) || teachers[idx % teachers.length];
+
+          if (matchedTeacher) {
+            newAllotment[b.key] = {
+              teacherId: matchedTeacher._id ? matchedTeacher._id.toString() : matchedTeacher.id,
+              teacherName: matchedTeacher.name,
+              teacherPhone: matchedTeacher.mobile || matchedTeacher.phone || '',
+              assignedAt: new Date().toISOString(),
+            };
+            assignedCount++;
+          }
+        }
+      });
+
+      alert(`सफलतापूर्वक ${assignedCount} विषय बंडलों का शिक्षकों को आवंटन किया गया!`);
+      return newAllotment;
+    });
+  };
+
+  // Export Allotment Report to Excel
+  const handleExportAllotmentReport = () => {
+    const data = allSchoolBundles.map((b, idx) => ({
+      'क्र० सं०': idx + 1,
+      'कक्षा': b.grade,
+      'सेक्शन': b.section,
+      'विषय (Subject)': b.subject,
+      'विषय (हिन्दी)': b.hindiName || b.subject,
+      'कुल कॉपियां (Total Copies)': b.totalStudents,
+      'जांची गई (Checked)': b.enteredCount,
+      'प्रगति (%)': `${b.progressPercent}%`,
+      'आवंटित परीक्षक (Assigned Teacher)': b.assignedTeacherName || 'आवंटित नहीं',
+      'शिक्षक का फोन': b.assignedTeacherPhone || '—',
+      'स्थिति (Status)': b.isLocked ? `लॉक (${b.roleLocked === 'admin' ? 'प्रधानाचार्य' : 'शिक्षक'})` : (b.enteredCount > 0 ? 'प्रगति पर' : 'लंबित'),
+      'लॉक कर्ता': b.lockedBy || '—',
+      'लॉक समय': b.lockedAt ? new Date(b.lockedAt).toLocaleString('hi-IN') : '—',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Evaluation_Allotment');
+    XLSX.writeFile(wb, `Evaluation_Duty_Allotment_Report_${Date.now()}.xlsx`);
   };
 
   // Manual save to cloud handler
@@ -902,6 +1137,23 @@ export default function ResultMarksheetManager({
             <Settings className="w-4 h-4" />
             <span>4. पूर्णांक व सेटिंग्स (Subject Config)</span>
           </button>
+
+          {(isAdmin || canToggleLock) && (
+            <button
+              onClick={() => setActiveSubTab('allotment')}
+              className={`pb-3 px-3.5 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeSubTab === 'allotment'
+                  ? 'border-indigo-600 text-indigo-600 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>5. कॉपी मूल्यांकन आवंटन व प्रगति (Evaluation Allotment)</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-100 text-indigo-800 font-black">
+                Master
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -910,100 +1162,230 @@ export default function ResultMarksheetManager({
          ========================================================================= */}
       {activeSubTab === 'marks-entry' && (
         <div className="space-y-4 no-print">
+          {/* Admin Master Control Notice */}
+          {isAdmin && (
+            <div className="bg-slate-900 text-white rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md border border-slate-800">
+              <div className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-sm shrink-0 border border-amber-400/30">
+                  👑
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-amber-300 text-xs sm:text-sm tracking-wide">
+                      प्रधानाचार्य / कोऑर्डिनेटर मास्टर कंट्रोल (Master Access)
+                    </span>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                      सार्वभौमिक अधिकार
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    आप किसी भी कक्षा व विषय के अंक भर सकते हैं, संसोधन कर सकते हैं तथा किसी भी शिक्षक हेतु विषय को अनलॉक अथवा फाइनल लॉक कर सकते हैं।
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveSubTab('allotment')}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>कॉपी आवंटन व लाइव प्रगति</span>
+              </button>
+            </div>
+          )}
+
+          {/* Teacher Assigned Bundles Quick Access (When Teacher logs in) */}
+          {isTeacher && myAssignedBundles.length > 0 && (
+            <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-slate-50 border border-indigo-200 rounded-2xl p-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-indigo-700 shrink-0" />
+                  <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                    आपकी आवंटित उत्तर पुस्तिकाएं (Your Assigned Copies)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-600 text-white font-black">
+                    {myAssignedBundles.length} बंडल
+                  </span>
+                </div>
+                <span className="text-xs text-slate-600">
+                  परीक्षक: <strong className="text-slate-900">{currentUser?.name}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {myAssignedBundles.map((b) => {
+                  const isSelected = selectedGrade === b.grade && selectedSection === b.section && selectedSubject === b.subject;
+                  return (
+                    <button
+                      key={b.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGrade(b.grade);
+                        setSelectedSection(b.section);
+                        setSelectedSubject(b.subject);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-white border-indigo-600 ring-2 ring-indigo-400/30 shadow-sm'
+                          : 'bg-white/80 hover:bg-white border-slate-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-black text-slate-900">
+                          कक्षा {b.grade}-{b.section}
+                        </span>
+                        {b.isLocked ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5">
+                            <Lock className="w-2.5 h-2.5" /> सबमिट
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            {b.enteredCount}/{b.totalStudents} जांची
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-bold text-indigo-700 truncate">
+                        {b.subject} {b.hindiName && b.hindiName !== b.subject ? `(${b.hindiName})` : ''}
+                      </div>
+                      <div className="mt-2 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            b.isLocked ? 'bg-emerald-500' : 'bg-indigo-600'
+                          }`}
+                          style={{ width: `${b.progressPercent}%` }}
+                        ></div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Quick Toolbar */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-xs font-bold text-slate-700">
-                वर्तमान विषय: <span className="text-indigo-600 font-black">{selectedSubject}</span>
+                विषय: <span className="text-indigo-600 font-black">{selectedSubject}</span>
               </span>
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-100 font-bold text-slate-600">
                 थ्योरी: {currentSubjectConfig.maxTheory} अंक
               </span>
               {currentSubjectConfig.maxPractical > 0 && (
                 <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-100 font-bold text-slate-600">
-                  प्रोजेक्ट/प्रायोगिक: {currentSubjectConfig.maxPractical} अंक
+                  प्रायोगिक: {currentSubjectConfig.maxPractical} अंक
+                </span>
+              )}
+              {currentBundleAllotment && (
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 font-bold text-indigo-800">
+                  परीक्षक: {currentBundleAllotment.teacherName}
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={handleGenerateDemoMarks}
-                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-indigo-200 transition-all cursor-pointer"
-                title="परीक्षण हेतु सभी विषयों में डेमो अंक भरें"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>डेमो अंक भरें (Auto Demo)</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={handleGenerateDemoMarks}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-indigo-200 transition-all cursor-pointer"
+                  title="परीक्षण हेतु सभी विषयों में डेमो अंक भरें"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>डेमो अंक भरें (Auto Demo)</span>
+                </button>
+              )}
 
-              <label className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition-all cursor-pointer">
-                <Upload className="w-3.5 h-3.5" />
-                <span>एक्सेल से अंक भरें</span>
-                <input
-                  type="file"
-                  accept=".xlsx, .xls, .csv"
-                  onChange={handleImportMarksExcel}
-                  className="hidden"
-                />
-              </label>
+              {isAdmin && (
+                <label className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition-all cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>एक्सेल से अंक भरें</span>
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls, .csv"
+                    onChange={handleImportMarksExcel}
+                    className="hidden"
+                  />
+                </label>
+              )}
 
               <button
                 type="button"
                 onClick={handleSaveToCloud}
                 disabled={isCloudSaving}
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer"
-                title="प्राप्तांक सुरक्षित करें"
+                title="प्राप्तांक क्लाउड पर सुरक्षित करें"
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>{isCloudSaving ? 'सेविंग...' : cloudSaveMessage || 'क्लाउड सेव'}</span>
               </button>
 
-              {/* Lock / Unlock Toggle Button */}
-              {isCurrentSubjectLocked ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="px-2.5 py-1 bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5 text-rose-700" />
-                    <span>डाटा लॉक है</span>
+              {/* Teacher Submit & Lock Button (When logged in as regular teacher) */}
+              {isTeacher && !isAdmin && (
+                isCurrentSubjectLocked ? (
+                  <span className="px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-black flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>सबमिट व लॉक है</span>
                   </span>
-                  {canToggleLock && (
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleTeacherSubmitAndLock}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                    title="कॉपी चेकिंग पूर्ण होने पर सबमिट व लॉक करें"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>सबमिट व लॉक करें (Submit & Freeze)</span>
+                  </button>
+                )
+              )}
+
+              {/* Admin Lock / Unlock Controls */}
+              {isAdmin && (
+                isCurrentSubjectLocked ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-rose-700" />
+                      <span>{isLockedByTeacher ? 'शिक्षक द्वारा सबमिट' : 'एडमिन द्वारा लॉक'}</span>
+                    </span>
                     <button
                       type="button"
-                      onClick={handleToggleLock}
-                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-xs transition cursor-pointer"
-                      title="एडमिन द्वारा अनलॉक करें"
+                      onClick={handleAdminUnlock}
+                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-xs transition cursor-pointer flex items-center gap-1"
+                      title="शिक्षक को संसोधन की अनुमति देने हेतु अनलॉक करें"
                     >
-                      अनलॉक करें (Unlock)
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>अनलॉक करें</span>
                     </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
-                    <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>प्रविष्टि खुली है</span>
-                  </span>
-                  {canToggleLock && (
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                      <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>प्रविष्टि खुली है</span>
+                    </span>
                     <button
                       type="button"
                       onClick={handleToggleLock}
                       className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
-                      title="कॉपी चेकिंग उपरांत डाटा लॉक करें"
+                      title="कॉपी चेकिंग उपरांत डेटा लॉक करें"
                     >
                       <Lock className="w-3.5 h-3.5" />
                       <span>डाटा लॉक करें</span>
                     </button>
-                  )}
-                </div>
+                  </div>
+                )
               )}
 
-              <button
-                onClick={handleClearCurrentClassMarks}
-                disabled={isCurrentSubjectLocked && !isAdmin}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer disabled:opacity-40"
-                title="अंक मिटाएं"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={handleClearCurrentClassMarks}
+                  disabled={isCurrentSubjectLocked && !isAdmin}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer disabled:opacity-40"
+                  title="अंक मिटाएं"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -1013,13 +1395,13 @@ export default function ResultMarksheetManager({
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
-                  🔒 <strong>डेटा लॉक (Frozen):</strong> कक्षा {selectedGrade} ({selectedSection}) के <strong>{selectedSubject}</strong> के अंक <strong>{marksLocks[currentLockKey]?.lockedBy || 'एडमिन'}</strong> द्वारा लॉक कर दिए गए हैं। अब कोई शिक्षक इसमें बदलाव नहीं कर सकता।
+                  🔒 <strong>डेटा लॉक (Frozen):</strong> कक्षा {selectedGrade} ({selectedSection}) के <strong>{selectedSubject}</strong> के अंक <strong>{currentLockInfo?.lockedBy || 'परीक्षक'}</strong> द्वारा {currentLockInfo?.lockedAt ? new Date(currentLockInfo.lockedAt).toLocaleDateString('hi-IN') : ''} को लॉक कर दिए गए हैं। {isAdmin ? ' (प्रधानाचार्य मास्टर मोड में आप अभी भी नंबर बदल सकते हैं या अनलॉक कर सकते हैं)' : 'यदि कोई संशोधन करना है तो कृपया प्रधानाचार्य / कोऑर्डिनेटर से अनलॉक कराएं।'}
                 </span>
               </div>
-              {canToggleLock && (
+              {isAdmin && (
                 <button
                   type="button"
-                  onClick={handleToggleLock}
+                  onClick={handleAdminUnlock}
                   className="ml-3 px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-black shadow-xs shrink-0 cursor-pointer"
                 >
                   अनलॉक करें (Unlock)
@@ -1701,6 +2083,278 @@ export default function ResultMarksheetManager({
             >
               डिफ़ॉल्ट पूर्णांक पर रीसेट करें
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 5: EVALUATION ALLOTMENT & LIVE TRACKING (कॉपी आवंटन व लाइव प्रगति)
+         ========================================================================= */}
+      {activeSubTab === 'allotment' && (
+        <div className="space-y-5 no-print">
+          {/* Header & Metrics Cards */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                    कॉपी मूल्यांकन आवंटन व लाइव प्रगति ट्रैकिंग (Evaluation Duty Allotment)
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-50 border border-indigo-200 text-indigo-700">
+                    Master Console
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  प्रधानाचार्य / कोऑर्डिनेटर द्वारा विषय अध्यापकों को कॉपियां आवंटित करें, लाइव जांच प्रगति देखें और डाटा लॉक प्रबंधित करें।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleAutoAllotTeachers}
+                  className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  title="शिक्षकों के विषय अनुसार स्वतः आवंटन करें"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>⚡ 1-क्लिक ऑटो आवंटन (Auto Allot)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportAllotmentReport}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  title="एक्सेल में पूरी रिपोर्ट डाउनलोड करें"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>आवंटन रिपोर्ट (Excel)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Metrics Overview */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-slate-500 block">कुल विषय बंडल (Bundles)</span>
+                <span className="text-2xl font-black text-slate-900 mt-1 block">
+                  {allSchoolBundles.length}
+                </span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">समस्त कक्षा 6 से 12</span>
+              </div>
+
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-indigo-700 block">आवंटित बंडल (Assigned)</span>
+                <span className="text-2xl font-black text-indigo-900 mt-1 block">
+                  {allSchoolBundles.filter((b) => b.allotment).length}
+                </span>
+                <span className="text-[10px] text-indigo-600 mt-0.5 block">
+                  {allSchoolBundles.length > 0 ? Math.round((allSchoolBundles.filter((b) => b.allotment).length / allSchoolBundles.length) * 100) : 0}% कवर्ड
+                </span>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-emerald-700 block">जांच पूर्ण व लॉक (Locked)</span>
+                <span className="text-2xl font-black text-emerald-900 mt-1 block">
+                  {allSchoolBundles.filter((b) => b.isLocked).length}
+                </span>
+                <span className="text-[10px] text-emerald-600 mt-0.5 block">अंक फ्रीज एवं सुरक्षित</span>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-amber-700 block">प्रगति पर / बाकी (Pending)</span>
+                <span className="text-2xl font-black text-amber-900 mt-1 block">
+                  {allSchoolBundles.filter((b) => !b.isLocked).length}
+                </span>
+                <span className="text-[10px] text-amber-600 mt-0.5 block">जांच कार्य जारी</span>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-xs font-bold text-slate-600">कक्षा फ़िल्टर:</label>
+                <select
+                  value={allotmentClassFilter}
+                  onChange={(e) => setAllotmentClassFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
+                >
+                  <option value="all">सभी कक्षाएं (All Classes)</option>
+                  {availableGrades.map((g) => (
+                    <option key={g} value={g}>
+                      Class {g}th
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={allotmentSearch}
+                  onChange={(e) => setAllotmentSearch(e.target.value)}
+                  placeholder="विषय या शिक्षक का नाम खोजें..."
+                  className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 w-full sm:w-64 focus:outline-indigo-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Allotment & Tracking Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-black uppercase text-[11px] tracking-wider">
+                    <th className="px-4 py-3 w-14 text-center">क्र०</th>
+                    <th className="px-4 py-3 w-28 text-center">कक्षा व सेक्शन</th>
+                    <th className="px-4 py-3">विषय (Subject Name)</th>
+                    <th className="px-4 py-3 w-28 text-center">कुल कॉपियां</th>
+                    <th className="px-4 py-3 w-40 text-center">जांच प्रगति (Progress)</th>
+                    <th className="px-4 py-3 w-64">आवंटित परीक्षक शिक्षक (Evaluator)</th>
+                    <th className="px-4 py-3 w-32 text-center">स्थिति</th>
+                    <th className="px-4 py-3 w-40 text-center">एक्शन</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allSchoolBundles
+                    .filter((b) => {
+                      if (allotmentClassFilter !== 'all' && b.grade !== allotmentClassFilter) return false;
+                      if (allotmentSearch.trim()) {
+                        const q = allotmentSearch.toLowerCase().trim();
+                        const sMatch = b.subject.toLowerCase().includes(q) || (b.hindiName && b.hindiName.toLowerCase().includes(q));
+                        const tMatch = b.assignedTeacherName && b.assignedTeacherName.toLowerCase().includes(q);
+                        if (!sMatch && !tMatch) return false;
+                      }
+                      return true;
+                    })
+                    .map((b, idx) => (
+                      <tr key={b.key} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-4 py-3 text-center font-bold text-slate-400">
+                          {idx + 1}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="px-2 py-0.5 rounded-md font-mono font-black text-xs bg-slate-100 text-slate-800 border border-slate-200">
+                            Class {b.grade}-{b.section}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-800">
+                          {b.subject}
+                          {b.hindiName && b.hindiName !== b.subject && (
+                            <span className="block text-[11px] font-normal text-slate-500">
+                              {b.hindiName}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
+                          {b.totalStudents}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-between gap-1 text-[11px] font-bold text-slate-600 mb-1">
+                            <span>{b.enteredCount}/{b.totalStudents}</span>
+                            <span className={b.progressPercent === 100 ? 'text-emerald-700' : 'text-indigo-700'}>
+                              {b.progressPercent}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                b.isLocked ? 'bg-emerald-500' : b.progressPercent === 100 ? 'bg-blue-600' : 'bg-indigo-600'
+                              }`}
+                              style={{ width: `${b.progressPercent}%` }}
+                            ></div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={b.allotment?.teacherId || ''}
+                            onChange={(e) => handleAssignTeacher(b.key, e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 cursor-pointer focus:outline-indigo-500"
+                          >
+                            <option value="">— शिक्षक चुनें (Unassigned) —</option>
+                            {teachers.map((t) => {
+                              const tId = t._id ? t._id.toString() : t.id;
+                              return (
+                                <option key={tId} value={tId}>
+                                  {t.name} {t.subject ? `[${t.subject}]` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {b.assignedTeacherPhone && (
+                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                              📞 {b.assignedTeacherPhone}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {b.isLocked ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              <span>{b.roleLocked === 'admin' ? 'फाइनल लॉक' : 'शिक्षक लॉक'}</span>
+                            </span>
+                          ) : b.enteredCount > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              प्रगति पर
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                              शुरू नहीं
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedGrade(b.grade);
+                                setSelectedSection(b.section);
+                                setSelectedSubject(b.subject);
+                                setActiveSubTab('marks-entry');
+                              }}
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                              title="इस विषय के प्राप्तांक भरें अथवा देखें"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>अंक भरें</span>
+                            </button>
+
+                            {b.isLocked ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedGrade(b.grade);
+                                  setSelectedSection(b.section);
+                                  setSelectedSubject(b.subject);
+                                  handleAdminUnlock();
+                                }}
+                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition cursor-pointer"
+                                title="अनलॉक करें"
+                              >
+                                <Unlock className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedGrade(b.grade);
+                                  setSelectedSection(b.section);
+                                  setSelectedSubject(b.subject);
+                                  handleToggleLock();
+                                }}
+                                className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition cursor-pointer"
+                                title="डेटा लॉक करें"
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

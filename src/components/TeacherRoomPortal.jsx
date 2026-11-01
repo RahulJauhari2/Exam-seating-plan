@@ -46,6 +46,7 @@ export default function TeacherRoomPortal({
   onUpdateBCopy,
   onLogout,
   onSwitchToAdminView,
+  onGoToEvaluation,
 }) {
   const { currentUser, canAccessAllRooms } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -512,6 +513,16 @@ export default function TeacherRoomPortal({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2">
+            {onGoToEvaluation && (
+              <button
+                onClick={onGoToEvaluation}
+                className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold border border-indigo-500/30 shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                title="आवंटित कॉपियों के अंक भरें"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>कॉपी जांच व अंक भरें</span>
+              </button>
+            )}
             {canAccessAllRooms && (
               <button
                 onClick={onSwitchToAdminView}

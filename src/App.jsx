@@ -716,6 +716,7 @@ export default function App() {
                 onUpdateBCopy={handleUpdateBCopy}
                 onLogout={logout}
                 onSwitchToAdminView={() => setActiveTab('main-gate')}
+                onGoToEvaluation={() => setActiveTab('result-marksheet')}
               />
             )
           )}
@@ -767,6 +768,7 @@ export default function App() {
                 activeShift={activeShift}
                 examDetails={examDetails}
                 seatingResult={seatingResult}
+                teachers={teachers}
               />
             )
           )}
