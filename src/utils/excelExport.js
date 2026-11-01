@@ -164,3 +164,117 @@ export function exportTeachersToExcel(teachersList) {
   const fileName = `Teachers_Directory_ABVIC_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
+
+/**
+ * Exports Re-Exam Candidate List and Subject Paper Demand to Excel
+ */
+export function exportReExamListToExcel({ reExamCandidates = [], subjectWiseCounts = [] }, examDetails = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  // 1. Sheet: Re-exam Student Candidates
+  const candidateRows = reExamCandidates.map((c, idx) => ({
+    'क्र.सं. (S.No)': idx + 1,
+    'रोल नंबर (Roll No)': c.rollNo,
+    'छात्र का नाम (Student Name)': c.studentName || '—',
+    'कक्षा (Class)': c.className || '',
+    'वर्ग (Section)': c.section || '',
+    'छूटे हुए विषय (Missed Subjects)': (c.missedSubjects || []).join(', ') || '—',
+    'छूटी हुई परीक्षा तिथियां (Missed Dates)': (c.missedDates || []).join(', ') || '—',
+    'कुल छूटे प्रश्न-पत्र (Papers Count)': c.totalMissed || (c.missedDates || []).length || 1,
+    'पुनः परीक्षा पात्रता (Eligibility)': 'पात्र (ELIGIBLE FOR RE-EXAM)',
+  }));
+
+  const candidateWs = XLSX.utils.json_to_sheet(
+    candidateRows.length > 0 ? candidateRows : [{ 'विवरण': 'कोई भी छात्र री-एग्जाम हेतु पात्र नहीं है (शून्य अनुपस्थिति)' }]
+  );
+  XLSX.utils.book_append_sheet(workbook, candidateWs, 'री-एग्जाम परीक्षार्थी सूची');
+
+  // 2. Sheet: Subject-wise Question Paper Requirement
+  if (subjectWiseCounts.length > 0) {
+    const paperRows = subjectWiseCounts.map((sub, idx) => ({
+      'क्र.सं. (S.No)': idx + 1,
+      'कक्षा (Class)': sub.className,
+      'विषय (Subject)': sub.subjectName,
+      'परीक्षा तिथि (Exam Date)': sub.date || '—',
+      'पाली (Shift)': sub.shift === 'shift_2' ? 'Shift 2 (दोपहर)' : 'Shift 1 (सुबह)',
+      'आवश्यक री-एग्जाम पेपर संख्या (Required Papers)': sub.candidateCount,
+    }));
+    const paperWs = XLSX.utils.json_to_sheet(paperRows);
+    XLSX.utils.book_append_sheet(workbook, paperWs, 'विषय-वार पेपर मांग');
+  }
+
+  const fileName = `ReExam_Candidate_List_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
+/**
+ * Exports Class Register Attendance Matrix (Dates as columns, P/A) to Excel
+ */
+export function exportClassAttendanceMatrixToExcel({ classMatrices = [], examDates = [] }, examDetails = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  classMatrices.forEach((matrix) => {
+    const sheetName = `Class_${matrix.className}${matrix.section ? `_${matrix.section}` : ''}`.slice(0, 31);
+    
+    const rows = (matrix.students || []).map((st, idx) => {
+      const row = {
+        'क्र.सं.': idx + 1,
+        'रोल नंबर': st.rollNo,
+        'छात्र का नाम': st.studentName || st.name || '',
+        'कक्षा': matrix.className,
+        'वर्ग': matrix.section || '',
+      };
+
+      // Add each exam date as a column
+      examDates.forEach((d) => {
+        const status = st.attendanceByDate && st.attendanceByDate[d.dateKey];
+        row[d.colLabel] = status === 'A' ? 'A (अनुपस्थित)' : 'P (उपस्थित)';
+      });
+
+      row['कुल अनुपस्थिति दिन'] = st.totalAbsentDays || 0;
+      row['परीक्षा परिणाम स्थिति'] = st.totalAbsentDays > 0 ? `री-एग्जाम (${st.totalAbsentDays} पेपर)` : 'पूर्ण उपस्थित';
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'विवरण': 'कोई छात्र डेटा उपलब्ध नहीं' }]);
+    XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+  });
+
+  const fileName = `Class_Register_Attendance_Matrix_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
+/**
+ * Exports Master Teacher Invigilation Duty Summary across all days to Excel
+ */
+export function exportMasterTeacherDutyToExcel({ masterDutyRows = [], shiftSlots = [] }, examDetails = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  const rows = masterDutyRows.map((t, idx) => {
+    const row = {
+      'क्र.सं.': idx + 1,
+      'शिक्षक का नाम': t.name || '',
+      'पद': t.designation || 'सहायक अध्यापक',
+      'विषय': t.subject || '',
+      'मोबाइल': t.mobile || '',
+    };
+
+    // Slot duties
+    shiftSlots.forEach((slot) => {
+      const duty = t.dutyMap && t.dutyMap[slot.slotKey];
+      row[slot.colLabel] = duty || '—';
+    });
+
+    row['कुल कमरा ड्यूटी'] = t.roomDutyCount || 0;
+    row['कुल रिलीवर ड्यूटी'] = t.relieverDutyCount || 0;
+    row['महायोग ड्यूटी'] = (t.roomDutyCount || 0) + (t.relieverDutyCount || 0);
+    row['शिक्षक हस्ताक्षर'] = '';
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'विवरण': 'कोई शिक्षक ड्यूटी डेटा नहीं' }]);
+  XLSX.utils.book_append_sheet(workbook, ws, 'समस्त शिक्षक ड्यूटी चार्ट');
+
+  const fileName = `Master_Teacher_Duty_Audit_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}

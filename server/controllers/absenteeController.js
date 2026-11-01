@@ -66,13 +66,14 @@ export const toggleAbsentee = async (req, res) => {
 
     const markedBy = req.user?.name || req.body.markedBy || 'Teacher';
     const markedByRole = req.user?.role || req.body.markedByRole || 'teacher';
+    const effectiveDate = date || new Date().toISOString().split('T')[0];
 
     const recordData = {
       rollNo,
       isAbsent,
       roomName,
       sessionName,
-      date,
+      date: effectiveDate,
       shift,
       studentName,
       className,
@@ -86,15 +87,15 @@ export const toggleAbsentee = async (req, res) => {
 
     if (mongoose.connection.readyState === 1) {
       if (isAbsent) {
-        // Mark student absent: upsert record for this student & shift
+        // Mark student absent: upsert record for this student, specific date & shift
         savedRecord = await AbsenteeRecord.findOneAndUpdate(
-          { rollNo, shift },
+          { rollNo, date: effectiveDate, shift },
           { ...recordData, updatedAt: new Date() },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
       } else {
-        // Mark student present: completely remove from AbsenteeRecord so no ghost record lingers!
-        await AbsenteeRecord.deleteMany({ rollNo, shift });
+        // Mark student present: completely remove from AbsenteeRecord for this date & shift
+        await AbsenteeRecord.deleteMany({ rollNo, date: effectiveDate, shift });
         savedRecord = { ...recordData, isAbsent: false };
       }
     }
@@ -103,7 +104,7 @@ export const toggleAbsentee = async (req, res) => {
     let localRecords = readLocalAbsentees();
     if (isAbsent) {
       const existingIdx = localRecords.findIndex(
-        (r) => r.rollNo === rollNo && r.shift === shift
+        (r) => r.rollNo === rollNo && r.shift === shift && r.date === effectiveDate
       );
       if (existingIdx >= 0) {
         localRecords[existingIdx] = { ...localRecords[existingIdx], ...recordData };
@@ -112,7 +113,7 @@ export const toggleAbsentee = async (req, res) => {
       }
     } else {
       localRecords = localRecords.filter(
-        (r) => !(r.rollNo === rollNo && r.shift === shift)
+        (r) => !(r.rollNo === rollNo && r.shift === shift && r.date === effectiveDate)
       );
     }
     writeLocalAbsentees(localRecords);
@@ -144,8 +145,9 @@ export const getLiveAbsentees = async (req, res) => {
         $in: [sessionName, cleanSession, spacedSession, 'Half Yearly  Examination 2026', 'Half_Yearly_2026_27'],
       };
     }
-    if (shift) filter.shift = shift;
-    if (roomName) filter.roomName = roomName;
+    if (date && date !== 'all') filter.date = date;
+    if (shift && shift !== 'all') filter.shift = shift;
+    if (roomName && roomName !== 'all') filter.roomName = roomName;
 
     let records = [];
 
@@ -155,8 +157,9 @@ export const getLiveAbsentees = async (req, res) => {
       // Fallback to local file
       const local = readLocalAbsentees();
       records = local.filter((r) => {
-        if (shift && r.shift !== shift) return false;
-        if (roomName && r.roomName !== roomName) return false;
+        if (date && date !== 'all' && r.date !== date) return false;
+        if (shift && shift !== 'all' && r.shift !== shift) return false;
+        if (roomName && roomName !== 'all' && r.roomName !== roomName) return false;
         return true;
       });
     }

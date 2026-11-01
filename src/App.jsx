@@ -657,6 +657,7 @@ export default function App() {
                 teachers={teachers}
                 bCopyRecords={bCopyRecords}
                 onUpdateBCopy={handleUpdateBCopy}
+                classes={classes}
               />
             )
           )}

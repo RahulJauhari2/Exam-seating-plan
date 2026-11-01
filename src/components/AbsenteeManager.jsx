@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   UserX, 
   CheckCircle2, 
@@ -18,9 +18,20 @@ import {
   Calendar,
   Clock,
   Sparkles,
-  Info
+  Info,
+  BookOpen,
+  ClipboardList,
+  Download,
+  FileCheck,
+  Award
 } from 'lucide-react';
-import { exportAbsenteeListToExcel } from '../utils/excelExport';
+import { 
+  exportAbsenteeListToExcel, 
+  exportReExamListToExcel, 
+  exportClassAttendanceMatrixToExcel 
+} from '../utils/excelExport';
+import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA } from '../data/examSchemeData';
+import { fetchLiveAbsenteesAPI } from '../services/api';
 
 export default function AbsenteeManager({ 
   seatingResult = {}, 
@@ -31,17 +42,48 @@ export default function AbsenteeManager({
   onToggleAbsent,
   teachers = [],
   bCopyRecords = {},
-  onUpdateBCopy
+  onUpdateBCopy,
+  classes = []
 }) {
   const { rooms = [] } = seatingResult;
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.roomId || 'all');
   const [quickRollInput, setQuickRollInput] = useState('');
   const [searchFeedback, setSearchFeedback] = useState('');
-  const [activeViewMode, setActiveViewMode] = useState('class-wise'); // 'class-wise' | 'room-wise'
+  const [activeViewMode, setActiveViewMode] = useState('class-wise'); // 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [filterOnlyAbsentClasses, setFilterOnlyAbsentClasses] = useState(false);
   const [copiedClassKey, setCopiedClassKey] = useState(null);
-  const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise'
+  const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
+  const [reExamSearch, setReExamSearch] = useState('');
+  const [reExamClassFilter, setReExamClassFilter] = useState('all');
+  const [matrixSelectedClass, setMatrixSelectedClass] = useState('all');
+
+  // Load all dates absentee records from MongoDB
+  const [allDatesAbsentees, setAllDatesAbsentees] = useState([]);
+  const [isLoadingAllDates, setIsLoadingAllDates] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAll = async () => {
+      setIsLoadingAllDates(true);
+      try {
+        const res = await fetchLiveAbsenteesAPI({
+          sessionName: examDetails.examName,
+          date: 'all',
+          shift: 'all',
+        });
+        if (isMounted && res && res.records) {
+          setAllDatesAbsentees(res.records.filter((r) => r.isAbsent));
+        }
+      } catch (err) {
+        console.error('Failed to load all dates absentees:', err);
+      } finally {
+        if (isMounted) setIsLoadingAllDates(false);
+      }
+    };
+    loadAll();
+    return () => { isMounted = false; };
+  }, [examDetails.examName, absentStudents]);
 
   // Helper to fetch B-copies for a student
   const getStudentBCopies = (rollNo) => {

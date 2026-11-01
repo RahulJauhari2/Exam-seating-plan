@@ -31,7 +31,7 @@ import {
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
 import { saveDutyRosterToDB, fetchTeachersAPI, createTeacherAPI, updateTeacherAPI, deleteTeacherAPI, bulkImportTeachersAPI } from '../services/api';
-import { exportTeachersToExcel } from '../utils/excelExport';
+import { exportTeachersToExcel, exportMasterTeacherDutyToExcel } from '../utils/excelExport';
 import { useAuth } from '../context/AuthContext';
 
 export default function TeacherDutyManager({
@@ -830,6 +830,119 @@ export default function TeacherDutyManager({
     return counts;
   }, [dutyRoster, teachers]);
 
+    // All slots across entire exam timetable
+  const shiftSlots = useMemo(() => {
+    const slots = [];
+    (EXAM_TIMETABLE || []).forEach((d) => {
+      slots.push({
+        dayId: d.id,
+        date: d.date,
+        fullDate: d.fullDate,
+        shift: 'shift_1',
+        slotKey: `${d.id}_shift_1`,
+        colLabel: `${d.date} S1`,
+        displayTitle: `${d.date} (सुबह)`,
+      });
+      slots.push({
+        dayId: d.id,
+        date: d.date,
+        fullDate: d.fullDate,
+        shift: 'shift_2',
+        slotKey: `${d.id}_shift_2`,
+        colLabel: `${d.date} S2`,
+        displayTitle: `${d.date} (दोपहर)`,
+      });
+    });
+    return slots;
+  }, []);
+
+  const masterDutyRows = useMemo(() => {
+    return (teachers || []).map((t) => {
+      const teacherIds = new Set();
+      if (t.id) teacherIds.add(String(t.id));
+      if (t._id) teacherIds.add(String(t._id));
+      if (t.teacherCode) {
+        teacherIds.add(String(t.teacherCode));
+        teacherIds.add(String(t.teacherCode).toLowerCase());
+      }
+      if (t.mobile) teacherIds.add(String(t.mobile));
+      if (t.name) teacherIds.add(String(t.name).trim());
+
+      const dutyMap = {};
+      let roomDutyCount = 0;
+      let relieverDutyCount = 0;
+
+      shiftSlots.forEach((slot) => {
+        const alloc = dutyRoster[slot.slotKey];
+        let assignedDesc = null;
+
+        if (alloc && alloc.rooms) {
+          for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
+            const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
+            const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
+            if (
+              (inv1 && teacherIds.has(inv1)) ||
+              (inv2 && teacherIds.has(inv2))
+            ) {
+              const rObj = (seatingResult?.rooms || []).find((r) => r.roomId === rId || r.roomName === rId);
+              assignedDesc = rObj ? rObj.roomName : rId;
+              roomDutyCount++;
+              break;
+            }
+          }
+        }
+
+        if (!assignedDesc && alloc && alloc.relievers && Array.isArray(alloc.relievers)) {
+          for (const relId of alloc.relievers) {
+            if (teacherIds.has(String(relId))) {
+              assignedDesc = 'उड़नदस्ता';
+              relieverDutyCount++;
+              break;
+            }
+          }
+        }
+
+        dutyMap[slot.slotKey] = assignedDesc;
+      });
+
+      return {
+        id: t.id || t._id,
+        name: t.name || t.englishName || 'शिक्षक',
+        designation: t.designation || 'सहायक अध्यापक',
+        subject: t.subject || '—',
+        mobile: t.mobile || '—',
+        dutyMap,
+        roomDutyCount,
+        relieverDutyCount,
+        totalDuties: roomDutyCount + relieverDutyCount,
+      };
+    });
+  }, [teachers, dutyRoster, shiftSlots, seatingResult?.rooms]);
+
+  const [masterSearchQuery, setMasterSearchQuery] = useState('');
+
+  const filteredMasterRows = useMemo(() => {
+    if (!masterSearchQuery.trim()) return masterDutyRows;
+    const q = masterSearchQuery.toLowerCase().trim();
+    return masterDutyRows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.mobile.includes(q) ||
+        r.subject.toLowerCase().includes(q) ||
+        r.designation.toLowerCase().includes(q)
+    );
+  }, [masterDutyRows, masterSearchQuery]);
+
+  const handleExportMasterExcel = () => {
+    exportMasterTeacherDutyToExcel({ masterDutyRows, shiftSlots }, examDetails);
+  };
+
+  const handlePrintMaster = () => {
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
   const filteredTeachers = useMemo(() => {
     if (!searchQuery.trim()) return teachers;
     const q = searchQuery.toLowerCase().trim();
@@ -889,6 +1002,18 @@ export default function TeacherDutyManager({
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>शिक्षक स्टाफ ({teachers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('master-summary')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'master-summary'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>समस्त दिवस महा-चार्ट (Master Duty)</span>
               </button>
             </div>
 
@@ -1810,6 +1935,215 @@ export default function TeacherDutyManager({
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 3: MASTER INVIGILATION DUTY SUMMARY ACROSS ALL DATES */}
+      {/* ========================================================= */}
+      {activeTab === 'master-summary' && (
+        <div className="space-y-6">
+          {/* Top Scoreboard & Control Bar (No Print) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 no-print">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-purple-700 text-white rounded-xl shadow-xs">
+                    <Layers className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      केंद्र-वार शिक्षक ड्यूटी महा-चार्ट (Master Invigilation Audit Chart)
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      समस्त परीक्षा दिवसों (Day 1 से अंतिम दिवस) के दोनों शिफ्टों का समेकित कक्ष निरीक्षक चार्ट व मानदेय रिकॉर्ड
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={masterSearchQuery}
+                    onChange={(e) => setMasterSearchQuery(e.target.value)}
+                    placeholder="शिक्षक का नाम खोजें..."
+                    className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-purple-600 w-44"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportMasterExcel}
+                  className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>महा-चार्ट एक्सेल (.xlsx)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintMaster}
+                  className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>महा-चार्ट प्रिंट</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+              <div className="bg-purple-50 p-3 rounded-xl border border-purple-200">
+                <span className="text-[11px] font-bold text-purple-800 block uppercase">कुल शिक्षक स्टाफ</span>
+                <span className="text-xl font-black text-purple-950 mt-0.5 block">{teachers.length} शिक्षक</span>
+              </div>
+              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200">
+                <span className="text-[11px] font-bold text-indigo-800 block uppercase">कुल परीक्षा स्लॉट्स</span>
+                <span className="text-xl font-black text-indigo-950 mt-0.5 block">{shiftSlots.length} स्लॉट</span>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                <span className="text-[11px] font-bold text-blue-800 block uppercase">कुल रूम ड्यूटियां</span>
+                <span className="text-xl font-black text-blue-950 mt-0.5 block">
+                  {masterDutyRows.reduce((sum, r) => sum + r.roomDutyCount, 0)}
+                </span>
+              </div>
+              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                <span className="text-[11px] font-bold text-amber-800 block uppercase">उड़नदस्ता / रिलीवर</span>
+                <span className="text-xl font-black text-amber-950 mt-0.5 block">
+                  {masterDutyRows.reduce((sum, r) => sum + r.relieverDutyCount, 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Master Table (Screen + Print) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print:border print:border-black print:rounded-none print:shadow-none">
+            {/* Print Header */}
+            <div className="hidden print:block text-center border-b-2 border-black p-3 mb-2">
+              <h1 className="text-lg font-black uppercase text-black">
+                {EXAM_SCHEME_METADATA.schoolName || 'A B V I C MIRANPUR KATRA SHAHJAHANPUR'}
+              </h1>
+              <p className="text-xs font-bold text-black mt-0.5">
+                {EXAM_SCHEME_METADATA.examTitle || 'HALF YEARLY EXAMINATION 2026-27'} • शिक्षक ड्यूटी महा-चार्ट
+              </p>
+              <span className="text-[10px] font-bold uppercase tracking-wider block mt-1">
+                MASTER INVIGILATION AUDIT STATEMENT & REMUNERATION RECORD
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse print:text-[10px]">
+                <thead className="bg-slate-100 text-slate-800 font-extrabold uppercase tracking-wider border-b border-slate-200 print:bg-slate-200 print:text-black print:border-b-2 print:border-black">
+                  <tr>
+                    <th className="px-3 py-3 w-10 text-center print:border print:border-black">क्र.</th>
+                    <th className="px-3 py-3 w-44 print:border print:border-black">शिक्षक का नाम व पद</th>
+                    <th className="px-2 py-3 w-24 text-center print:border print:border-black">विषय</th>
+                    {shiftSlots.map((slot) => (
+                      <th
+                        key={slot.slotKey}
+                        className="px-2 py-3 text-center whitespace-nowrap print:border print:border-black text-[10px]"
+                        title={slot.displayTitle}
+                      >
+                        <div>{slot.date}</div>
+                        <div className="text-[9px] font-bold text-purple-700 print:text-black">
+                          {slot.shift === 'shift_1' ? 'Shift 1' : 'Shift 2'}
+                        </div>
+                      </th>
+                    ))}
+                    <th className="px-2 py-3 text-center w-16 bg-purple-50 text-purple-950 font-black print:border print:border-black">
+                      कमरा
+                    </th>
+                    <th className="px-2 py-3 text-center w-16 bg-amber-50 text-amber-950 font-black print:border print:border-black">
+                      रिलीवर
+                    </th>
+                    <th className="px-3 py-3 text-center w-16 bg-slate-200 text-slate-900 font-black print:border print:border-black">
+                      योग
+                    </th>
+                    <th className="px-3 py-3 text-center w-28 print:border print:border-black">हस्ताक्षर</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 print:divide-y-0 font-medium">
+                  {filteredMasterRows.map((t, idx) => {
+                    const isEven = idx % 2 === 0;
+                    return (
+                      <tr
+                        key={t.id}
+                        className={`${isEven ? 'bg-white' : 'bg-slate-50/50'} hover:bg-purple-50/40 transition-colors print:break-inside-avoid`}
+                      >
+                        <td className="px-3 py-2 text-center text-slate-500 font-bold print:border print:border-black print:text-black">
+                          {idx + 1}
+                        </td>
+                        <td className="px-3 py-2 print:border print:border-black print:text-black">
+                          <div className="font-bold text-slate-900">{t.name}</div>
+                          <div className="text-[10px] text-slate-500">{t.designation} • {t.mobile}</div>
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-600 text-[11px] font-bold print:border print:border-black print:text-black">
+                          {t.subject}
+                        </td>
+                        {shiftSlots.map((slot) => {
+                          const duty = t.dutyMap[slot.slotKey];
+                          const isRoom = duty && duty !== 'उड़नदस्ता';
+                          const isReliever = duty === 'उड़नदस्ता';
+                          return (
+                            <td
+                              key={slot.slotKey}
+                              className="px-1.5 py-2 text-center print:border print:border-black text-[11px]"
+                            >
+                              {isRoom ? (
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 font-black text-[10px] print:bg-transparent print:p-0 print:font-bold">
+                                  {duty}
+                                </span>
+                              ) : isReliever ? (
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[9px] print:bg-transparent print:p-0">
+                                  रिलीवर
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 print:text-slate-400">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-2 text-center font-bold bg-purple-50/50 text-purple-950 print:border print:border-black print:text-black">
+                          {t.roomDutyCount}
+                        </td>
+                        <td className="px-2 py-2 text-center font-bold bg-amber-50/50 text-amber-950 print:border print:border-black print:text-black">
+                          {t.relieverDutyCount}
+                        </td>
+                        <td className="px-3 py-2 text-center font-black bg-slate-100 text-slate-900 text-sm print:border print:border-black print:text-black">
+                          {t.totalDuties}
+                        </td>
+                        <td className="px-3 py-2 text-center print:border print:border-black">
+                          <div className="h-6 border-b border-dashed border-slate-300 print:border-black"></div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Print Signatures */}
+            <div className="hidden print:flex items-end justify-between pt-12 pb-4 px-6 text-xs font-bold text-black print-avoid-break">
+              <div>
+                <div className="w-48 border-b-2 border-black mb-1"></div>
+                <div>श्री ब्रह्मधर मिश्र / श्री राहुल जौहरी</div>
+                <div className="text-[10px] font-normal">परीक्षा प्रभारी (Exam Incharge)</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[10px] text-slate-500 font-serif italic mb-6">
+                  Certified genuine invigilation record of A B V I C Katra
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="w-48 border-b-2 border-black mb-1"></div>
+                <div>श्री प्रदीप सिंह</div>
+                <div className="text-[10px] font-normal">प्रधानाचार्य / केंद्राध्यक्ष (सील)</div>
               </div>
             </div>
           </div>
