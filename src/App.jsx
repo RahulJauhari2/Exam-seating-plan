@@ -98,16 +98,6 @@ export default function App() {
   const knownAbsentRolls = useRef(new Set());
   const isInitialPoll = useRef(true);
 
-  // Reset live attendance and toast memory when date or shift changes so all students start fresh as PRESENT
-  useEffect(() => {
-    setAbsentStudents({});
-    setLiveAbsentees({});
-    knownAbsentRolls.current = new Set();
-    previousAbsentCount.current = 0;
-    isInitialPoll.current = true;
-    setLiveNotification(null);
-  }, [examDetails.date, activeShift]);
-
   // Mobile drawer state
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -122,6 +112,16 @@ export default function App() {
     timeRange: initialDefaultData.timeRange,
     date: '2026-11-02',
   });
+
+  // Reset live attendance and toast memory when date or shift changes so all students start fresh as PRESENT
+  useEffect(() => {
+    setAbsentStudents({});
+    setLiveAbsentees({});
+    knownAbsentRolls.current = new Set();
+    previousAbsentCount.current = 0;
+    isInitialPoll.current = true;
+    setLiveNotification(null);
+  }, [examDetails.date, activeShift]);
 
   // Dynamic Classes & Rooms
   const [classes, setClasses] = useState(initialDefaultData.classes);

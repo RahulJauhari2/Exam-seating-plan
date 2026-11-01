@@ -1,5 +1,10 @@
+import { useAuth } from '../context/AuthContext';
+import { saveMarksToDB } from '../services/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
+  Lock,
+  Unlock,
+  ShieldCheck,
   Award, 
   FileText, 
   Edit3, 
@@ -51,6 +56,31 @@ export default function ResultMarksheetManager({
   examDetails = {},
   seatingResult
 }) {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'principal' || currentUser?.role === 'coordinator' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const canToggleLock = isAdmin;
+
+  // Storage key for locks
+  const STORAGE_KEY_LOCKS = 'dynamic_exam_marks_locks_v1';
+  const [marksLocks, setMarksLocks] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LOCKS);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [isCloudSaving, setIsCloudSaving] = useState(false);
+  const [cloudSaveMessage, setCloudSaveMessage] = useState('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_LOCKS, JSON.stringify(marksLocks));
+    } catch (e) {
+      console.error('Failed to save marks locks', e);
+    }
+  }, [marksLocks]);
   // Navigation tabs inside result manager
   const [activeSubTab, setActiveSubTab] = useState('marks-entry'); // 'marks-entry', 'result-sheet', 'marksheet', 'config'
 
@@ -298,8 +328,57 @@ export default function ResultMarksheetManager({
     }
   }, [studentsList, selectedStudentRoll]);
 
+  // Current subject lock status
+  const currentLockKey = `${selectedGrade}_${selectedSection}_${selectedSubject}`;
+  const isCurrentSubjectLocked = Boolean(marksLocks[currentLockKey]?.isLocked);
+
+  // Toggle lock handler
+  const handleToggleLock = async () => {
+    if (!canToggleLock) return;
+    const nowLocked = !isCurrentSubjectLocked;
+    const updated = {
+      ...marksLocks,
+      [currentLockKey]: {
+        isLocked: nowLocked,
+        lockedBy: currentUser?.name || 'Admin',
+        lockedAt: new Date().toISOString(),
+      },
+    };
+    setMarksLocks(updated);
+
+    if (nowLocked) {
+      setIsCloudSaving(true);
+      try {
+        await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+        setCloudSaveMessage('डेटा लॉक एवं सुरक्षित किया गया!');
+        setTimeout(() => setCloudSaveMessage(''), 4000);
+      } catch (err) {
+        console.error('Error saving locked marks to MongoDB:', err);
+      } finally {
+        setIsCloudSaving(false);
+      }
+    }
+  };
+
+  // Manual save to cloud handler
+  const handleSaveToCloud = async () => {
+    setIsCloudSaving(true);
+    try {
+      await saveMarksToDB(examDetails?.examName || 'HALF YEARLY EXAMINATION 2026-27', activeShift, marksData);
+      setCloudSaveMessage('क्लाउड पर सुरक्षित!');
+      setTimeout(() => setCloudSaveMessage(''), 3000);
+    } catch (err) {
+      console.error('Cloud save error:', err);
+      setCloudSaveMessage('सेव करने में त्रुटि!');
+      setTimeout(() => setCloudSaveMessage(''), 3000);
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
   // Update marks for a student in state
   const handleUpdateMarks = (studentKey, subjectName, field, value) => {
+    if (isCurrentSubjectLocked && !isAdmin) return;
     const sName = subjectName.toUpperCase().trim();
     const cfg = getSubjectMaxMarks(sName);
     const maxVal = field === 'theory' ? cfg.maxTheory : cfg.maxPractical;
@@ -323,6 +402,10 @@ export default function ResultMarksheetManager({
 
   // Generate realistic demo marks in 1-click for testing
   const handleGenerateDemoMarks = () => {
+    if (isCurrentSubjectLocked && !isAdmin) {
+      alert('यह विषय लॉक है, अंक नहीं बदले जा सकते।');
+      return;
+    }
     if (!window.confirm(`क्या आप कक्षा ${selectedGrade}-${selectedSection} के सभी छात्रों के लिए डेमो अंक भरना चाहते हैं?`)) {
       return;
     }
@@ -356,6 +439,10 @@ export default function ResultMarksheetManager({
 
   // Clear marks for current class
   const handleClearCurrentClassMarks = () => {
+    if (isCurrentSubjectLocked && !isAdmin) {
+      alert('यह विषय लॉक है, अंक मिटाए नहीं जा सकते।');
+      return;
+    }
     if (!window.confirm(`क्या आप कक्षा ${selectedGrade}-${selectedSection} के सभी अंक मिटाना चाहते हैं?`)) {
       return;
     }
@@ -861,14 +948,85 @@ export default function ResultMarksheetManager({
               </label>
 
               <button
+                type="button"
+                onClick={handleSaveToCloud}
+                disabled={isCloudSaving}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                title="प्राप्तांक सुरक्षित करें"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{isCloudSaving ? 'सेविंग...' : cloudSaveMessage || 'क्लाउड सेव'}</span>
+              </button>
+
+              {/* Lock / Unlock Toggle Button */}
+              {isCurrentSubjectLocked ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2.5 py-1 bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-rose-700" />
+                    <span>डाटा लॉक है</span>
+                  </span>
+                  {canToggleLock && (
+                    <button
+                      type="button"
+                      onClick={handleToggleLock}
+                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-xs transition cursor-pointer"
+                      title="एडमिन द्वारा अनलॉक करें"
+                    >
+                      अनलॉक करें (Unlock)
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                    <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>प्रविष्टि खुली है</span>
+                  </span>
+                  {canToggleLock && (
+                    <button
+                      type="button"
+                      onClick={handleToggleLock}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
+                      title="कॉपी चेकिंग उपरांत डाटा लॉक करें"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>डाटा लॉक करें</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <button
                 onClick={handleClearCurrentClassMarks}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                disabled={isCurrentSubjectLocked && !isAdmin}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer disabled:opacity-40"
                 title="अंक मिटाएं"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
+
+          {/* Locked Notice Banner */}
+          {isCurrentSubjectLocked && (
+            <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center justify-between text-xs text-amber-950 font-bold shadow-2xs">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>
+                  🔒 <strong>डेटा लॉक (Frozen):</strong> कक्षा {selectedGrade} ({selectedSection}) के <strong>{selectedSubject}</strong> के अंक <strong>{marksLocks[currentLockKey]?.lockedBy || 'एडमिन'}</strong> द्वारा लॉक कर दिए गए हैं। अब कोई शिक्षक इसमें बदलाव नहीं कर सकता।
+                </span>
+              </div>
+              {canToggleLock && (
+                <button
+                  type="button"
+                  onClick={handleToggleLock}
+                  className="ml-3 px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-black shadow-xs shrink-0 cursor-pointer"
+                >
+                  अनलॉक करें (Unlock)
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Students Marks Input Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -953,7 +1111,12 @@ export default function ResultMarksheetManager({
                             placeholder="0"
                             onChange={(e) => handleUpdateMarks(key, selectedSubject, 'theory', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, idx, 'theory')}
-                            className="w-20 px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-center font-mono font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            disabled={isCurrentSubjectLocked && !isAdmin}
+                            className={`w-20 px-2 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
+                              isCurrentSubjectLocked && !isAdmin
+                                ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                : 'bg-white border border-indigo-200 text-indigo-950 focus:ring-indigo-500'
+                            }`}
                           />
                         </td>
                         {/* Practical Marks Input */}
@@ -968,7 +1131,12 @@ export default function ResultMarksheetManager({
                               placeholder="0"
                               onChange={(e) => handleUpdateMarks(key, selectedSubject, 'practical', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, idx, 'practical')}
-                              className="w-20 px-2 py-1.5 bg-white border border-emerald-200 rounded-lg text-center font-mono font-black text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                              disabled={isCurrentSubjectLocked && !isAdmin}
+                            className={`w-20 px-2 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
+                              isCurrentSubjectLocked && !isAdmin
+                                ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                : 'bg-white border border-emerald-200 text-emerald-950 focus:ring-emerald-500'
+                            }`}
                             />
                           </td>
                         )}
