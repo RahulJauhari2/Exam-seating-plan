@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { EXAM_TIMETABLE } from '../data/examSchemeData';
 import { 
   UserX, 
   UserCheck, 
@@ -184,10 +185,24 @@ export default function TeacherRoomPortal({
       if (teacherRec.name) teacherIdSet.add(String(teacherRec.name).trim());
     }
 
-    // Search across duty roster prioritized by activeShift (e.g. d1_shift_2 when activeShift === 'shift_2')
+    // Search across duty roster prioritized by date (e.g. d2 on 02-11-26) and activeShift (e.g. shift_1)
     const allKeys = Object.keys(dutyRoster);
-    const activeShiftKeys = allKeys.filter((k) => k.endsWith(activeShift) || k.includes(activeShift));
-    const otherKeys = allKeys.filter((k) => !activeShiftKeys.includes(k));
+    
+    // Determine matching day from activeDate or latest day
+    const matchedDay = (EXAM_TIMETABLE || []).find(
+      (d) => d.fullDate === activeDate || d.date === activeDate || (activeDate && activeDate.includes(d.date))
+    );
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayDay = (EXAM_TIMETABLE || []).find((d) => d.fullDate === todayStr || d.date === todayStr);
+    const preferredDayId = matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (allKeys.some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
+    const exactKey = `${preferredDayId}_${activeShift}`;
+
+    const activeShiftKeys = allKeys
+      .filter((k) => k.endsWith(activeShift) || k.includes(activeShift))
+      .sort((a, b) => (a === exactKey ? -1 : b === exactKey ? 1 : b.localeCompare(a)));
+    const otherKeys = allKeys
+      .filter((k) => !activeShiftKeys.includes(k))
+      .sort((a, b) => b.localeCompare(a));
     const searchOrder = [...activeShiftKeys, ...otherKeys];
 
     for (const key of searchOrder) {
@@ -209,7 +224,7 @@ export default function TeacherRoomPortal({
 
     // Default to first room
     return rooms[0]?.roomName || 'Room 01';
-  }, [currentUser, dutyRoster, rooms, teachers, activeShift]);
+  }, [currentUser, dutyRoster, rooms, teachers, activeShift, activeDate]);
 
   const [selectedRoomName, setSelectedRoomName] = useState(assignedRoomDefault);
 
