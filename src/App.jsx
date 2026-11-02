@@ -607,8 +607,8 @@ export default function App() {
         {/* Right / Center Content Area */}
         <main className="flex-1 w-full min-w-0">
           <Suspense fallback={<PageLoader />}>
-          {/* Anti-Adjacent Anti-Cheating Guarantee Banner */}
-          {activeTab !== 'teacher-portal' && activeTab !== 'student-home' && (
+          {/* Anti-Adjacent Anti-Cheating Guarantee Banner (Only on Seating Plan tabs) */}
+          {!['teacher-portal', 'student-home', 'search-student', 'result-marksheet', 'teacher-duty', 'absentee', 'exam-scheme'].includes(activeTab) && (
             <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
@@ -640,8 +640,8 @@ export default function App() {
             </div>
           )}
 
-          {/* Warning if capacity is less */}
-          {activeTab !== 'teacher-portal' && activeTab !== 'student-home' && seatingResult.unseatedCount > 0 && (
+          {/* Warning if capacity is less (Only on Seating Plan tabs) */}
+          {!['teacher-portal', 'student-home', 'search-student', 'result-marksheet', 'teacher-duty', 'absentee', 'exam-scheme'].includes(activeTab) && seatingResult.unseatedCount > 0 && (
             <div className="mb-6 p-4 sm:p-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 text-xs shadow-xs no-print">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />

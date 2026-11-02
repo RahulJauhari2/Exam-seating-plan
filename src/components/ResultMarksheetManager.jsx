@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { EXAM_TIMETABLE, UP_BOARD_SUBJECT_CODES } from '../data/examSchemeData';
+import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
 
 // Grade calculation helper
 export function calculateGrade(percentage) {
@@ -271,10 +272,30 @@ export default function ResultMarksheetManager({
     return Array.from(subjectsSet.values());
   };
 
+  // Combine all school classes across both shifts (6th to 12th) so mark entry works 24/7 regardless of shift
+  const allClasses = useMemo(() => {
+    const classMap = new Map();
+    (classes || []).forEach((c) => {
+      if (c && c.name && c.section) {
+        const key = `${String(c.name).trim()}_${String(c.section).toUpperCase().trim()}`;
+        classMap.set(key, c);
+      }
+    });
+    [...(DEFAULT_SHIFT_1?.classes || []), ...(DEFAULT_SHIFT_2?.classes || [])].forEach((c) => {
+      if (c && c.name && c.section) {
+        const key = `${String(c.name).trim()}_${String(c.section).toUpperCase().trim()}`;
+        if (!classMap.has(key)) {
+          classMap.set(key, c);
+        }
+      }
+    });
+    return Array.from(classMap.values());
+  }, [classes]);
+
   // Comprehensive list of all evaluation bundles across all classes
   const allSchoolBundles = useMemo(() => {
     const list = [];
-    classes.forEach((c) => {
+    allClasses.forEach((c) => {
       const g = String(c.name).trim();
       const s = String(c.section).toUpperCase().trim();
       const subs = getSubjectsForGradeSection(g, s, activeShift);
@@ -322,7 +343,7 @@ export default function ResultMarksheetManager({
       });
     });
     return list;
-  }, [classes, activeShift, subjectConfig, evaluationAllotment, marksLocks, marksData]);
+  }, [allClasses, activeShift, subjectConfig, evaluationAllotment, marksLocks, marksData]);
 
   // Robust Phone & Name normalizers for teacher matching
   const normalizePhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
@@ -335,19 +356,69 @@ export default function ResultMarksheetManager({
     const uName = cleanName(currentUser.name || '');
     const uId = String(currentUser.assignedTeacherId || currentUser.id || currentUser._id || '');
 
-    return allSchoolBundles.filter((b) => {
-      if (!b.allotment) return false;
+    const matchedMap = new Map();
+
+    // 1. Scan bundles derived from school classes
+    allSchoolBundles.forEach((b) => {
+      if (!b.allotment) return;
       const tPhone = normalizePhone(b.assignedTeacherPhone || '');
       const tName = cleanName(b.assignedTeacherName || '');
       const tId = String(b.assignedTeacherId || '');
 
-      return (
+      const isMatch = (
         (uPhone && tPhone && uPhone === tPhone) ||
         (uId && tId && uId === tId) ||
         (uName && tName && (uName.includes(tName) || tName.includes(uName)))
       );
+      if (isMatch) {
+        matchedMap.set(b.key, b);
+      }
     });
-  }, [allSchoolBundles, currentUser]);
+
+    // 2. Also directly check evaluationAllotment object: Any allotment matching this teacher is 100% included!
+    Object.entries(evaluationAllotment || {}).forEach(([key, allot]) => {
+      if (!allot || matchedMap.has(key)) return;
+      const tPhone = normalizePhone(allot.teacherPhone || allot.mobile || '');
+      const tName = cleanName(allot.teacherName || '');
+      const tId = String(allot.teacherId || '');
+
+      const isMatch = (
+        (uPhone && tPhone && uPhone === tPhone) ||
+        (uId && tId && uId === tId) ||
+        (uName && tName && (uName.includes(tName) || tName.includes(uName)))
+      );
+
+      if (isMatch) {
+        const parts = key.split('_');
+        const g = parts[0] || '';
+        const s = parts[1] || '';
+        const subName = parts.slice(2).join('_') || '';
+        const classObj = allClasses.find((c) => String(c.name).trim() === g && String(c.section).toUpperCase().trim() === s);
+        const studentCount = Number(classObj?.totalStudents) || 52;
+
+        matchedMap.set(key, {
+          key,
+          grade: g,
+          section: s,
+          subject: subName,
+          hindiName: subName,
+          totalStudents: studentCount,
+          enteredCount: 0,
+          progressPercent: 0,
+          allotment: allot,
+          assignedTeacherName: allot.teacherName || '',
+          assignedTeacherPhone: allot.teacherPhone || '',
+          assignedTeacherId: allot.teacherId || '',
+          isLocked: Boolean(marksLocks[key]?.isLocked),
+          lockedBy: marksLocks[key]?.lockedBy || '',
+          lockedAt: marksLocks[key]?.lockedAt || '',
+          roleLocked: marksLocks[key]?.role || '',
+        });
+      }
+    });
+
+    return Array.from(matchedMap.values());
+  }, [allSchoolBundles, currentUser, evaluationAllotment, marksLocks, allClasses]);
 
   // If navigated from TeacherRoomPortal with a specific target subject
   useEffect(() => {
@@ -359,14 +430,24 @@ export default function ResultMarksheetManager({
     }
   }, [initialTarget]);
 
+  // Auto-focus teacher's first assigned copy bundle when they visit Marksheet
+  useEffect(() => {
+    if (isTeacher && myAssignedBundles.length > 0 && !selectedGrade) {
+      const first = myAssignedBundles[0];
+      setSelectedGrade(first.grade);
+      setSelectedSection(first.section);
+      setSelectedSubject(first.subject);
+    }
+  }, [isTeacher, myAssignedBundles, selectedGrade]);
+
   // Available distinct grades from classes in current state
   const availableGrades = useMemo(() => {
     const set = new Set();
-    classes.forEach((c) => {
+    allClasses.forEach((c) => {
       if (c.name) set.add(String(c.name).trim());
     });
     return Array.from(set).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
-  }, [classes]);
+  }, [allClasses]);
 
   // Grades strictly displayed to the active user (Teacher only sees assigned classes)
   const displayedGrades = useMemo(() => {
@@ -387,11 +468,11 @@ export default function ResultMarksheetManager({
 
   // Available sections for the selected grade (All for Admin)
   const availableSections = useMemo(() => {
-    const list = classes
+    const list = allClasses
       .filter((c) => String(c.name).trim() === selectedGrade)
       .map((c) => String(c.section).toUpperCase().trim());
     return Array.from(new Set(list)).sort();
-  }, [classes, selectedGrade]);
+  }, [allClasses, selectedGrade]);
 
   // Sections strictly displayed to active user (Teacher only sees assigned sections)
   const displayedSections = useMemo(() => {
@@ -413,10 +494,10 @@ export default function ResultMarksheetManager({
 
   // Get active class entry object
   const currentClassObj = useMemo(() => {
-    return classes.find(
+    return allClasses.find(
       (c) => String(c.name).trim() === selectedGrade && String(c.section).toUpperCase().trim() === selectedSection
     );
-  }, [classes, selectedGrade, selectedSection]);
+  }, [allClasses, selectedGrade, selectedSection]);
 
   // Dynamically extract subjects for the selected grade & section (All for Admin)
   const gradeSubjects = useMemo(() => {
@@ -1781,6 +1862,7 @@ export default function ResultMarksheetManager({
                             <td className="px-2 py-2.5 text-center bg-purple-50/30 border-l border-purple-200">
                               <input
                                 type="number"
+                                inputMode="decimal"
                                 min="0"
                                 max="20"
                                 value={stMarks.omr !== undefined ? stMarks.omr : ''}
@@ -1799,6 +1881,7 @@ export default function ResultMarksheetManager({
                             <td className="px-2 py-2.5 text-center bg-indigo-50/30 border-x border-indigo-200">
                               <input
                                 type="number"
+                                inputMode="decimal"
                                 min="0"
                                 max="50"
                                 value={stMarks.theoryCopy !== undefined ? stMarks.theoryCopy : ''}
@@ -1826,6 +1909,7 @@ export default function ResultMarksheetManager({
                             <input
                               id={`input_theory_${idx}`}
                               type="number"
+                              inputMode="decimal"
                               min="0"
                               max={currentSubjectConfig.maxTheory}
                               value={tVal}
@@ -1847,6 +1931,7 @@ export default function ResultMarksheetManager({
                             <input
                               id={`input_practical_${idx}`}
                               type="number"
+                              inputMode="decimal"
                               min="0"
                               max={currentSubjectConfig.maxPractical}
                               value={pVal}
