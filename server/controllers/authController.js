@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { Teacher } from '../models/Teacher.js';
 import { LoginValidationSchema, UserValidationSchema } from '../validations/authValidation.js';
 import { DEFAULT_TEACHERS } from '../../src/data/defaultTeachers.js';
+import { connectDB, getLastConnectionError } from '../config/db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'exam_seating_secret_key_2026_abvic';
 
@@ -100,6 +101,18 @@ export const seedInitialUsers = async () => {
 // 1. User Login (Supports Phone + 4-digit PIN OR Username + Password)
 export const loginUser = async (req, res) => {
   try {
+    // Ensure DB connection is active before executing queries, preventing 10s buffering timeout
+    if (mongoose.connection.readyState !== 1) {
+      await connectDB();
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          message: 'डेटाबेस से कनेक्ट नहीं हो सका। कृपया MongoDB Atlas में अपने VPS की IP (31.42.125.248) Whitelist करें या Coolify में MONGODB_URI चेक करें।',
+          details: getLastConnectionError() || 'MongoDB Connection Failed',
+        });
+      }
+    }
+
     const valResult = LoginValidationSchema.safeParse(req.body);
     if (!valResult.success) {
       return res.status(400).json({

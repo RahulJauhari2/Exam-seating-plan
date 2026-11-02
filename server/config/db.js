@@ -3,7 +3,12 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/exam_seating_db';
+export let lastConnectionError = null;
+export const getLastConnectionError = () => lastConnectionError;
+
+export const getMongoUri = () => {
+  return (process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/exam_seating_db').trim();
+};
 
 let cached = global.mongoose;
 if (!cached) {
@@ -20,17 +25,21 @@ export const connectDB = async () => {
     return true;
   }
 
+  const uri = getMongoUri();
+
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI, {
+    cached.promise = mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000,
       maxPoolSize: 10,
     }).then((conn) => {
       console.log(`✅ MongoDB Connected Successfully: ${conn.connection.host}/${conn.connection.name}`);
       cached.conn = conn;
+      lastConnectionError = null;
       return true;
     }).catch((error) => {
       cached.promise = null;
-      console.warn(`⚠️ MongoDB Connection Notice: Could not connect to MongoDB at ${MONGODB_URI}`);
+      lastConnectionError = error.message;
+      console.warn(`⚠️ MongoDB Connection Notice: Could not connect to MongoDB at ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}`);
       console.warn(`   Reason: ${error.message}`);
       console.warn(`   Tip: To use local MongoDB, make sure MongoDB Service is running, or add your MongoDB Atlas URI in .env file.`);
       return false;

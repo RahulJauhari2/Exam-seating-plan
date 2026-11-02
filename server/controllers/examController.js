@@ -7,6 +7,7 @@ import {
   ExamSessionValidationSchema, 
   MarksDataValidationSchema 
 } from '../validations/examValidation.js';
+import { getLastConnectionError, getMongoUri, connectDB } from '../config/db.js';
 
 // Setup local JSON file storage fallback when MongoDB is offline
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,9 @@ const writeLocalSessions = (data) => {
 export const getHealth = async (req, res) => {
   const isConnected = mongoose.connection.readyState === 1;
   const states = ['Disconnected', 'Connected', 'Connecting', 'Disconnecting'];
+  const uri = getMongoUri();
+  const isAtlas = uri.includes('mongodb.net') || uri.includes('+srv');
+  const sanitizedUri = uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@');
   
   return res.json({
     status: isConnected ? 'healthy' : 'local_fallback',
@@ -57,6 +61,10 @@ export const getHealth = async (req, res) => {
       state: states[mongoose.connection.readyState] || 'Unknown',
       host: mongoose.connection.host || null,
       name: mongoose.connection.name || null,
+      isAtlas,
+      configuredUri: sanitizedUri,
+      hasCustomUri: Boolean(process.env.MONGODB_URI),
+      lastError: getLastConnectionError() || null,
     },
     timestamp: new Date().toISOString(),
   });
