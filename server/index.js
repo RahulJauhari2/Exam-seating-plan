@@ -40,6 +40,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: Date.now() });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', time: Date.now() });
+});
+
 // Serve frontend build static files (dist/)
 app.use(express.static(distPath));
 
@@ -60,14 +64,34 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Server and Connect DB
-const startServer = async () => {
-  await connectDB();
-  await seedInitialUsers();
-  app.listen(PORT, () => {
-    console.log(`🚀 API Server running on http://localhost:${PORT}`);
-    console.log(`📋 Health check available at http://localhost:${PORT}/api/health`);
+// Start Server immediately on 0.0.0.0 so Docker/Coolify health check succeeds right away!
+const startServer = () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 API Server running on http://0.0.0.0:${PORT}`);
+    console.log(`📋 Health check available at http://0.0.0.0:${PORT}/api/health`);
     console.log(`🔒 RBAC Auth & Live Absentee Sync endpoints ready`);
+  });
+
+  // Connect MongoDB in background without blocking server startup or failing health checks
+  connectDB()
+    .then(async (connected) => {
+      if (connected) {
+        await seedInitialUsers().catch((err) => console.error('Seed error:', err.message));
+      }
+    })
+    .catch((err) => {
+      console.warn('⚠️ Initial MongoDB connection notice:', err.message);
+    });
+
+  // Graceful shutdown handling for Docker
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => process.exit(0));
+  });
+
+  process.on('SIGINT', () => {
+    console.log('SIGINT received. Shutting down gracefully...');
+    server.close(() => process.exit(0));
   });
 };
 
