@@ -170,7 +170,7 @@ export default function App() {
 
   const [evaluationTarget, setEvaluationTarget] = useState(null);
 
-  // Automatically persist dutyRoster changes locally AND to MongoDB Atlas
+  // Automatically persist dutyRoster changes locally AND to MongoDB Atlas (debounced)
   useEffect(() => {
     try {
       if (dutyRoster && Object.keys(dutyRoster).length > 0) {
@@ -179,10 +179,10 @@ export default function App() {
         const timer = setTimeout(() => {
           saveDutyRosterToDB(
             examDetails?.examName || 'Half_Yearly_2026_27',
-            activeShift,
+            activeShift || 'shift_1',
             dutyRoster
           ).catch(() => {});
-        }, 1200);
+        }, 2000);
         return () => clearTimeout(timer);
       } else {
         localStorage.removeItem('exam_duty_roster_v1');
@@ -190,7 +190,7 @@ export default function App() {
     } catch (e) {
       console.error('Error saving duty roster to localStorage', e);
     }
-  }, [dutyRoster, activeShift, examDetails?.examName]);
+  }, [dutyRoster, examDetails?.examName]);
 
   // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
   const reloadDutyRoster = () => {

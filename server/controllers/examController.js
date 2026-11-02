@@ -86,6 +86,21 @@ export const saveExamSession = async (req, res) => {
 
     // A. If MongoDB is connected: use MongoDB
     if (mongoose.connection.readyState === 1) {
+      // Preserve existing dutyRoster & evaluationAllotment if the incoming one is empty
+      const existing = await ExamSession.findOne({ 
+        sessionName: validatedData.sessionName, 
+        activeShift: validatedData.activeShift 
+      });
+      if (existing) {
+        if ((!validatedData.dutyRoster || Object.keys(validatedData.dutyRoster).length === 0) && existing.dutyRoster && Object.keys(existing.dutyRoster).length > 0) {
+          validatedData.dutyRoster = existing.dutyRoster;
+        }
+        if ((!validatedData.evaluationAllotment || Object.keys(validatedData.evaluationAllotment).length === 0) && existing.evaluationAllotment && Object.keys(existing.evaluationAllotment).length > 0) {
+          validatedData.evaluationAllotment = existing.evaluationAllotment;
+          validatedData.marksLocks = existing.marksLocks || {};
+        }
+      }
+
       const session = await ExamSession.findOneAndUpdate(
         { 
           sessionName: validatedData.sessionName, 
@@ -216,6 +231,11 @@ export const getSessionByName = async (req, res) => {
         if (altSession && altSession.dutyRoster && Object.keys(altSession.dutyRoster).length > 0) {
           sessionObj.dutyRoster = altSession.dutyRoster;
         }
+      }
+
+      // Automatically expand all date aliases so frontend client can query with any date format
+      if (sessionObj.dutyRoster) {
+        sessionObj.dutyRoster = expandDutyRosterAliases(sessionObj.dutyRoster);
       }
 
       // Cross-Shift Fallback: If evaluationAllotment is empty, retrieve from any session with allotments
@@ -378,7 +398,37 @@ export const saveMarks = async (req, res) => {
   }
 };
 
-// 7. Save or Update Duty Roster specifically in MongoDB
+const TIMETABLE_DATE_MAP = {
+  d1: ['2026-10-31', '31-10-2026', '31-10-26'],
+  d2: ['2026-11-02', '02-11-2026', '02-11-26'],
+  d3: ['2026-11-03', '03-11-2026', '03-11-26'],
+  d4: ['2026-11-04', '04-11-2026', '04-11-26'],
+  d5: ['2026-11-05', '05-11-2026', '05-11-26'],
+  d6: ['2026-11-06', '06-11-2026', '06-11-26'],
+  d7: ['2026-11-07', '07-11-2026', '07-11-26'],
+};
+
+// Helper to expand aliases so duty roster slots are accessible by both day ID and real date
+const expandDutyRosterAliases = (roster = {}) => {
+  const expanded = { ...roster };
+  for (const [dayId, dateAliases] of Object.entries(TIMETABLE_DATE_MAP)) {
+    ['shift_1', 'shift_2'].forEach((sh) => {
+      const srcKey = `${dayId}_${sh}`;
+      const srcData = roster[srcKey];
+      if (srcData && typeof srcData === 'object') {
+        dateAliases.forEach((alias) => {
+          const aliasKey = `${alias}_${sh}`;
+          if (!expanded[aliasKey]) {
+            expanded[aliasKey] = srcData;
+          }
+        });
+      }
+    });
+  }
+  return expanded;
+};
+
+// 7. Save or Update Duty Roster specifically in MongoDB (Atomic Deep-Merge, Zero-Wipeout)
 export const saveDutyRoster = async (req, res) => {
   try {
     const { sessionName, activeShift = 'shift_1', dutyRoster = {} } = req.body;
@@ -402,7 +452,50 @@ export const saveDutyRoster = async (req, res) => {
       }
       const actualName = target ? target.sessionName : sessionName;
 
-      // Update ALL matching sessions for both shift_1 and shift_2 so duty roster is never lost regardless of which shift user views
+      // 1. Fetch all existing sessions to deep-merge existing rosters
+      const existingSessions = await ExamSession.find({
+        $or: [
+          { sessionName: actualName },
+          { sessionName: { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } },
+          { 'examDetails.examName': { $regex: sessionName.replace(/[_\s]+/g, '.*'), $options: 'i' } }
+        ]
+      });
+
+      // 2. Accumulate all existing slots so no slot/shift is ever wiped
+      let mergedRoster = {};
+      existingSessions.forEach((s) => {
+        if (s.dutyRoster && typeof s.dutyRoster === 'object') {
+          mergedRoster = { ...mergedRoster, ...s.dutyRoster };
+        }
+      });
+
+      // 3. Deep-merge incoming slots
+      for (const [slotKey, slotData] of Object.entries(dutyRoster)) {
+        if (slotData && typeof slotData === 'object') {
+          mergedRoster[slotKey] = {
+            ...(mergedRoster[slotKey] || {}),
+            ...slotData,
+            rooms: {
+              ...(mergedRoster[slotKey]?.rooms || {}),
+              ...(slotData.rooms || {})
+            }
+          };
+          if (Array.isArray(slotData.relievers)) {
+            mergedRoster[slotKey].relievers = slotData.relievers;
+          }
+          if (slotData.isLocked !== undefined) {
+            mergedRoster[slotKey].isLocked = slotData.isLocked;
+          }
+          if (slotData.pin !== undefined) {
+            mergedRoster[slotKey].pin = slotData.pin;
+          }
+        }
+      }
+
+      // 4. Automatically expand date aliases
+      mergedRoster = expandDutyRosterAliases(mergedRoster);
+
+      // 5. Update ALL matching sessions for both shift_1 and shift_2
       await ExamSession.updateMany(
         {
           $or: [
@@ -412,23 +505,15 @@ export const saveDutyRoster = async (req, res) => {
           ]
         },
         { 
-          $set: { dutyRoster } 
+          $set: { dutyRoster: mergedRoster } 
         }
-      );
-
-      const updatedSession = await ExamSession.findOneAndUpdate(
-        { sessionName: actualName, activeShift },
-        { 
-          $set: { dutyRoster } 
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
       );
 
       return res.status(200).json({
         success: true,
         storage: 'mongodb',
         message: `सत्र '${actualName}' का ड्यूटी रोस्टर MongoDB में सुरक्षित हो गया!`,
-        data: updatedSession.dutyRoster,
+        data: mergedRoster,
       });
     }
 

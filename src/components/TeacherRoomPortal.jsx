@@ -165,11 +165,14 @@ export default function TeacherRoomPortal({
 
   // Available room objects corresponding to the shift the teacher is currently viewing
   const rooms = useMemo(() => {
+    if (examSession?.rooms && examSession.rooms.length > 0 && portalShift === activeShift) {
+      return examSession.rooms;
+    }
     if (portalShift === 'shift_1') {
       return (seatingShift1?.rooms && seatingShift1.rooms.length > 0) ? seatingShift1.rooms : (examSession?.rooms || []);
     }
     return (seatingShift2?.rooms && seatingShift2.rooms.length > 0) ? seatingShift2.rooms : (examSession?.rooms || []);
-  }, [portalShift, seatingShift1, seatingShift2, examSession?.rooms]);
+  }, [portalShift, activeShift, seatingShift1, seatingShift2, examSession?.rooms]);
 
   // Flatten all students across all rooms in the exam session
   const allSchoolStudents = useMemo(() => {
@@ -251,29 +254,40 @@ export default function TeacherRoomPortal({
   // Build teacher identification ID set
   const teacherIdSet = useMemo(() => {
     if (!currentUser) return new Set();
-    const teacherRec = (teachers || []).find(
-      (t) =>
-        (t.mobile && currentUser.phone && t.mobile.trim() === currentUser.phone.trim()) ||
-        (t.id && currentUser.assignedTeacherId && String(t.id) === String(currentUser.assignedTeacherId)) ||
-        (t._id && currentUser.assignedTeacherId && String(t._id) === String(currentUser.assignedTeacherId)) ||
-        (t.teacherCode && currentUser.assignedTeacherId && t.teacherCode.toLowerCase() === String(currentUser.assignedTeacherId).toLowerCase()) ||
-        (t.name && currentUser.name && t.name.trim() === currentUser.name.trim())
-    );
-
     const set = new Set();
     if (currentUser.assignedTeacherId) set.add(String(currentUser.assignedTeacherId));
     if (currentUser.id) set.add(String(currentUser.id));
+    if (currentUser._id) set.add(String(currentUser._id));
     if (currentUser.phone) set.add(String(currentUser.phone));
-    if (teacherRec) {
-      if (teacherRec.id) set.add(String(teacherRec.id));
-      if (teacherRec._id) set.add(String(teacherRec._id));
-      if (teacherRec.teacherCode) {
-        set.add(String(teacherRec.teacherCode));
-        set.add(String(teacherRec.teacherCode).toLowerCase());
+
+    const cleanStr = (s) => String(s || '').replace(/^(श्री|श्रीमती|डॉ०|डॉ\.|डा०|डा\.|shri|mr|mrs|dr)\s+/i, '').replace(/\s+/g, '').toLowerCase();
+    const uCleanName = cleanStr(currentUser.name);
+    const uPhone = String(currentUser.phone || '').replace(/\D/g, '').slice(-10);
+
+    (teachers || []).forEach((t) => {
+      const tPhone = String(t.mobile || t.phone || '').replace(/\D/g, '').slice(-10);
+      const tCleanName = cleanStr(t.name);
+      const isMatch =
+        (uPhone && tPhone && uPhone === tPhone) ||
+        (currentUser.assignedTeacherId && (String(t.id) === String(currentUser.assignedTeacherId) || String(t._id) === String(currentUser.assignedTeacherId))) ||
+        (currentUser.id && (String(t.id) === String(currentUser.id) || String(t._id) === String(currentUser.id))) ||
+        (uCleanName && tCleanName && (uCleanName === tCleanName || uCleanName.includes(tCleanName) || tCleanName.includes(uCleanName)));
+
+      if (isMatch) {
+        if (t.id) set.add(String(t.id));
+        if (t._id) set.add(String(t._id));
+        if (t.teacherCode) {
+          set.add(String(t.teacherCode));
+          set.add(String(t.teacherCode).toLowerCase());
+        }
+        if (t.mobile) set.add(String(t.mobile));
+        if (t.name) {
+          set.add(String(t.name).trim());
+          set.add(cleanStr(t.name));
+        }
       }
-      if (teacherRec.mobile) set.add(String(teacherRec.mobile));
-      if (teacherRec.name) set.add(String(teacherRec.name).trim());
-    }
+    });
+
     return set;
   }, [currentUser, teachers]);
 
