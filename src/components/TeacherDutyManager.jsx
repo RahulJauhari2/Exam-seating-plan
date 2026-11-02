@@ -29,6 +29,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
+import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
+import { generateSeatingPlan } from '../utils/seatingAlgorithm';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
 import { saveDutyRosterToDB, fetchTeachersAPI, createTeacherAPI, updateTeacherAPI, deleteTeacherAPI, bulkImportTeachersAPI } from '../services/api';
 import { exportTeachersToExcel, exportMasterTeacherDutyToExcel } from '../utils/excelExport';
@@ -114,20 +116,42 @@ export default function TeacherDutyManager({
     return EXAM_TIMETABLE.find((d) => d.id === selectedDateId) || EXAM_TIMETABLE[0];
   }, [selectedDateId]);
 
-  // Active rooms from seating result
+  // Independent in-page shift selection so assigning Shift 2 duty NEVER interferes with ongoing Shift 1 exam!
+  const [selectedShift, setSelectedShift] = useState(activeShift || 'shift_1');
+
+  // Pre-calculate seating for Shift 1 (19 rooms) and Shift 2 (12 rooms)
+  const seatingShift1 = useMemo(() => {
+    return generateSeatingPlan({
+      classes: DEFAULT_SHIFT_1.classes,
+      rooms: DEFAULT_SHIFT_1.rooms,
+      pairingStrategy: 'auto',
+    });
+  }, []);
+
+  const seatingShift2 = useMemo(() => {
+    return generateSeatingPlan({
+      classes: DEFAULT_SHIFT_2.classes,
+      rooms: DEFAULT_SHIFT_2.rooms,
+      pairingStrategy: 'auto',
+    });
+  }, []);
+
+  const currentSeating = selectedShift === 'shift_1' ? seatingShift1 : seatingShift2;
+
+  // Active rooms for the CURRENT selected shift
   const activeRooms = useMemo(() => {
-    if (!seatingResult || !seatingResult.rooms) return [];
-    return seatingResult.rooms.filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
-  }, [seatingResult]);
+    if (!currentSeating || !currentSeating.rooms) return [];
+    return currentSeating.rooms.filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
+  }, [currentSeating]);
 
   // Current duty allocation for selected day & shift: { [roomId]: { invigilator1: teacherId, invigilator2: teacherId }, relievers: [teacherId...] }
-  const currentAllocKey = `${selectedDay.id}_${activeShift}`;
+  const currentAllocKey = `${selectedDay.id}_${selectedShift}`;
   const currentAllocation = useMemo(() => {
     return dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
   }, [dutyRoster, currentAllocKey]);
 
-  // Other shift key on the same day (e.g. shift_2 if activeShift is shift_1)
-  const otherShift = activeShift === 'shift_1' ? 'shift_2' : 'shift_1';
+  // Other shift key on the same day (e.g. shift_2 if selectedShift is shift_1)
+  const otherShift = selectedShift === 'shift_1' ? 'shift_2' : 'shift_1';
   const otherShiftKey = `${selectedDay.id}_${otherShift}`;
   const otherShiftAllocation = useMemo(() => {
     return dutyRoster[otherShiftKey] || { rooms: {}, relievers: [] };
@@ -211,11 +235,15 @@ export default function TeacherDutyManager({
 
   // Smart Auto Allocate Duties with strict Shift 1 vs Shift 2 fair rotation
   // Rule: "jiski first meeting me duty ho wo 2nd meeting me na ho , ager koi free na ho tab lage duty dono meeting me"
-  const handleAutoAllocate = (targetShift = activeShift) => {
+  const handleAutoAllocate = (targetShift = selectedShift) => {
     const targetKey = `${selectedDay.id}_${targetShift}`;
     const targetOtherShift = targetShift === 'shift_1' ? 'shift_2' : 'shift_1';
     const targetOtherKey = `${selectedDay.id}_${targetOtherShift}`;
     const targetOtherAlloc = dutyRoster[targetOtherKey] || { rooms: {}, relievers: [] };
+
+    // Target rooms strictly for the shift being allocated (Shift 1 = 19 rooms, Shift 2 = 12 rooms)
+    const targetSeating = targetShift === 'shift_1' ? seatingShift1 : seatingShift2;
+    const targetRooms = (targetSeating?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
 
     // Get set of teachers who worked in the other shift on this date
     const otherWorkedSet = new Set();
@@ -278,7 +306,7 @@ export default function TeacherDutyManager({
     let tIdx = 0;
     const roomAssignments = {};
 
-    activeRooms.forEach((rm) => {
+    targetRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
       
       const inv1 = roomCandidates[tIdx % roomCandidates.length]?.id || null;
@@ -286,7 +314,7 @@ export default function TeacherDutyManager({
       tIdx++;
 
       let inv2 = null;
-      if (isLarge && roomCandidates.length > activeRooms.length) {
+      if (isLarge && roomCandidates.length > targetRooms.length) {
         inv2 = roomCandidates[tIdx % roomCandidates.length]?.id || null;
         if (inv2) usedIds.add(String(inv2));
         tIdx++;
@@ -311,7 +339,7 @@ export default function TeacherDutyManager({
     // Immediate DB Sync to MongoDB Atlas so all devices get the duty roster right away
     saveDutyRosterToDB(
       examDetails?.examName || 'Half_Yearly_2026_27',
-      activeShift,
+      targetShift,
       updatedRoster
     ).then((res) => {
       if (res && res.success) {
@@ -324,9 +352,12 @@ export default function TeacherDutyManager({
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
   const handleAllocateBothShifts = () => {
+    const s1ActiveRooms = (seatingShift1?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
+    const s2ActiveRooms = (seatingShift2?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
+
     const available = teachers.filter((t) => t.isPresent !== false && !t.isExamIncharge && !t.exemptDuty);
-    if (available.length < activeRooms.length) {
-      alert(`कुल उपस्थित शिक्षक (${available.length}) कमरों की संख्या (${activeRooms.length}) से कम हैं!`);
+    if (available.length < s1ActiveRooms.length) {
+      alert(`कुल उपस्थित शिक्षक (${available.length}) Shift 1 के कमरों (${s1ActiveRooms.length}) से कम हैं!`);
       return;
     }
 
@@ -337,7 +368,7 @@ export default function TeacherDutyManager({
     const poolShift1 = shuffled.slice(0, mid);
     const poolShift2 = shuffled.slice(mid);
 
-    // Shift 1
+    // Shift 1 (19 rooms)
     const s1Used = new Set();
     const s1Relievers = [];
     // User requested preferred relievers for Shift 1
@@ -359,19 +390,19 @@ export default function TeacherDutyManager({
     const s1RoomCand = poolShift1.filter((t) => !s1Used.has(String(t.id)));
     let s1Idx = 0;
     const s1Rooms = {};
-    activeRooms.forEach((rm) => {
+    s1ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
       const inv1 = s1RoomCand[s1Idx % s1RoomCand.length]?.id || null;
       s1Idx++;
       let inv2 = null;
-      if (isLarge && s1RoomCand.length > activeRooms.length) {
+      if (isLarge && s1RoomCand.length > s1ActiveRooms.length) {
         inv2 = s1RoomCand[s1Idx % s1RoomCand.length]?.id || null;
         s1Idx++;
       }
       s1Rooms[rm.roomId] = { invigilator1: inv1, invigilator2: inv2 };
     });
 
-    // Shift 2 (Completely Fresh teachers from poolShift2!)
+    // Shift 2 (12 rooms ONLY!)
     const s2Used = new Set();
     const s2Relievers = [];
     for (const t of poolShift2) {
@@ -383,14 +414,14 @@ export default function TeacherDutyManager({
     const s2RoomCand = poolShift2.filter((t) => !s2Used.has(String(t.id)));
     let s2Idx = 0;
     const s2Rooms = {};
-    activeRooms.forEach((rm) => {
+    s2ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
       // If poolShift2 runs out, gracefully fallback to poolShift1
-      const candidateList = s2RoomCand.length >= activeRooms.length ? s2RoomCand : [...s2RoomCand, ...poolShift1];
+      const candidateList = s2RoomCand.length >= s2ActiveRooms.length ? s2RoomCand : [...s2RoomCand, ...poolShift1];
       const inv1 = candidateList[s2Idx % candidateList.length]?.id || null;
       s2Idx++;
       let inv2 = null;
-      if (isLarge) {
+      if (isLarge && candidateList.length > s2ActiveRooms.length) {
         inv2 = candidateList[s2Idx % candidateList.length]?.id || null;
         s2Idx++;
       }
@@ -411,7 +442,7 @@ export default function TeacherDutyManager({
     // Immediate DB Sync for both shifts to MongoDB Atlas
     saveDutyRosterToDB(
       examDetails?.examName || 'Half_Yearly_2026_27',
-      activeShift,
+      selectedShift,
       updatedRoster
     ).then((res) => {
       if (res && res.success) {
@@ -421,7 +452,7 @@ export default function TeacherDutyManager({
       }
     }).catch(() => {});
 
-    alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${poolShift1.length} शिक्षक\n• Shift 2 (दोपहर): ${poolShift2.length} फ्रेश शिक्षक (बिना किसी दोहराव के)`);
+    alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${s1ActiveRooms.length} कक्ष (${poolShift1.length} शिक्षक)\n• Shift 2 (दोपहर): ${s2ActiveRooms.length} कक्ष (${poolShift2.length} शिक्षक - बिना किसी दोहराव के)`);
   };
 
   // Auto-allocation is on-demand by clicking 'ऑटो ड्यूटी आवंटन' button
@@ -429,7 +460,7 @@ export default function TeacherDutyManager({
 
   // 1. Clear duty allocation for currently selected date & shift
   const handleClearCurrentShift = () => {
-    if (!window.confirm(`क्या आप ${selectedDay.date} (${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) का ड्यूटी डेटा खाली करना चाहते हैं?`)) {
+    if (!window.confirm(`क्या आप ${selectedDay.date} (${selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) का ड्यूटी डेटा खाली करना चाहते हैं?`)) {
       return;
     }
     const next = { ...dutyRoster };
@@ -437,7 +468,7 @@ export default function TeacherDutyManager({
     setDutyRoster(next);
     saveDutyRosterToDB(
       examDetails?.examName || 'Half_Yearly_2026_27',
-      activeShift,
+      selectedShift,
       next
     ).catch(() => {});
   };
@@ -590,7 +621,7 @@ export default function TeacherDutyManager({
     try {
       const res = await saveDutyRosterToDB(
         examDetails?.examName || 'Half_Yearly_2026_27',
-        activeShift,
+        selectedShift,
         dutyRoster
       );
       if (res && res.success) {
@@ -615,7 +646,7 @@ export default function TeacherDutyManager({
     const timer = setTimeout(() => {
       saveDutyRosterToDB(
         examDetails?.examName || 'Half_Yearly_2026_27',
-        activeShift,
+        selectedShift,
         dutyRoster
       ).then((res) => {
         if (res && res.success) {
@@ -627,7 +658,7 @@ export default function TeacherDutyManager({
     }, 2500);
 
     return () => clearTimeout(timer);
-  }, [dutyRoster, examDetails?.examName, activeShift]);
+  }, [dutyRoster, examDetails?.examName, selectedShift]);
 
 
   // Toggle Exam Incharge status (Exempt from room duties)
@@ -1080,12 +1111,12 @@ export default function TeacherDutyManager({
 
             <button
               type="button"
-              onClick={() => handleAutoAllocate(activeShift)}
+              onClick={() => handleAutoAllocate(selectedShift)}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              title="इस शिफ्ट के लिए फ्रेश शिक्षकों को प्राथमिकता देकर ऑटो आवंटन करें"
+              title={`इस शिफ्ट (${selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) के लिए फ्रेश शिक्षकों को प्राथमिकता देकर ऑटो आवंटन करें`}
             >
               <Shuffle className="w-3.5 h-3.5" />
-              <span>ऑटो ड्यूटी आवंटन</span>
+              <span>ऑटो ड्यूटी आवंटन ({selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'})</span>
             </button>
 
             <button
@@ -1146,15 +1177,68 @@ export default function TeacherDutyManager({
           </div>
         </div>
 
+        {/* Independent Shift Selector Tabs (Shift 1 vs Shift 2) */}
+        <div className="pt-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 bg-gradient-to-r from-slate-50 to-indigo-50/50 border border-slate-200 rounded-2xl shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-indigo-600" />
+                <span>ड्यूटी पाली चुनें (Select Meeting Shift):</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">
+                (सुबह की परीक्षा चालू रहते हुए भी दोपहर की ड्यूटी सुरक्षित सेट करें)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl shadow-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedShift('shift_1')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedShift === 'shift_1'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>🌅 1st Meeting (Shift 1 - सुबह)</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                  selectedShift === 'shift_1' ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  19 कक्ष
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedShift('shift_2')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedShift === 'shift_2'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>☀️ 2nd Meeting (Shift 2 - दोपहर)</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                  selectedShift === 'shift_2' ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  12 कक्ष
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Date Selector Pills */}
-        <div className="pt-4">
+        <div className="pt-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-indigo-600" />
+              <Calendar className="w-4 h-4 text-indigo-600" />
               <span>परीक्षा तिथि चुनें (Select Exam Date):</span>
             </span>
             <span className="text-[11px] text-slate-500 font-medium">
-              सक्रिय शिफ्ट: <strong className="text-indigo-700">{activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'}</strong>
+              चयनित पाली: <strong className={selectedShift === 'shift_1' ? 'text-indigo-700 font-black' : 'text-amber-700 font-black'}>
+                {selectedShift === 'shift_1' ? 'Shift 1 (सुबह 08:30 - 11:45)' : 'Shift 2 (दोपहर 12:30 - 03:00)'}
+              </strong>
             </span>
           </div>
 
@@ -1224,8 +1308,8 @@ export default function TeacherDutyManager({
             </div>
             <div className="flex items-center justify-between text-[11px] font-bold text-black mt-2 px-2.5 bg-slate-100 py-1 border border-black">
               <span>दिनांक: <strong>{selectedDay.date} ({selectedDay.day})</strong></span>
-              <span>शिफ्ट: <strong>{activeShift === 'shift_1' ? EXAM_SCHEME_METADATA.shift1Time : EXAM_SCHEME_METADATA.shift2Time}</strong></span>
-              <span>आवंटित कमरे: <strong>{activeRooms.length}</strong> (कुल परीक्षार्थी: {seatingResult?.totalSeated || 0})</span>
+              <span>शिफ्ट: <strong>{selectedShift === 'shift_1' ? EXAM_SCHEME_METADATA.shift1Time : EXAM_SCHEME_METADATA.shift2Time}</strong></span>
+              <span>आवंटित कमरे: <strong>{activeRooms.length}</strong> (कुल परीक्षार्थी: {currentSeating?.totalSeated || 0})</span>
             </div>
           </div>
 

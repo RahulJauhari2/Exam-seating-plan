@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { EXAM_TIMETABLE } from '../data/examSchemeData';
+import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
+import { generateSeatingPlan } from '../utils/seatingAlgorithm';
 import { 
   UserX, 
   UserCheck, 
@@ -140,8 +142,34 @@ export default function TeacherRoomPortal({
     return bundles;
   }, [currentUser, evaluationAllotment, marksLocks, classes]);
 
-  // Available room objects from seatingResult
-  const rooms = examSession?.rooms || [];
+  // Independent shift for teacher portal - defaults based on current time (>= 12:00 PM -> Shift 2)
+  const [portalShift, setPortalShift] = useState(() => {
+    return new Date().getHours() >= 12 ? 'shift_2' : (activeShift || 'shift_1');
+  });
+
+  const seatingShift1 = useMemo(() => {
+    return generateSeatingPlan({
+      classes: DEFAULT_SHIFT_1.classes,
+      rooms: DEFAULT_SHIFT_1.rooms,
+      pairingStrategy: 'auto',
+    });
+  }, []);
+
+  const seatingShift2 = useMemo(() => {
+    return generateSeatingPlan({
+      classes: DEFAULT_SHIFT_2.classes,
+      rooms: DEFAULT_SHIFT_2.rooms,
+      pairingStrategy: 'auto',
+    });
+  }, []);
+
+  // Available room objects corresponding to the shift the teacher is currently viewing
+  const rooms = useMemo(() => {
+    if (portalShift === 'shift_1') {
+      return (seatingShift1?.rooms && seatingShift1.rooms.length > 0) ? seatingShift1.rooms : (examSession?.rooms || []);
+    }
+    return (seatingShift2?.rooms && seatingShift2.rooms.length > 0) ? seatingShift2.rooms : (examSession?.rooms || []);
+  }, [portalShift, seatingShift1, seatingShift2, examSession?.rooms]);
 
   // Flatten all students across all rooms in the exam session
   const allSchoolStudents = useMemo(() => {
@@ -217,15 +245,12 @@ export default function TeacherRoomPortal({
     }
   };
 
-  // 1. Identify teacher's assigned room and duty status for the ACTIVE DAY & SHIFT
+  // 1. Identify teacher's assigned room and duty status for BOTH Shift 1 and Shift 2
   const dutyRoster = examSession?.dutyRoster || {};
 
-  const currentShiftDutyInfo = useMemo(() => {
-    if (!currentUser) {
-      return { hasDuty: false, isReliever: false, roomName: null, isRosterPublished: false, statusText: 'लॉगिन नहीं हैं' };
-    }
-
-    // Find teacher in teachers directory by mobile, id, teacherCode, or name
+  // Build teacher identification ID set
+  const teacherIdSet = useMemo(() => {
+    if (!currentUser) return new Set();
     const teacherRec = (teachers || []).find(
       (t) =>
         (t.mobile && currentUser.phone && t.mobile.trim() === currentUser.phone.trim()) ||
@@ -235,36 +260,45 @@ export default function TeacherRoomPortal({
         (t.name && currentUser.name && t.name.trim() === currentUser.name.trim())
     );
 
-    const teacherIdSet = new Set();
-    if (currentUser.assignedTeacherId) teacherIdSet.add(String(currentUser.assignedTeacherId));
-    if (currentUser.id) teacherIdSet.add(String(currentUser.id));
-    if (currentUser.phone) teacherIdSet.add(String(currentUser.phone));
+    const set = new Set();
+    if (currentUser.assignedTeacherId) set.add(String(currentUser.assignedTeacherId));
+    if (currentUser.id) set.add(String(currentUser.id));
+    if (currentUser.phone) set.add(String(currentUser.phone));
     if (teacherRec) {
-      if (teacherRec.id) teacherIdSet.add(String(teacherRec.id));
-      if (teacherRec._id) teacherIdSet.add(String(teacherRec._id));
+      if (teacherRec.id) set.add(String(teacherRec.id));
+      if (teacherRec._id) set.add(String(teacherRec._id));
       if (teacherRec.teacherCode) {
-        teacherIdSet.add(String(teacherRec.teacherCode));
-        teacherIdSet.add(String(teacherRec.teacherCode).toLowerCase());
+        set.add(String(teacherRec.teacherCode));
+        set.add(String(teacherRec.teacherCode).toLowerCase());
       }
-      if (teacherRec.mobile) teacherIdSet.add(String(teacherRec.mobile));
-      if (teacherRec.name) teacherIdSet.add(String(teacherRec.name).trim());
+      if (teacherRec.mobile) set.add(String(teacherRec.mobile));
+      if (teacherRec.name) set.add(String(teacherRec.name).trim());
     }
+    return set;
+  }, [currentUser, teachers]);
 
-    // Determine target day ID: e.g. 'd2' for 02-11-26
+  // Preferred day ID (e.g. 'd2' for 02-11-26)
+  const preferredDayId = useMemo(() => {
     const matchedDay = (EXAM_TIMETABLE || []).find(
       (d) => d.fullDate === activeDate || d.date === activeDate || (activeDate && activeDate.includes(d.date))
     );
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDay = (EXAM_TIMETABLE || []).find((d) => d.fullDate === todayStr || d.date === todayStr);
-    const preferredDayId = matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (Object.keys(dutyRoster).some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
-    
-    // Exact shift key for CURRENT active day & shift (e.g. d2_shift_1 or d2_shift_2)
-    const exactKey = `${preferredDayId}_${activeShift}`;
+    return matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (Object.keys(dutyRoster).some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
+  }, [activeDate, dutyRoster]);
+
+  // Helper to resolve duty status for any specific shift (shift_1 or shift_2)
+  const getDutyInfoForShift = (targetShift, targetRooms = []) => {
+    if (!currentUser) {
+      return { hasDuty: false, isReliever: false, roomName: null, isRosterPublished: false, statusText: 'लॉगिन नहीं हैं' };
+    }
+
+    const exactKey = `${preferredDayId}_${targetShift}`;
     let alloc = dutyRoster[exactKey];
 
     // Fallback: If not found under exact day, check other day keys for this shift (e.g. d1 vs d2)
     if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {
-      const altDayKey = preferredDayId === 'd2' ? `d1_${activeShift}` : `d2_${activeShift}`;
+      const altDayKey = preferredDayId === 'd2' ? `d1_${targetShift}` : `d2_${targetShift}`;
       if (dutyRoster[altDayKey]?.rooms && Object.keys(dutyRoster[altDayKey].rooms).length > 0) {
         alloc = dutyRoster[altDayKey];
       }
@@ -277,7 +311,7 @@ export default function TeacherRoomPortal({
         isReliever: false,
         roomName: null,
         isRosterPublished: false,
-        statusText: `${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
+        statusText: `${targetShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
       };
     }
 
@@ -289,8 +323,8 @@ export default function TeacherRoomPortal({
         (inv1 && teacherIdSet.has(inv1)) ||
         (inv2 && teacherIdSet.has(inv2))
       ) {
-        const foundRoom = rooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
-        const rName = foundRoom ? foundRoom.roomName : rId;
+        const foundRoom = targetRooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
+        const rName = foundRoom ? (foundRoom.roomName || foundRoom.name) : rId;
         return {
           hasDuty: true,
           isReliever: false,
@@ -326,7 +360,17 @@ export default function TeacherRoomPortal({
       isRosterPublished: true,
       statusText: 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)',
     };
-  }, [currentUser, dutyRoster, rooms, teachers, activeShift, activeDate]);
+  };
+
+  const s1DutyInfo = useMemo(() => {
+    return getDutyInfoForShift('shift_1', seatingShift1?.rooms || []);
+  }, [preferredDayId, dutyRoster, teacherIdSet, seatingShift1]);
+
+  const s2DutyInfo = useMemo(() => {
+    return getDutyInfoForShift('shift_2', seatingShift2?.rooms || []);
+  }, [preferredDayId, dutyRoster, teacherIdSet, seatingShift2]);
+
+  const currentShiftDutyInfo = portalShift === 'shift_1' ? s1DutyInfo : s2DutyInfo;
 
   const assignedRoomDefault = useMemo(() => {
     if (canAccessAllRooms) {
@@ -773,38 +817,38 @@ export default function TeacherRoomPortal({
           <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5">
             <div className="flex items-center justify-between">
               <span className="text-amber-800 block text-[10px] font-bold uppercase tracking-wider">
-                परीक्षा पाली (Shift)
+                परीक्षा पाली (Meeting Shift)
               </span>
               <span className="text-[10px] text-amber-700 font-bold">
-                {activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}
+                {portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'}
               </span>
             </div>
             <div className="flex items-center gap-1 mt-1">
               <button
                 type="button"
-                onClick={() => handleShiftChange && handleShiftChange('shift_1')}
+                onClick={() => setPortalShift('shift_1')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  activeShift === 'shift_1'
-                    ? 'bg-amber-800 text-white shadow-xs'
-                    : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'
+                  portalShift === 'shift_1'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                 }`}
                 title="सुबह की पाली (9वीं - 12वीं)"
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Shift 1 (सुबह)</span>
+                <span>Shift 1 {s1DutyInfo.hasDuty ? `(${s1DutyInfo.roomName})` : '(निरंक)'}</span>
               </button>
               <button
                 type="button"
-                onClick={() => handleShiftChange && handleShiftChange('shift_2')}
+                onClick={() => setPortalShift('shift_2')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  activeShift === 'shift_2'
-                    ? 'bg-amber-800 text-white shadow-xs'
-                    : 'text-amber-900 hover:bg-amber-100 border border-amber-300'
+                  portalShift === 'shift_2'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                 }`}
                 title="दोपहर की पाली (6वीं - 8वीं)"
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Shift 2 (दोपहर)</span>
+                <span>Shift 2 {s2DutyInfo.hasDuty ? `(${s2DutyInfo.roomName})` : '(निरंक)'}</span>
               </button>
             </div>
           </div>
@@ -848,22 +892,22 @@ export default function TeacherRoomPortal({
           <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
             {currentShiftDutyInfo.isRosterPublished
               ? 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)'
-              : `${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`}
+              : `${portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`}
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mb-5 max-w-md mx-auto leading-relaxed">
             {currentShiftDutyInfo.isRosterPublished
-              ? `दिनांक ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${activeShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} में आपको किसी कक्ष का प्रभार नहीं दिया गया है।`
-              : `कंट्रोल रूम द्वारा ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} की कक्ष ड्यूटी अभी जारी नहीं की गई है। जैसे ही ड्यूटी लगाई जाएगी, आपका कमरा यहाँ स्वतः दिखाई देगा।`}
+              ? `दिनांक ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} में आपको किसी कक्ष का प्रभार नहीं दिया गया है।`
+              : `कंट्रोल रूम द्वारा ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} की कक्ष ड्यूटी अभी जारी नहीं की गई है। जैसे ही ड्यूटी लगाई जाएगी, आपका कमरा यहाँ स्वतः दिखाई देगा।`}
           </p>
 
           <div className="inline-flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold">
             <span>💡 दूसरी पाली देखने के लिए यहाँ क्लिक करें:</span>
             <button
               type="button"
-              onClick={() => handleShiftChange && handleShiftChange(activeShift === 'shift_1' ? 'shift_2' : 'shift_1')}
+              onClick={() => setPortalShift(portalShift === 'shift_1' ? 'shift_2' : 'shift_1')}
               className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-black shadow-xs transition cursor-pointer"
             >
-              {activeShift === 'shift_1' ? 'Shift 2 (दोपहर) देखें' : 'Shift 1 (सुबह) देखें'}
+              {portalShift === 'shift_1' ? 'Shift 2 (दोपहर) देखें' : 'Shift 1 (सुबह) देखें'}
             </button>
           </div>
         </div>
