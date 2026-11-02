@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import examRoutes from './routes/examRoutes.js';
 import authRoutes from './routes/authRoutes.js';
@@ -11,8 +13,12 @@ import { seedInitialUsers } from './controllers/authController.js';
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.join(__dirname, '../dist');
+
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors({
@@ -34,23 +40,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: Date.now() });
 });
 
-// Root test endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Exam Seating Plan & Result Management System API with RBAC & Live Absentee Sync',
-    database: 'MongoDB + Mongoose',
-    validation: 'Zod Validation Engine',
-    status: 'Running',
-    version: '2.0.0',
-    documentation: {
-      health: 'GET /api/health',
-      auth: 'POST /api/auth/login, GET /api/auth/me, GET /api/auth/users',
-      absentees: 'GET /api/absentees, POST /api/absentees/toggle',
-      sessions: 'GET /api/sessions, POST /api/sessions',
-      singleSession: 'GET /api/sessions/:sessionName',
-      marks: 'POST /api/marks',
-    }
-  });
+// Serve frontend build static files (dist/)
+app.use(express.static(distPath));
+
+// SPA Client-side Routing Fallback (for non-API requests)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Error handling middleware
