@@ -7,7 +7,8 @@ export let lastConnectionError = null;
 export const getLastConnectionError = () => lastConnectionError;
 
 export const getMongoUri = () => {
-  return (process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/exam_seating_db').trim();
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || 'mongodb://127.0.0.1:27017/exam_seating_db';
+  return uri.trim();
 };
 
 let cached = global.mongoose;
