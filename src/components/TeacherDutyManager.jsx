@@ -26,7 +26,10 @@ import {
   Check,
   Database,
   Save,
-  RotateCcw
+  RotateCcw,
+  Lock,
+  Unlock,
+  KeyRound
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
@@ -97,10 +100,16 @@ export default function TeacherDutyManager({
       return null;
     }
   });
-  const { isPrincipal, isSuperAdmin } = useAuth();
+  const { currentUser, isPrincipal, isSuperAdmin } = useAuth();
   const canEditTeacher = isPrincipal || isSuperAdmin;
   const [editingTeacherId, setEditingTeacherId] = useState(null);
   const [editForm, setEditForm] = useState({});
+
+  // PIN Lock State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinAction, setPinAction] = useState('lock'); // 'lock' | 'unlock'
+  const [enteredPin, setEnteredPin] = useState('1234');
+  const [pinError, setPinError] = useState('');
 
   const [newTeacher, setNewTeacher] = useState({
     name: '',
@@ -149,6 +158,69 @@ export default function TeacherDutyManager({
   const currentAllocation = useMemo(() => {
     return dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
   }, [dutyRoster, currentAllocKey]);
+
+  // Is current shift's duty locked with a PIN?
+  const isDutyLocked = Boolean(currentAllocation?.isLocked);
+
+  const handleLockDuty = (pin) => {
+    const cleanPin = String(pin || '').trim();
+    if (cleanPin.length < 4) {
+      setPinError('कृपया कम से कम 4 अंकों का गुप्त पिन दर्ज करें (उदा. 1234)');
+      return;
+    }
+    const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
+    const updatedRoster = {
+      ...dutyRoster,
+      [currentAllocKey]: {
+        ...curr,
+        isLocked: true,
+        lockPin: cleanPin,
+        lockedBy: currentUser?.name || 'परीक्षा प्रभारी / प्रधानाचार्य',
+        lockedAt: new Date().toISOString(),
+      },
+    };
+    setDutyRoster(updatedRoster);
+    setIsPinModalOpen(false);
+    setEnteredPin('1234');
+    setPinError('');
+
+    // Save to DB immediately
+    saveDutyRosterToDB(
+      examDetails?.examName || 'Half_Yearly_2026_27',
+      selectedShift,
+      updatedRoster
+    );
+  };
+
+  const handleUnlockDuty = (pin) => {
+    const cleanPin = String(pin || '').trim();
+    const savedPin = String(currentAllocation?.lockPin || '1234').trim();
+    if (cleanPin === savedPin || cleanPin === '1234' || isPrincipal || isSuperAdmin) {
+      const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
+      const updatedRoster = {
+        ...dutyRoster,
+        [currentAllocKey]: {
+          ...curr,
+          isLocked: false,
+          unlockedBy: currentUser?.name || 'परीक्षा प्रभारी',
+          unlockedAt: new Date().toISOString(),
+        },
+      };
+      setDutyRoster(updatedRoster);
+      setIsPinModalOpen(false);
+      setEnteredPin('1234');
+      setPinError('');
+
+      // Save to DB immediately
+      saveDutyRosterToDB(
+        examDetails?.examName || 'Half_Yearly_2026_27',
+        selectedShift,
+        updatedRoster
+      );
+    } else {
+      setPinError('गलत पिन! कृपया सही 4 अंकों का पिन दर्ज करें (Default PIN: 1234)');
+    }
+  };
 
   // Other shift key on the same day (e.g. shift_2 if selectedShift is shift_1)
   const otherShift = selectedShift === 'shift_1' ? 'shift_2' : 'shift_1';
@@ -236,6 +308,10 @@ export default function TeacherDutyManager({
   // Smart Auto Allocate Duties with strict Shift 1 vs Shift 2 fair rotation
   // Rule: "jiski first meeting me duty ho wo 2nd meeting me na ho , ager koi free na ho tab lage duty dono meeting me"
   const handleAutoAllocate = (targetShift = selectedShift) => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! बदलाव करने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const targetKey = `${selectedDay.id}_${targetShift}`;
     const targetOtherShift = targetShift === 'shift_1' ? 'shift_2' : 'shift_1';
     const targetOtherKey = `${selectedDay.id}_${targetOtherShift}`;
@@ -352,6 +428,10 @@ export default function TeacherDutyManager({
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
   const handleAllocateBothShifts = () => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! बदलाव करने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const s1ActiveRooms = (seatingShift1?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
     const s2ActiveRooms = (seatingShift2?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
 
@@ -460,6 +540,10 @@ export default function TeacherDutyManager({
 
   // 1. Clear duty allocation for currently selected date & shift
   const handleClearCurrentShift = () => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! खाली करने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     if (!window.confirm(`क्या आप ${selectedDay.date} (${selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) का ड्यूटी डेटा खाली करना चाहते हैं?`)) {
       return;
     }
@@ -475,6 +559,10 @@ export default function TeacherDutyManager({
 
   // 2. Completely delete all test duty roster data (All dates & shifts) from state, localStorage & MongoDB Atlas
   const handleClearAllDuties = async () => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const ok = window.confirm(
       '⚠️ क्या आप निश्चित हैं कि आप सभी तिथियों और शिफ्टों का टेस्ट ड्यूटी डेटा पूरी तरह हटाना (Delete) चाहते हैं?\n\nयह डेटाबेस (MongoDB Atlas) और स्थानीय ब्राउज़र दोनों से हमेशा के लिए साफ हो जाएगा।'
     );
@@ -509,6 +597,10 @@ export default function TeacherDutyManager({
   // Handle manual dropdown change for a room
   // When a teacher is selected, remove them from relievers or other room if previously assigned
   const handleRoomTeacherChange = (roomId, slot, teacherId) => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! शिक्षक बदलने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
     const currRooms = { ...(curr.rooms || {}) };
     let currRelievers = [...(curr.relievers || [])];
@@ -546,6 +638,10 @@ export default function TeacherDutyManager({
 
   // Add teacher to Relievers
   const handleAddReliever = (teacherId) => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! रिलीवर जोड़ने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     if (!teacherId) return;
     const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
     const currRelievers = [...(curr.relievers || [])];
@@ -579,6 +675,10 @@ export default function TeacherDutyManager({
 
   // Remove teacher from Relievers
   const handleRemoveReliever = (teacherId) => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! रिलीवर हटाने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
     const currRelievers = (curr.relievers || []).filter((tid) => String(tid) !== String(teacherId));
 
@@ -593,6 +693,10 @@ export default function TeacherDutyManager({
 
   // Set User's Requested 3 Relievers: श्री अंकित अवस्थी (t19), श्री प्रभात कुमार पाण्डेय (t13), श्री सुनील कुमार बाजपेयी (t2)
   const handleSetPriorityRelievers = () => {
+    if (isDutyLocked) {
+      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! पहले ऊपर दिए गए बटन से अनलॉक करें।');
+      return;
+    }
     const targetIds = ['t19', 't13', 't2'];
     const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
     const currRooms = { ...(curr.rooms || {}) };
@@ -1099,11 +1203,51 @@ export default function TeacherDutyManager({
               </button>
             </div>
 
+            {/* PIN Lock / Unlock Control */}
+            {isDutyLocked ? (
+              <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-300 p-1 rounded-xl shadow-xs">
+                <span className="text-xs font-black text-rose-800 px-2 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-rose-600" />
+                  <span>🔒 ड्यूटी पिन द्वारा लॉक है</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinAction('unlock');
+                    setEnteredPin('');
+                    setPinError('');
+                    setIsPinModalOpen(true);
+                  }}
+                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-xs transition cursor-pointer flex items-center gap-1 active:scale-95"
+                  title="ड्यूटी अनलॉक करने के लिए पिन दर्ज करें"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>पिन से अनलॉक करें</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setPinAction('lock');
+                  setEnteredPin('1234');
+                  setPinError('');
+                  setIsPinModalOpen(true);
+                }}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="ड्यूटी को 4-अंकों के पिन से लॉक करें ताकि कोई बदलाव या ओवरराइट न हो"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-200" />
+                <span>🔒 पिन से ड्यूटी लॉक करें</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleAllocateBothShifts}
-              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              title="दोनों पालियों (Shift 1 व 2) का निष्पक्ष बिना दोहराव वाला आवंटन"
+              disabled={isDutyLocked}
+              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isDutyLocked ? 'ड्यूटी लॉक है! पहले अनलॉक करें' : 'दोनों पालियों (Shift 1 व 2) का निष्पक्ष बिना दोहराव वाला आवंटन'}
             >
               <Scale className="w-3.5 h-3.5" />
               <span>दोनों शिफ्टों का निष्पक्ष आवंटन</span>
@@ -1112,8 +1256,9 @@ export default function TeacherDutyManager({
             <button
               type="button"
               onClick={() => handleAutoAllocate(selectedShift)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              title={`इस शिफ्ट (${selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) के लिए फ्रेश शिक्षकों को प्राथमिकता देकर ऑटो आवंटन करें`}
+              disabled={isDutyLocked}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isDutyLocked ? 'ड्यूटी लॉक है! पहले अनलॉक करें' : `इस शिफ्ट (${selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}) के लिए फ्रेश शिक्षकों को प्राथमिकता देकर ऑटो आवंटन करें`}
             >
               <Shuffle className="w-3.5 h-3.5" />
               <span>ऑटो ड्यूटी आवंटन ({selectedShift === 'shift_1' ? 'Shift 1' : 'Shift 2'})</span>
@@ -1122,8 +1267,9 @@ export default function TeacherDutyManager({
             <button
               type="button"
               onClick={handleClearCurrentShift}
-              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-              title="वर्तमान शिफ्ट का ड्यूटी आवंटन खाली करें"
+              disabled={isDutyLocked}
+              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isDutyLocked ? 'ड्यूटी लॉक है! पहले अनलॉक करें' : 'वर्तमान शिफ्ट का ड्यूटी आवंटन खाली करें'}
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
               <span>शिफ्ट खाली करें</span>
@@ -1132,8 +1278,9 @@ export default function TeacherDutyManager({
             <button
               type="button"
               onClick={handleClearAllDuties}
-              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-              title="सभी तिथियों और शिफ्टों का टेस्ट ड्यूटी डेटा पूरी तरह हटाएं (Reset All)"
+              disabled={isDutyLocked}
+              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isDutyLocked ? 'ड्यूटी लॉक है! पहले अनलॉक करें' : 'सभी तिथियों और शिफ्टों का टेस्ट ड्यूटी डेटा पूरी तरह हटाएं (Reset All)'}
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-600" />
               <span>🗑️ टेस्ट डेटा हटाएं</span>
@@ -1421,32 +1568,39 @@ export default function TeacherDutyManager({
                         {/* Invigilator 1 Dropdown: ONLY FREE TEACHERS + CURRENTLY SELECTED */}
                         <td className="px-4 py-2.5 print:border print:border-black print:text-black print:py-1">
                           <div className="no-print">
-                            <select
-                              value={t1Id || ''}
-                              onChange={(e) => handleRoomTeacherChange(rm.roomId, 'invigilator1', e.target.value)}
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:outline-indigo-500 cursor-pointer shadow-2xs"
-                            >
-                              <option value="">— शिक्षक चुनें (हटाएं) —</option>
-                              
-                              {/* If currently assigned, always show at top */}
-                              {t1 && (
-                                <option value={t1.id}>
-                                  ✓ {t1.name} ({t1.designation}) [वर्तमान चयनित]
-                                </option>
-                              )}
+                            {isDutyLocked ? (
+                              <div className="w-full px-2.5 py-1.5 border border-slate-200 bg-slate-50/80 rounded-lg text-xs font-black text-slate-800 flex items-center justify-between shadow-2xs">
+                                <span className="truncate">{t1 ? `${t1.name} (${t1.designation})` : '— रिक्त —'}</span>
+                                <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                              </div>
+                            ) : (
+                              <select
+                                value={t1Id || ''}
+                                onChange={(e) => handleRoomTeacherChange(rm.roomId, 'invigilator1', e.target.value)}
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">— शिक्षक चुनें (हटाएं) —</option>
+                                
+                                {/* If currently assigned, always show at top */}
+                                {t1 && (
+                                  <option value={t1.id}>
+                                    ✓ {t1.name} ({t1.designation}) [वर्तमान चयनित]
+                                  </option>
+                                )}
 
-                              {/* Only show FREE teachers */}
-                              <optgroup label={`उपलब्ध मुक्त शिक्षक (${freeTeachers.length})`}>
-                                {freeTeachers.map((t) => {
-                                  const workedInOther = otherShiftAssignedIds.has(String(t.id));
-                                  return (
-                                    <option key={t.id} value={t.id}>
-                                      {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
-                                    </option>
-                                  );
-                                })}
-                              </optgroup>
-                            </select>
+                                {/* Only show FREE teachers */}
+                                <optgroup label={`उपलब्ध मुक्त शिक्षक (${freeTeachers.length})`}>
+                                  {freeTeachers.map((t) => {
+                                    const workedInOther = otherShiftAssignedIds.has(String(t.id));
+                                    return (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              </select>
+                            )}
                           </div>
                           <div className="hidden print:block leading-tight">
                             {t1 ? (
@@ -1463,36 +1617,45 @@ export default function TeacherDutyManager({
                         {/* Invigilator 2 Dropdown: ONLY FREE TEACHERS + CURRENTLY SELECTED */}
                         <td className="px-4 py-2.5 print:border print:border-black print:text-black print:py-1">
                           <div className="no-print">
-                            <select
-                              value={t2Id || ''}
-                              onChange={(e) => handleRoomTeacherChange(rm.roomId, 'invigilator2', e.target.value)}
-                              className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold cursor-pointer shadow-2xs ${
-                                isLarge
-                                  ? 'border-indigo-300 bg-indigo-50/40 text-indigo-900'
-                                  : 'border-slate-200 text-slate-600 bg-slate-50/60'
-                              }`}
-                            >
-                              <option value="">— द्वितीय कक्ष निरीक्षक {isLarge ? '(हॉल)' : '(वैकल्पिक)'} —</option>
+                            {isDutyLocked ? (
+                              <div className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-black flex items-center justify-between shadow-2xs ${
+                                isLarge ? 'border-indigo-200 bg-indigo-50/50 text-indigo-900' : 'border-slate-200 bg-slate-50/60 text-slate-600'
+                              }`}>
+                                <span className="truncate">{t2 ? `${t2.name} (${t2.designation})` : '— रिक्त (वैकल्पिक) —'}</span>
+                                <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                              </div>
+                            ) : (
+                              <select
+                                value={t2Id || ''}
+                                onChange={(e) => handleRoomTeacherChange(rm.roomId, 'invigilator2', e.target.value)}
+                                className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold cursor-pointer shadow-2xs ${
+                                  isLarge
+                                    ? 'border-indigo-300 bg-indigo-50/40 text-indigo-900'
+                                    : 'border-slate-200 text-slate-600 bg-slate-50/60'
+                                }`}
+                              >
+                                <option value="">— द्वितीय कक्ष निरीक्षक {isLarge ? '(हॉल)' : '(वैकल्पिक)'} —</option>
 
-                              {/* If currently assigned, always show at top */}
-                              {t2 && (
-                                <option value={t2.id}>
-                                  ✓ {t2.name} ({t2.designation}) [वर्तमान चयनित]
-                                </option>
-                              )}
+                                {/* If currently assigned, always show at top */}
+                                {t2 && (
+                                  <option value={t2.id}>
+                                    ✓ {t2.name} ({t2.designation}) [वर्तमान चयनित]
+                                  </option>
+                                )}
 
-                              {/* Only show FREE teachers */}
-                              <optgroup label={`उपलब्ध मुक्त शिक्षक (${freeTeachers.length})`}>
-                                {freeTeachers.map((t) => {
-                                  const workedInOther = otherShiftAssignedIds.has(String(t.id));
-                                  return (
-                                    <option key={t.id} value={t.id}>
-                                      {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
-                                    </option>
-                                  );
-                                })}
-                              </optgroup>
-                            </select>
+                                {/* Only show FREE teachers */}
+                                <optgroup label={`उपलब्ध मुक्त शिक्षक (${freeTeachers.length})`}>
+                                  {freeTeachers.map((t) => {
+                                    const workedInOther = otherShiftAssignedIds.has(String(t.id));
+                                    return (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              </select>
+                            )}
                           </div>
                           <div className="hidden print:block leading-tight">
                             {t2 ? (
@@ -1538,8 +1701,9 @@ export default function TeacherDutyManager({
                   <button
                     type="button"
                     onClick={handleSetPriorityRelievers}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition flex items-center gap-1 cursor-pointer"
-                    title="श्री अंकित अवस्थी, श्री प्रभात पाण्डेय व श्री सुनील बाजपेयी को रिलीवर बनाएं"
+                    disabled={isDutyLocked}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={isDutyLocked ? 'ड्यूटी लॉक है!' : 'श्री अंकित अवस्थी, श्री प्रभात पाण्डेय व श्री सुनील बाजपेयी को रिलीवर बनाएं'}
                   >
                     <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
                     <span>3 विशेष रिलीवर लगाएं (अंकित, प्रभात, सुनील)</span>
@@ -1564,36 +1728,40 @@ export default function TeacherDutyManager({
                         <span>
                           {t.name} <span className="text-[10px] text-slate-500 font-normal">({t.designation})</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveReliever(tid)}
-                          className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition no-print cursor-pointer"
-                          title="रिलीवर से हटाएं (मुक्त करें)"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        {!isDutyLocked && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveReliever(tid)}
+                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition no-print cursor-pointer"
+                            title="रिलीवर से हटाएं (मुक्त करें)"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </span>
                     );
                   })
                 )}
 
                 {/* Add Free Teacher to Relievers Dropdown */}
-                <div className="no-print ml-2 flex items-center gap-1.5">
-                  <select
-                    value={selectedRelieverToAdd}
-                    onChange={(e) => {
-                      if (e.target.value) handleAddReliever(e.target.value);
-                    }}
-                    className="px-2.5 py-1 border border-amber-300 bg-white rounded-xl text-xs font-bold text-amber-950 focus:outline-indigo-500 cursor-pointer shadow-2xs"
-                  >
-                    <option value="">+ रिलीवर शिक्षक जोड़ें (मुक्त शिक्षकों में से)...</option>
-                    {freeTeachers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.designation})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {!isDutyLocked && (
+                  <div className="no-print ml-2 flex items-center gap-1.5">
+                    <select
+                      value={selectedRelieverToAdd}
+                      onChange={(e) => {
+                        if (e.target.value) handleAddReliever(e.target.value);
+                      }}
+                      className="px-2.5 py-1 border border-amber-300 bg-white rounded-xl text-xs font-bold text-amber-950 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">+ रिलीवर शिक्षक जोड़ें (मुक्त शिक्षकों में से)...</option>
+                      {freeTeachers.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.designation})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2281,6 +2449,112 @@ export default function TeacherDutyManager({
                 <div className="text-[10px] font-normal">प्रधानाचार्य / केंद्राध्यक्ष (सील)</div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Lock / Unlock Modal */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 p-6 relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsPinModalOpen(false);
+                setPinError('');
+              }}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center">
+              <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-3.5 shadow-md ${
+                pinAction === 'lock' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+              }`}>
+                {pinAction === 'lock' ? <Lock className="w-7 h-7" /> : <Unlock className="w-7 h-7" />}
+              </div>
+
+              <h3 className="text-base font-black text-slate-900">
+                {pinAction === 'lock' ? '🔒 ड्यूटी को पिन से लॉक करें' : '🔓 ड्यूटी अनलॉक करें'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                {pinAction === 'lock'
+                  ? '4-अंकों का गुप्त पिन सेट करें ताकि यह ड्यूटी चार्ट पूरी तरह सुरक्षित रहे और कोई आकस्मिक बदलाव न हो सके।'
+                  : 'ड्यूटी में बदलाव, ऑटो आवंटन या शिक्षक बदलने हेतु 4-अंकों का पिन दर्ज करें (डिफ़ॉल्ट पिन: 1234)'}
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (pinAction === 'lock') {
+                  handleLockDuty(enteredPin);
+                } else {
+                  handleUnlockDuty(enteredPin);
+                }
+              }}
+              className="mt-4 space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  4-अंकों का सुरक्षा पिन (PIN):
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    maxLength={6}
+                    value={enteredPin}
+                    onChange={(e) => {
+                      setEnteredPin(e.target.value);
+                      setPinError('');
+                    }}
+                    placeholder="उदा. 1234"
+                    autoFocus
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-center text-lg font-black tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                  />
+                </div>
+                {pinError && (
+                  <p className="text-xs text-rose-600 font-bold mt-1 text-center">
+                    {pinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPinModalOpen(false);
+                    setPinError('');
+                  }}
+                  className="flex-1 py-2 px-3 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  className={`flex-1 py-2 px-3 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition ${
+                    pinAction === 'lock'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {pinAction === 'lock' ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>पिन लॉक करें</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>अनलॉक करें</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
