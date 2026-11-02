@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  UserX, 
+  UserX,
+  UserCheck,
+  Layers, 
   CheckCircle2, 
   Printer, 
   FileSpreadsheet, 
@@ -52,6 +54,8 @@ export default function AbsenteeManager({
   const [activeViewMode, setActiveViewMode] = useState('class-wise'); // 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [filterOnlyAbsentClasses, setFilterOnlyAbsentClasses] = useState(false);
+  const [selectedDateFilter, setSelectedDateFilter] = useState(examDetails?.date || '2026-11-02');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('all'); // 'all' | 'absent' | 'present' | 'b-copy'
   const [copiedClassKey, setCopiedClassKey] = useState(null);
   const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
   const [reExamSearch, setReExamSearch] = useState('');
@@ -185,6 +189,37 @@ export default function AbsenteeManager({
     }
   };
 
+  // Compute effective absentees map for the selected date (supports single date & all dates)
+  const effectiveAbsenteesMap = useMemo(() => {
+    const isCurrentDate = selectedDateFilter === (examDetails?.date || '2026-11-02');
+    if (isCurrentDate) {
+      return absentStudents;
+    }
+    const map = {};
+    if (selectedDateFilter === 'all') {
+      (allDatesAbsentees || []).forEach((r) => {
+        if (r.rollNo) {
+          map[String(r.rollNo)] = true;
+          map[Number(r.rollNo)] = true;
+        }
+      });
+      Object.keys(absentStudents || {}).forEach((k) => {
+        if (absentStudents[k]) {
+          map[k] = true;
+        }
+      });
+      return map;
+    }
+    (allDatesAbsentees || []).forEach((r) => {
+      const match = r.date === selectedDateFilter || selectedDateFilter.includes(r.date) || (r.date && r.date.includes(selectedDateFilter));
+      if (match && r.rollNo) {
+        map[String(r.rollNo)] = true;
+        map[Number(r.rollNo)] = true;
+      }
+    });
+    return map;
+  }, [selectedDateFilter, examDetails?.date, absentStudents, allDatesAbsentees]);
+
   // 1. Generate Room-wise Absentee Summary Data
   const absenteeSummary = useMemo(() => {
     return rooms.map((room) => {
@@ -193,7 +228,7 @@ export default function AbsenteeManager({
       let roomBCopies = 0;
 
       (room.students || []).forEach((s) => {
-        if (absentStudents[s.rollNo?.toString()] || absentStudents[s.rollNo]) {
+        if (effectiveAbsenteesMap[s.rollNo?.toString()] || effectiveAbsenteesMap[s.rollNo]) {
           roomAbsentRolls.push({
             rollNo: s.rollNo,
             name: s.name,
@@ -275,12 +310,19 @@ export default function AbsenteeManager({
       const stBCopies = getStudentBCopies(st.rollNo);
       map[classKey].bCopiesCount += stBCopies;
 
-      const isAbsent = Boolean(absentStudents[st.rollNo?.toString()] || absentStudents[st.rollNo]);
+      const isAbsent = Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]);
+      if (!map[classKey].presentStudents) map[classKey].presentStudents = [];
+      if (!map[classKey].bCopyStudents) map[classKey].bCopyStudents = [];
+
       if (isAbsent) {
         map[classKey].absentCount++;
         map[classKey].absentStudents.push(st);
       } else {
         map[classKey].presentCount++;
+        map[classKey].presentStudents.push(st);
+      }
+      if (stBCopies > 0) {
+        map[classKey].bCopyStudents.push(st);
       }
     });
 
@@ -291,12 +333,12 @@ export default function AbsenteeManager({
       if (numA !== numB) return numA - numB;
       return (a.section || '').localeCompare(b.section || '');
     });
-  }, [allSeatedStudents, absentStudents, teachers, bCopyRecords]);
+  }, [allSeatedStudents, effectiveAbsenteesMap, teachers, bCopyRecords]);
 
   // 4. Flat list of all absent students
   const flatAbsentStudents = useMemo(() => {
     return allSeatedStudents
-      .filter((st) => Boolean(absentStudents[st.rollNo?.toString()] || absentStudents[st.rollNo]))
+      .filter((st) => Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]))
       .sort((a, b) => Number(a.rollNo || 0) - Number(b.rollNo || 0));
   }, [allSeatedStudents, absentStudents]);
 
@@ -442,6 +484,127 @@ export default function AbsenteeManager({
           <p className="text-xl font-black text-indigo-800 mt-1">
             {classesWithAbsenteesCount} <span className="text-xs font-normal text-slate-500">/ {classWiseSummary.length} कक्षाएं</span>
           </p>
+        </div>
+      </div>
+
+      {/* Date-wise Selector Bar (दिनांक अनुसार फ़िल्टर) */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5 no-print">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              दिनांक अनुसार उपस्थिति व अनुपस्थिति फ़िल्टर (Date-wise Attendance):
+            </span>
+          </div>
+          {selectedDateFilter !== 'all' ? (
+            <span className="text-[11px] text-slate-600 font-bold bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+              📅 चयनित परीक्षा तिथि: {selectedDateFilter}
+            </span>
+          ) : (
+            <span className="text-[11px] text-purple-700 font-bold bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full">
+              🌐 संपूर्ण सत्र संकलित दृश्य (All Dates)
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+          <button
+            type="button"
+            onClick={() => setSelectedDateFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+              selectedDateFilter === 'all'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>🌐 समस्त दिवस (All Dates)</span>
+          </button>
+
+          {EXAM_TIMETABLE.map((d) => {
+            const dateStr = d.fullDate || d.date;
+            const isSelected = selectedDateFilter === d.fullDate || selectedDateFilter === d.date;
+            const isToday = d.fullDate === new Date().toISOString().split('T')[0] || d.fullDate === (examDetails?.date || '2026-11-02');
+            return (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setSelectedDateFilter(dateStr)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>{d.date}</span>
+                {isToday && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase ${
+                    isSelected ? 'bg-white text-indigo-700' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    आज
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Attendance Status Filter Chips (स्थिति फ़िल्टर) */}
+        <div className="pt-2 border-t border-slate-100 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> स्थिति फ़िल्टर:
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setAttendanceStatusFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              attendanceStatusFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>🔘 सभी छात्र ({totalAllocated})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAttendanceStatusFilter('absent')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              attendanceStatusFilter === 'absent'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+            }`}
+          >
+            <UserX className="w-3.5 h-3.5" />
+            <span>❌ केवल अनुपस्थित ({totalAbsent})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAttendanceStatusFilter('present')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              attendanceStatusFilter === 'present'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>✅ केवल उपस्थित ({totalPresent})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAttendanceStatusFilter('b-copy')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              attendanceStatusFilter === 'b-copy'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>📙 केवल 'B' कॉपी लेने वाले ({totalCenterBCopies} B)</span>
+          </button>
         </div>
       </div>
 
@@ -637,24 +800,19 @@ export default function AbsenteeManager({
                     </div>
                   </div>
 
-                  {/* Card Body */}
+                  {/* Card Body with Dynamic Attendance Status Filter */}
                   <div className="p-3 sm:p-4">
-                    {cls.absentCount === 0 ? (
-                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>इस कक्षा के सभी छात्र परीक्षा में उपस्थित हैं (No Absentees)।</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
+                    {/* View: ONLY ABSENT or ALL (with absentees) */}
+                    {(attendanceStatusFilter === 'absent' || attendanceStatusFilter === 'all') && cls.absentCount > 0 && (
+                      <div className="space-y-2 mb-3">
                         <div className="text-xs font-black text-rose-900 flex items-center gap-1.5">
                           <UserX className="w-4 h-4 text-rose-600" />
                           <span>अनुपस्थित छात्र सूची ({cls.absentCount} छात्र):</span>
                         </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                           {cls.absentStudents.map((st) => (
                             <div
-                              key={`${st.rollNo}-${st.roomId}`}
+                              key={`abs-${st.rollNo}-${st.roomId}`}
                               className="p-3 bg-rose-50/80 border-2 border-rose-300 rounded-xl flex items-center justify-between gap-2 shadow-2xs"
                             >
                               <div className="min-w-0 flex-1">
@@ -671,16 +829,13 @@ export default function AbsenteeManager({
                                     </span>
                                   )}
                                 </div>
-
                                 <div className="text-xs font-bold text-slate-900 truncate mt-1">
                                   {st.name || 'परीक्षार्थी'}
                                 </div>
-
                                 <div className="text-[10px] text-slate-500 truncate mt-0.5">
                                   विषय: {st.subject || 'सामान्य विषय'}
                                 </div>
                               </div>
-
                               <button
                                 type="button"
                                 onClick={() => toggleAbsent(st.rollNo)}
@@ -693,6 +848,101 @@ export default function AbsenteeManager({
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* View: ONLY PRESENT */}
+                    {attendanceStatusFilter === 'present' && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                          <UserCheck className="w-4 h-4 text-emerald-600" />
+                          <span>उपस्थित छात्र सूची ({cls.presentCount} छात्र - 'A' कॉपी जमा):</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
+                          {(cls.presentStudents || []).map((st) => (
+                            <div
+                              key={`pres-${st.rollNo}-${st.roomId}`}
+                              className="p-2.5 bg-emerald-50/60 border border-emerald-300 rounded-xl flex items-center justify-between gap-2 shadow-2xs"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-black text-sm text-emerald-950">
+                                    #{st.rollNo}
+                                  </span>
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                                    {st.roomName}
+                                  </span>
+                                  {getStudentBCopies(st.rollNo) > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                      +{getStudentBCopies(st.rollNo)} B
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                                  {st.name || 'परीक्षार्थी'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleAbsent(st.rollNo)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                title="अनुपस्थित मार्क करें"
+                              >
+                                <UserX className="w-3 h-3" />
+                                <span>अनुपस्थित</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* View: ONLY B-COPY TAKERS */}
+                    {attendanceStatusFilter === 'b-copy' && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                          <BookOpen className="w-4 h-4 text-amber-600" />
+                          <span>'B' कॉपी लेने वाले छात्र ({(cls.bCopyStudents || []).length} छात्र):</span>
+                        </div>
+                        {(cls.bCopyStudents || []).length === 0 ? (
+                          <div className="text-xs font-bold text-slate-400 italic p-3 bg-slate-50 rounded-xl text-center">
+                            इस कक्षा के किसी छात्र द्वारा 'B' कॉपी नहीं ली गई है।
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {(cls.bCopyStudents || []).map((st) => (
+                              <div
+                                key={`b-${st.rollNo}-${st.roomId}`}
+                                className="p-3 bg-amber-50/80 border-2 border-amber-300 rounded-xl flex items-center justify-between gap-2 shadow-2xs"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-black text-sm text-slate-900">
+                                      #{st.rollNo}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                                      {st.roomName}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-400">
+                                      +{getStudentBCopies(st.rollNo)} B
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-bold text-slate-900 truncate mt-1">
+                                    {st.name || 'परीक्षार्थी'}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* All Present Message when attendanceStatusFilter is 'absent' or 'all' and no absentees */}
+                    {(attendanceStatusFilter === 'absent' || attendanceStatusFilter === 'all') && cls.absentCount === 0 && (
+                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>इस कक्षा के सभी छात्र परीक्षा में उपस्थित हैं (शत-प्रतिशत उपस्थिति)।</span>
                       </div>
                     )}
                   </div>
@@ -752,8 +1002,17 @@ export default function AbsenteeManager({
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-                {currentRoomData.students.map((st) => {
-                  const isAbsent = Boolean(absentStudents[st.rollNo?.toString()] || absentStudents[st.rollNo]);
+                {currentRoomData.students
+                  .filter((st) => {
+                    const isAbs = Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]);
+                    const bCount = getStudentBCopies(st.rollNo);
+                    if (attendanceStatusFilter === 'absent') return isAbs;
+                    if (attendanceStatusFilter === 'present') return !isAbs;
+                    if (attendanceStatusFilter === 'b-copy') return bCount > 0;
+                    return true;
+                  })
+                  .map((st) => {
+                    const isAbsent = Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]);
                   return (
                     <button
                       key={st.id || st.rollNo}

@@ -98,6 +98,7 @@ export default function TeacherDutyManager({
   const [activeTab, setActiveTab] = useState('chart'); // 'chart', 'staff', 'print'
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [staffAttendanceFilter, setStaffAttendanceFilter] = useState('all'); // 'all' | 'present' | 'absent' | 'on-duty' | 'off-duty' | 'incharge'
   const [selectedRelieverToAdd, setSelectedRelieverToAdd] = useState('');
   const [isSavingDB, setIsSavingDB] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -1327,16 +1328,35 @@ export default function TeacherDutyManager({
   };
 
   const filteredTeachers = useMemo(() => {
-    if (!searchQuery.trim()) return teachers;
-    const q = searchQuery.toLowerCase().trim();
-    return teachers.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (t.englishName && t.englishName.toLowerCase().includes(q)) ||
-        (t.subject && t.subject.toLowerCase().includes(q)) ||
-        (t.designation && t.designation.toLowerCase().includes(q))
-    );
-  }, [teachers, searchQuery]);
+    let list = teachers;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.englishName && t.englishName.toLowerCase().includes(q)) ||
+          (t.subject && t.subject.toLowerCase().includes(q)) ||
+          (t.designation && t.designation.toLowerCase().includes(q)) ||
+          (t.mobile && String(t.mobile).includes(q))
+      );
+    }
+    if (staffAttendanceFilter === 'present') {
+      return list.filter((t) => t.isPresent !== false);
+    }
+    if (staffAttendanceFilter === 'absent') {
+      return list.filter((t) => t.isPresent === false);
+    }
+    if (staffAttendanceFilter === 'on-duty') {
+      return list.filter((t) => currentlyAssignedIds.has(String(t.id)));
+    }
+    if (staffAttendanceFilter === 'off-duty') {
+      return list.filter((t) => !currentlyAssignedIds.has(String(t.id)) && t.isPresent !== false && !t.isExamIncharge);
+    }
+    if (staffAttendanceFilter === 'incharge') {
+      return list.filter((t) => Boolean(t.isExamIncharge));
+    }
+    return list;
+  }, [teachers, searchQuery, staffAttendanceFilter, currentlyAssignedIds]);
 
   return (
     <div className="space-y-6">
@@ -2273,6 +2293,79 @@ export default function TeacherDutyManager({
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Staff Attendance & Duty Status Filter Chips */}
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5" /> स्थिति:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  🔘 सभी शिक्षक ({teachers.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('present')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'present'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  ✅ उपस्थित ({teachers.filter((t) => t.isPresent !== false).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('absent')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'absent'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                  }`}
+                >
+                  ❌ अवकाश / अनुपस्थित ({teachers.filter((t) => t.isPresent === false).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('on-duty')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'on-duty'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                  }`}
+                >
+                  🛡️ आज ड्यूटी पर ({currentlyAssignedIds.size})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('off-duty')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'off-duty'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  ☕ ड्यूटी मुक्त ({teachers.filter((t) => t.isPresent !== false && !t.isExamIncharge && !currentlyAssignedIds.has(String(t.id))).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffAttendanceFilter('incharge')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    staffAttendanceFilter === 'incharge'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                  }`}
+                >
+                  🏛️ परीक्षा प्रभारी ({teachers.filter((t) => t.isExamIncharge).length})
+                </button>
               </div>
 
               {/* Teachers Table */}
