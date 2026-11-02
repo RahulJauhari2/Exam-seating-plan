@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
+  TrendingUp,
+  BarChart3,
+  Bell,
   Users, 
   UserCheck, 
   UserX, 
@@ -46,7 +49,12 @@ export default function TeacherDutyManager({
   activeShift = 'shift_1',
   dutyRoster = {},
   setDutyRoster,
-  examDetails
+  examDetails,
+  setExamDetails,
+  bCopyRecords = {},
+  absentStudents = {},
+  classes = [],
+  rooms = []
 }) {
   const targetDayId = useMemo(() => {
     if (examDetails?.date) {
@@ -237,6 +245,195 @@ export default function TeacherDutyManager({
     });
     return map;
   }, [teachers]);
+
+  // Helper for Range Information (3 rooms per reliever range)
+  const getRelieverRangeInfo = (idx) => {
+    if (idx === 0) return { badge: 'रेंज 1', rooms: 'कमरा 01 - 03', bg: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
+    if (idx === 1) return { badge: 'रेंज 2', rooms: 'कमरा 04 - 06', bg: 'bg-blue-50 text-blue-800 border-blue-300' };
+    if (idx === 2) return { badge: 'रेंज 3', rooms: 'कमरा 07 - 09', bg: 'bg-purple-50 text-purple-800 border-purple-300' };
+    if (idx === 3) return { badge: 'रेंज 4', rooms: 'कमरा 10 - 12', bg: 'bg-amber-50 text-amber-800 border-amber-300' };
+    return { badge: 'फ्लोटिंग', rooms: 'समस्त कक्ष / उड़नदस्ता', bg: 'bg-rose-50 text-rose-800 border-rose-300' };
+  };
+
+  // State for Dynamic Exam Time & Warning Bell Modal
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [shift1TimeInput, setShift1TimeInput] = useState(examDetails?.shift1Time || examDetails?.timeRange || '08:30 AM - 11:45 AM');
+  const [shift2TimeInput, setShift2TimeInput] = useState(examDetails?.shift2Time || '01:30 PM - 04:45 PM');
+  const [warningMinutesInput, setWarningMinutesInput] = useState(examDetails?.warningMinutes || 15);
+  const [entryMinutesInput, setEntryMinutesInput] = useState(examDetails?.entryMinutes || 15);
+  const [isSavingTime, setIsSavingTime] = useState(false);
+  const [timeSaveSuccess, setTimeSaveSuccess] = useState('');
+
+  // Synchronize when examDetails changes
+  useEffect(() => {
+    if (examDetails?.shift1Time) setShift1TimeInput(examDetails.shift1Time);
+    else if (examDetails?.timeRange && selectedShift === 'shift_1') setShift1TimeInput(examDetails.timeRange);
+    if (examDetails?.shift2Time) setShift2TimeInput(examDetails.shift2Time);
+    if (examDetails?.warningMinutes) setWarningMinutesInput(examDetails.warningMinutes);
+    if (examDetails?.entryMinutes) setEntryMinutesInput(examDetails.entryMinutes);
+  }, [examDetails, selectedShift]);
+
+  const handleSaveTimeSettings = async () => {
+    setIsSavingTime(true);
+    try {
+      const updatedDetails = {
+        ...examDetails,
+        shift1Time: shift1TimeInput,
+        shift2Time: shift2TimeInput,
+        warningMinutes: Number(warningMinutesInput) || 15,
+        entryMinutes: Number(entryMinutesInput) || 15,
+        timeRange: selectedShift === 'shift_1' ? shift1TimeInput : shift2TimeInput
+      };
+      if (setExamDetails) {
+        setExamDetails(updatedDetails);
+      }
+      const sName = examDetails?.examName || 'Half_Yearly_2026_27';
+      const curDate = examDetails?.date || new Date().toISOString().split('T')[0];
+      await saveDutyRosterToDB({
+        sessionName: sName,
+        shift: selectedShift,
+        date: curDate,
+        dutyRoster: dutyRoster,
+        examDetails: updatedDetails
+      });
+      setTimeSaveSuccess('✅ परीक्षा समय व चेतावनी घंटी सफलतापूर्वक अपडेट हो गई!');
+      setTimeout(() => {
+        setTimeSaveSuccess('');
+        setShowTimeModal(false);
+      }, 1400);
+    } catch (err) {
+      console.error('Save time error:', err);
+      alert('समय सुरक्षित करने में त्रुटि: ' + (err.message || err));
+    } finally {
+      setIsSavingTime(false);
+    }
+  };
+
+  // 3-Tier B-Copy Analytics & AI Predictive Forecast Memo
+  const [bCopySearch, setBCopySearch] = useState('');
+  const [bCopySubView, setBCopySubView] = useState('rooms'); // 'rooms', 'classes', 'students', 'prediction'
+
+  const bCopyAnalytics = useMemo(() => {
+    const roomsMap = {};
+    const classesMap = {};
+    const studentRows = [];
+
+    const currentRooms = currentSeating?.rooms || {};
+    Object.entries(currentRooms).forEach(([roomId, roomObj]) => {
+      const rName = roomObj.roomName || roomObj.name || roomId;
+      const seatedList = roomObj.seatedStudents || [];
+      let rPresent = 0;
+      let rAbsent = 0;
+      let rBCopies = 0;
+      let rBStudents = 0;
+
+      seatedList.forEach((st) => {
+        const roll = st.rollNo;
+        const isAbs = Boolean(absentStudents[roll] || absentStudents[String(roll)]);
+        if (isAbs) {
+          rAbsent++;
+        } else {
+          rPresent++;
+        }
+        const bRec = bCopyRecords[roll] || bCopyRecords[String(roll)];
+        const bCount = Number(bRec?.bCopiesCount) || 0;
+        if (bCount > 0) {
+          rBCopies += bCount;
+          rBStudents++;
+          studentRows.push({
+            rollNo: roll,
+            name: st.name || bRec?.studentName || ('परीक्षार्थी #' + roll),
+            className: st.className || bRec?.className || '—',
+            section: st.section || '—',
+            roomName: rName,
+            bCopiesCount: bCount,
+            bCopyNumbers: bRec?.bCopyNumbers || [],
+            aCopyNumber: bRec?.aCopyNumber || '—'
+          });
+        }
+
+        const cKey = (st.className || 'General') + '_' + (st.section || 'A');
+        if (!classesMap[cKey]) {
+          classesMap[cKey] = {
+            classKey: cKey,
+            className: st.className || '—',
+            section: st.section || '—',
+            total: 0,
+            present: 0,
+            absent: 0,
+            bCopies: 0,
+            bStudents: 0
+          };
+        }
+        classesMap[cKey].total++;
+        if (isAbs) classesMap[cKey].absent++;
+        else classesMap[cKey].present++;
+        if (bCount > 0) {
+          classesMap[cKey].bCopies += bCount;
+          classesMap[cKey].bStudents++;
+        }
+      });
+
+      const alloc = currentAllocation?.rooms?.[roomId] || {};
+      const t1 = teacherMap[alloc.invigilator1];
+      const t2 = teacherMap[alloc.invigilator2];
+
+      roomsMap[roomId] = {
+        roomId,
+        roomName: rName,
+        totalSeated: seatedList.length,
+        present: rPresent,
+        absent: rAbsent,
+        bCopies: rBCopies,
+        bStudents: rBStudents,
+        bRate: rPresent > 0 ? Math.round((rBStudents / rPresent) * 100) : 0,
+        invigilators: [t1?.name, t2?.name].filter(Boolean).join(', ') || '—'
+      };
+    });
+
+    const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDateId);
+    const nextDay = EXAM_TIMETABLE[currentDayIdx + 1] || EXAM_TIMETABLE[0];
+    const nextShiftSubs = nextDay?.[selectedShift] || {};
+
+    let predictedDemandLevel = 'मध्यम (Moderate Demand)';
+    let avgCopyMultiplier = 0.45;
+    let subjectHighlights = [];
+
+    Object.entries(nextShiftSubs).forEach(([gr, subList]) => {
+      (subList || []).forEach((s) => {
+        const sName = (s.name || '').toUpperCase();
+        subjectHighlights.push('कक्षा ' + gr + ': ' + sName);
+        if (['MATH', 'SCIENCE', 'PHYSICS', 'CHEMISTRY', 'ACCOUNTANCY', 'गणित', 'विज्ञान'].some(k => sName.includes(k))) {
+          avgCopyMultiplier = Math.max(avgCopyMultiplier, 0.95);
+          predictedDemandLevel = 'अति उच्च (High - भारी गणना व आरेख)';
+        }
+      });
+    });
+
+    const totalRegisteredToday = Object.values(roomsMap).reduce((s, r) => s + r.totalSeated, 0);
+    const predictedBCopies = Math.round(totalRegisteredToday * avgCopyMultiplier);
+    const recommendedBufferCopies = Math.round(predictedBCopies * 1.15);
+    const recommendedBundles = Math.ceil(recommendedBufferCopies / 50);
+
+    return {
+      roomsList: Object.values(roomsMap),
+      classesList: Object.values(classesMap),
+      studentRows: studentRows.sort((a, b) => b.bCopiesCount - a.bCopiesCount),
+      totalBCopies: Object.values(roomsMap).reduce((s, r) => s + r.bCopies, 0),
+      totalBStudents: Object.values(roomsMap).reduce((s, r) => s + r.bStudents, 0),
+      aiPrediction: {
+        nextDay,
+        nextDate: nextDay?.date || 'आगामी दिवस',
+        predictedDemandLevel,
+        avgCopyMultiplier,
+        subjectHighlights,
+        predictedBCopies,
+        recommendedBufferCopies,
+        recommendedBundles
+      }
+    };
+  }, [currentSeating, currentAllocation, teacherMap, bCopyRecords, absentStudents, selectedDateId, selectedShift]);
+
 
   // Teachers who are ALREADY ASSIGNED in the CURRENT shift (rooms + relievers)
   const currentlyAssignedIds = useMemo(() => {
@@ -1199,9 +1396,31 @@ export default function TeacherDutyManager({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>समस्त दिवस महा-चार्ट (Master Duty)</span>
+                <span>समस्त दिवस महा-चार्ट</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('bcopy-analytics')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'bcopy-analytics'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>📊 बी-कॉपी विश्लेषण ({bCopyAnalytics.totalBCopies})</span>
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTimeModal(true)}
+              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="परीक्षा समय (Shift 1 & 2) एवं चेतावनी घंटी सेटिंग्स"
+            >
+              <Clock className="w-3.5 h-3.5 text-indigo-600" />
+              <span>⏰ परीक्षा समय व चेतावनी घंटी</span>
+            </button>
 
             {/* PIN Lock / Unlock Control */}
             {isDutyLocked ? (
@@ -1716,23 +1935,32 @@ export default function TeacherDutyManager({
                 {(currentAllocation.relievers || []).length === 0 ? (
                   <span className="text-slate-400 italic">कोई रिलीवर शिक्षक चयनित नहीं</span>
                 ) : (
-                  (currentAllocation.relievers || []).map((tid) => {
+                  (currentAllocation.relievers || []).map((tid, rIdx) => {
                     const t = teacherMap[tid];
                     if (!t) return null;
+                    const rangeInfo = getRelieverRangeInfo(rIdx);
                     return (
                       <span
                         key={tid}
-                        className="px-2.5 py-1.5 bg-white border-2 border-amber-300 rounded-xl text-slate-800 text-xs font-bold shadow-xs flex items-center gap-2"
+                        className="px-3 py-1.5 bg-white border-2 border-amber-300 rounded-xl text-slate-800 text-xs font-bold shadow-xs flex items-center gap-2"
                       >
                         <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>
-                          {t.name} <span className="text-[10px] text-slate-800 font-bold">मो० {t.mobile || t.phone || '—'}</span>
-                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black border ${rangeInfo.bg}`}>
+                              {rangeInfo.badge}: {rangeInfo.rooms}
+                            </span>
+                            <span className="font-black text-slate-900">{t.name}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-600 font-mono mt-0.5">
+                            📞 मो० {t.mobile || t.phone || '—'}
+                          </div>
+                        </div>
                         {!isDutyLocked && (
                           <button
                             type="button"
                             onClick={() => handleRemoveReliever(tid)}
-                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition no-print cursor-pointer"
+                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition no-print cursor-pointer ml-1"
                             title="रिलीवर से हटाएं (मुक्त करें)"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -1778,10 +2006,15 @@ export default function TeacherDutyManager({
                   {(currentAllocation.relievers || []).map((tid, rIdx) => {
                     const t = teacherMap[tid];
                     if (!t) return null;
+                    const rangeInfo = getRelieverRangeInfo(rIdx);
                     return (
                       <div key={tid} className="flex items-center justify-between border-b border-black/40 pb-0.5">
-                        <span className="font-bold text-black">
-                          {rIdx + 1}. {t.name} <span className="font-bold text-slate-800"> (मो० {t.mobile || t.phone || '—'})</span>
+                        <span className="font-bold text-black flex items-center gap-1.5">
+                          <span className="font-extrabold text-[10px] border border-black px-1 rounded">
+                            {rangeInfo.badge} ({rangeInfo.rooms})
+                          </span>
+                          <span>{rIdx + 1}. {t.name}</span>
+                          <span className="font-mono text-black text-[10px]"> (मो० {t.mobile || t.phone || '—'})</span>
                         </span>
                         <span className="text-slate-700 text-[10px] italic">ह०: ________________</span>
                       </div>
@@ -2555,6 +2788,415 @@ export default function TeacherDutyManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: 3-TIER B-COPY ANALYTICS & AI PREDICTIVE FORECAST */}
+      {/* ======================================================== */}
+      {activeTab === 'bcopy-analytics' && (
+        <div className="space-y-6 no-print">
+          {/* Header Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">कुल वितरित 'B' कॉपियां</span>
+              <span className="text-2xl font-black text-amber-600 mt-1 block">{bCopyAnalytics.totalBCopies} कॉपियां</span>
+              <span className="text-[11px] text-slate-400 mt-0.5 block">{bCopyAnalytics.totalBStudents} परीक्षार्थियों द्वारा</span>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">सक्रिय परीक्षा कक्ष</span>
+              <span className="text-2xl font-black text-indigo-700 mt-1 block">{bCopyAnalytics.roomsList.length} कक्ष</span>
+              <span className="text-[11px] text-slate-400 mt-0.5 block">{selectedShift === 'shift_1' ? 'प्रथम पाली' : 'द्वितीय पाली'}</span>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">प्रति छात्र औसत वितरण</span>
+              <span className="text-2xl font-black text-emerald-700 mt-1 block">
+                {bCopyAnalytics.totalBStudents > 0 ? (bCopyAnalytics.totalBCopies / bCopyAnalytics.totalBStudents).toFixed(1) : '0'} प्रति छात्र
+              </span>
+              <span className="text-[11px] text-slate-400 mt-0.5 block">पूरक उत्तर पुस्तिकाएं</span>
+            </div>
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 p-4 rounded-2xl text-white shadow-xs">
+              <span className="text-[11px] font-bold text-amber-100 uppercase block">आगामी दिवस AI पूर्व-अनुमान</span>
+              <span className="text-2xl font-black text-white mt-1 block">{bCopyAnalytics.aiPrediction.recommendedBundles} बंडल</span>
+              <span className="text-[11px] text-amber-100 mt-0.5 block">({bCopyAnalytics.aiPrediction.recommendedBufferCopies} कॉपियां 15% बफर सहित)</span>
+            </div>
+          </div>
+
+          {/* AI Predictive Insight Banner */}
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4.5 shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 inline-block mb-1">
+                  🤖 एआई कॉपी पूर्व-अनुमान (Predictive Copy Requirement)
+                </span>
+                <h4 className="text-sm font-black text-slate-900">
+                  आगामी परीक्षा दिवस ({bCopyAnalytics.aiPrediction.nextDate}) मांग स्तर: <span className="text-amber-800">{bCopyAnalytics.aiPrediction.predictedDemandLevel}</span>
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  आगामी विषय: {bCopyAnalytics.aiPrediction.subjectHighlights.join(', ') || 'मानक विषय'}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-xs font-bold text-slate-500">स्ट्रांग रूम संकलन आदेश:</div>
+                <div className="text-sm font-black text-amber-900">
+                  📦 50-कॉपियों के {bCopyAnalytics.aiPrediction.recommendedBundles} बंडल जारी करें
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Tier View Switcher */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setBCopySubView('rooms')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  bCopySubView === 'rooms' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                1. कक्ष-वार वितरण (Room-wise)
+              </button>
+              <button
+                type="button"
+                onClick={() => setBCopySubView('classes')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  bCopySubView === 'classes' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                2. कक्षा-वार वितरण (Class-wise)
+              </button>
+              <button
+                type="button"
+                onClick={() => setBCopySubView('students')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  bCopySubView === 'students' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                3. परीक्षार्थी रोल-वार रिकॉर्ड ({bCopyAnalytics.studentRows.length})
+              </button>
+            </div>
+
+            {bCopySubView === 'students' && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="रोल नं० / नाम से खोजें..."
+                  value={bCopySearch}
+                  onChange={(e) => setBCopySearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-56"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* TIER 1: ROOM-WISE TABLE */}
+          {bCopySubView === 'rooms' && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-700 flex items-center justify-between">
+                <span>कक्ष-वार बी-कॉपी वितरण तालिका</span>
+                <span className="text-[11px] text-slate-500">कुल {bCopyAnalytics.roomsList.length} कक्ष</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-100 text-slate-600 uppercase font-black text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2.5">कक्ष</th>
+                      <th className="px-3 py-2.5">कक्ष निरीक्षक (Invigilators)</th>
+                      <th className="px-3 py-2.5 text-center">पंजीकृत छात्र</th>
+                      <th className="px-3 py-2.5 text-center">उपस्थित ('A' कॉपियां)</th>
+                      <th className="px-3 py-2.5 text-center bg-amber-50 text-amber-900 font-black">'B' कॉपियां वितरित</th>
+                      <th className="px-3 py-2.5 text-center">छात्र संख्या (B Takers)</th>
+                      <th className="px-3 py-2.5 text-center">वितरण दर (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bCopyAnalytics.roomsList.map((r) => (
+                      <tr key={r.roomId} className="hover:bg-slate-50/70">
+                        <td className="px-3 py-2.5 font-black text-slate-900">{r.roomName}</td>
+                        <td className="px-3 py-2.5 text-slate-700 font-medium">{r.invigilators}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-slate-800">{r.totalSeated}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{r.present}</td>
+                        <td className="px-3 py-2.5 text-center font-black text-amber-700 bg-amber-50/50">
+                          {r.bCopies > 0 ? `+${r.bCopies} B` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-center font-bold text-slate-700">{r.bStudents}</td>
+                        <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-600">{r.bRate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TIER 2: CLASS-WISE TABLE */}
+          {bCopySubView === 'classes' && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-700 flex items-center justify-between">
+                <span>कक्षा-वार बी-कॉपी संकलन व औसत तालिका</span>
+                <span className="text-[11px] text-slate-500">कुल {bCopyAnalytics.classesList.length} कक्षाएं/वर्ग</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-100 text-slate-600 uppercase font-black text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2.5">कक्षा व वर्ग</th>
+                      <th className="px-3 py-2.5 text-center">कुल पंजीकृत</th>
+                      <th className="px-3 py-2.5 text-center">उपस्थित छात्र</th>
+                      <th className="px-3 py-2.5 text-center">अनुपस्थित छात्र</th>
+                      <th className="px-3 py-2.5 text-center bg-amber-50 text-amber-900 font-black">'B' कॉपियां कुल</th>
+                      <th className="px-3 py-2.5 text-center">प्रति छात्र औसत</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bCopyAnalytics.classesList.map((c) => (
+                      <tr key={c.classKey} className="hover:bg-slate-50/70">
+                        <td className="px-3 py-2.5 font-black text-slate-900">
+                          कक्षा {c.className} - {c.section}
+                        </td>
+                        <td className="px-3 py-2.5 text-center font-bold text-slate-800">{c.total}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{c.present}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-rose-600">{c.absent}</td>
+                        <td className="px-3 py-2.5 text-center font-black text-amber-700 bg-amber-50/50">
+                          {c.bCopies > 0 ? `+${c.bCopies} B` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-600">
+                          {c.present > 0 ? (c.bCopies / c.present).toFixed(2) : '0'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TIER 3: ROLL-WISE STUDENT LEDGER */}
+          {bCopySubView === 'students' && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-700 flex items-center justify-between">
+                <span>बी-कॉपी प्राप्त करने वाले समस्त परीक्षार्थियों का व्यक्तिगत रिकॉर्ड</span>
+                <span className="text-[11px] text-slate-500">
+                  {bCopyAnalytics.studentRows.length} परीक्षार्थी दर्ज
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-100 text-slate-600 uppercase font-black text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2.5">क्र०</th>
+                      <th className="px-3 py-2.5">रोल नं० (Roll)</th>
+                      <th className="px-3 py-2.5">परीक्षार्थी का नाम</th>
+                      <th className="px-3 py-2.5">कक्षा व वर्ग</th>
+                      <th className="px-3 py-2.5">परीक्षा कक्ष</th>
+                      <th className="px-3 py-2.5 text-center bg-amber-50 text-amber-900 font-black">'B' कॉपियां</th>
+                      <th className="px-3 py-2.5">कॉपी क्रमांक (Serial Nos)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bCopyAnalytics.studentRows
+                      .filter((st) => {
+                        if (!bCopySearch) return true;
+                        const q = bCopySearch.toLowerCase();
+                        return (
+                          String(st.rollNo).includes(q) ||
+                          st.name.toLowerCase().includes(q) ||
+                          st.roomName.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((st, idx) => (
+                        <tr key={st.rollNo} className="hover:bg-slate-50/70">
+                          <td className="px-3 py-2.5 text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="px-3 py-2.5 font-mono font-black text-indigo-700">#{st.rollNo}</td>
+                          <td className="px-3 py-2.5 font-bold text-slate-900">{st.name}</td>
+                          <td className="px-3 py-2.5 font-medium text-slate-700">
+                            कक्षा {st.className} - {st.section}
+                          </td>
+                          <td className="px-3 py-2.5 font-bold text-slate-800">{st.roomName}</td>
+                          <td className="px-3 py-2.5 text-center font-black text-amber-700 bg-amber-50/50">
+                            +{st.bCopiesCount} B
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-600 text-[11px]">
+                            {st.bCopyNumbers.length > 0 ? st.bCopyNumbers.join(', ') : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    {bCopyAnalytics.studentRows.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="text-center py-8 text-slate-400 italic">
+                          वर्तमान पाली में किसी छात्र द्वारा 'B' कॉपी दर्ज नहीं की गई है।
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Dynamic Exam Time & Warning Bell Modal */}
+      {showTimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 p-6 relative">
+            <button
+              type="button"
+              onClick={() => setShowTimeModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">परीक्षा समय व चेतावनी घंटी सेटिंग्स</h3>
+                <p className="text-xs text-slate-500">वार्षिक व अर्धवार्षिक सत्र अनुसार समय व अलर्ट बदलें</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  प्रथम पाली समय (Shift 1 Time):
+                </label>
+                <input
+                  type="text"
+                  value={shift1TimeInput}
+                  onChange={(e) => setShift1TimeInput(e.target.value)}
+                  placeholder="उदा. 08:30 AM - 11:45 AM"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  द्वितीय पाली समय (Shift 2 Time):
+                </label>
+                <input
+                  type="text"
+                  value={shift2TimeInput}
+                  onChange={(e) => setShift2TimeInput(e.target.value)}
+                  placeholder="उदा. 01:30 PM - 04:45 PM"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    चेतावनी घंटी (Warning Bell):
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={5}
+                      max={60}
+                      value={warningMinutesInput}
+                      onChange={(e) => setWarningMinutesInput(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-slate-500 font-bold shrink-0">मिनट पहले</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    प्रवेश घंटी (Entry Bell):
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={5}
+                      max={60}
+                      value={entryMinutesInput}
+                      onChange={(e) => setEntryMinutesInput(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-slate-500 font-bold shrink-0">मिनट पहले</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-500 block mb-1.5">त्वरित प्रीसेट (Quick Presets):</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShift1TimeInput('08:30 AM - 11:45 AM');
+                      setShift2TimeInput('01:30 PM - 04:45 PM');
+                      setWarningMinutesInput(15);
+                    }}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    मानक सत्र (08:30-11:45)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShift1TimeInput('09:30 AM - 12:45 PM');
+                      setShift2TimeInput('01:30 PM - 04:45 PM');
+                      setWarningMinutesInput(15);
+                    }}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    शीतकालीन (09:30-12:45)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShift1TimeInput('07:30 AM - 10:45 AM');
+                      setShift2TimeInput('02:00 PM - 05:15 PM');
+                      setWarningMinutesInput(15);
+                    }}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    ग्रीष्मकालीन / बोर्ड (07:30-10:45)
+                  </button>
+                </div>
+              </div>
+
+              {timeSaveSuccess && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold text-center">
+                  {timeSaveSuccess}
+                </div>
+              )}
+
+              <div className="pt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTimeModal(false)}
+                  className="flex-1 py-2 px-3 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTimeSettings}
+                  disabled={isSavingTime}
+                  className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingTime ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>सुरक्षित हो रहा है...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>क्लाउड में सेव करें</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

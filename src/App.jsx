@@ -841,6 +841,11 @@ export default function App() {
                 dutyRoster={dutyRoster}
                 setDutyRoster={setDutyRoster}
                 examDetails={examDetails}
+                setExamDetails={setExamDetails}
+                bCopyRecords={bCopyRecords}
+                absentStudents={absentStudents}
+                classes={classes}
+                rooms={rooms}
               />
             )
           )}

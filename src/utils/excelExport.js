@@ -114,7 +114,7 @@ export function exportAbsenteeListToExcel(data, examDetails) {
       'उपस्थित / A-कॉपी (Present / A-Copy)': cls.presentCount,
       'पूरक B-कॉपी (B-Copy)': cls.bCopiesCount || 0,
       'अनुपस्थित (Absent)': cls.absentCount,
-      'अनुपस्थित रोल नंबर (Absent Rolls)': cls.absentStudents.map((s) => `#${s.rollNo}`).join(', ') || 'निरंक',
+      'अनुपस्थित रोल नंबर (Absent Rolls)': cls.absentStudents.map((s) => `#${s.rollNo}`).join(', ') || '0 अनुपस्थित (शत-प्रतिशत)',
     }));
     const classWs = XLSX.utils.json_to_sheet(classRows);
     XLSX.utils.book_append_sheet(workbook, classWs, 'कक्षा-वार अनुपस्थिति');
@@ -129,7 +129,7 @@ export function exportAbsenteeListToExcel(data, examDetails) {
       'उपस्थित / A-कॉपी (Present / A-Copy)': rm.presentCount,
       'पूरक B-कॉपी (B-Copy)': rm.bCopiesCount || 0,
       'अनुपस्थित (Absent)': rm.absentCount,
-      'अनुपस्थित रोल नंबर (Absent Rolls)': rm.absentRollsText || 'निरंक',
+      'अनुपस्थित रोल नंबर (Absent Rolls)': rm.absentRollsText || '0 अनुपस्थित (शत-प्रतिशत)',
     }));
     const roomWs = XLSX.utils.json_to_sheet(roomRows);
     XLSX.utils.book_append_sheet(workbook, roomWs, 'कमरा-वार अनुपस्थिति');

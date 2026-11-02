@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { EXAM_TIMETABLE, UP_BOARD_SUBJECT_CODES } from '../data/examSchemeData';
+import { saveExamSessionToDB } from '../services/api';
 
 // Grade calculation helper
 export function calculateGrade(percentage) {
@@ -440,21 +441,34 @@ export default function ResultMarksheetManager({
     }
   }, [isAdmin, activeSubTab]);
 
-  // Get max marks configuration for a specific subject
+  // Get max marks configuration for a specific subject (100% Dynamic as Principal desires)
   const getSubjectMaxMarks = (subName) => {
     const sUpper = (subName || '').toUpperCase().trim();
+    // 1. Check exact Class + Subject key
+    const classSubKey = `${selectedGrade}_${sUpper}`;
+    if (subjectConfig[classSubKey]) {
+      return subjectConfig[classSubKey];
+    }
+    // 2. Check Subject name key
     if (subjectConfig[sUpper]) {
       return subjectConfig[sUpper];
     }
-    // UP Board standard defaults:
-    // High School (9th-10th): Theory 70, Practical/Project 30
-    // Intermediate Science: Theory 70, Practical 30
-    // Junior High School (6th-8th): Theory 50, Internal 50 (or Theory 70, Practical 30)
-    // Non-practical subjects (e.g. Hindi, English, Math in 11th-12th): Theory 100, Practical 0
+    // 3. Check Grade-specific preset set by Principal
+    const gradePresetKey = `_GRADE_${selectedGrade}`;
+    if (subjectConfig[gradePresetKey]) {
+      return subjectConfig[gradePresetKey];
+    }
+    // 4. Check Global School-wide preset
+    if (subjectConfig['GLOBAL_PRESET']) {
+      return subjectConfig['GLOBAL_PRESET'];
+    }
+
+    // 5. Intelligent UP Board standard fallbacks
     const nonPractical1112 = ['HINDI', 'ENGLISH', 'MATH', 'ACCOUNTANCY', 'BUSS. STUDY'];
     if (['11', '12'].includes(selectedGrade) && nonPractical1112.some((np) => sUpper.includes(np))) {
       return { maxTheory: 100, maxPractical: 0, minPassPercent: 33 };
     }
+    // Standard High School default: 70 theory, 30 practical (unless overridden by Principal)
     return { maxTheory: 70, maxPractical: 30, minPassPercent: 33 };
   };
 
@@ -2128,17 +2142,188 @@ export default function ResultMarksheetManager({
       )}
 
       {/* =========================================================================
-          TAB 4: CONFIGURATION & MAX MARKS (पूर्णांक व सेटिंग्स)
+          TAB 4: DYNAMIC CONFIGURATION & MAX MARKS (100% डायनामिक पूर्णांक व अंक व्यवस्था)
          ========================================================================= */}
       {isAdmin && activeSubTab === 'config' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 no-print">
-          <div>
-            <h3 className="text-base font-black text-slate-800">
-              विषय पूर्णांक एवं उत्तीर्णांक सेटिंग्स (Subject Max Marks & Passing Configuration)
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              प्रत्येक विषय के लिए लिखित (Theory) एवं प्रोजेक्ट/प्रायोगिक (Practical) के अधिकतम अंक सेट करें
-            </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-100 text-indigo-800">
+                  प्रधानाचार्य नियंत्रण (Principal Controls)
+                </span>
+                <h3 className="text-base font-black text-slate-800">
+                  पूर्णांक व परीक्षा अंक व्यवस्था (100% Dynamic Max Marks Engine)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                हाईस्कूल (9वीं-10वीं) व इंटरमीडिएट हेतु इच्छानुसार पूर्णांक (100 लिखित, 70/30, 50/0, 20 OMR + 50 आदि) सेट करें
+              </p>
+            </div>
+
+            {/* Cloud Save Button for Principal */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsCloudSaving(true);
+                  try {
+                    const sessionName = examDetails?.examName || 'Half_Yearly_2026_27';
+                    await saveExamSessionToDB({
+                      sessionName,
+                      activeShift,
+                      subjectConfig,
+                      marksData,
+                      classes,
+                      rooms,
+                      teachers,
+                      examDetails
+                    });
+                    setCloudSaveMessage('✅ पूर्णांक सेटिंग्स डेटाबेस में सुरक्षित हो गई!');
+                    setTimeout(() => setCloudSaveMessage(''), 4000);
+                  } catch (err) {
+                    console.error('Error saving subjectConfig to MongoDB:', err);
+                    alert('सेव करने में त्रुटि: ' + (err.message || err));
+                  } finally {
+                    setIsCloudSaving(false);
+                  }
+                }}
+                disabled={isCloudSaving}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isCloudSaving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>क्लाउड में सेव हो रहा है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{cloudSaveMessage || 'क्लाउड में सुरक्षित करें (Save Pattern)'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Presets Bar for Principal */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <span className="text-xs font-black text-slate-800 block mb-2">
+              ⚡ त्वरित 1-क्लिक प्रीसेट (Quick Pattern Presets for High School & Inter):
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {/* Preset 1: 100% Written (Zero Practical) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = { ...subjectConfig };
+                  gradeSubjects.forEach((sub) => {
+                    const sName = sub.name.toUpperCase().trim();
+                    updated[sName] = { maxTheory: 100, maxPractical: 0, minPassPercent: 33 };
+                    updated[`${selectedGrade}_${sUpper}`] = { maxTheory: 100, maxPractical: 0, minPassPercent: 33 };
+                  });
+                  updated[`_GRADE_${selectedGrade}`] = { maxTheory: 100, maxPractical: 0, minPassPercent: 33 };
+                  setSubjectConfig(updated);
+                }}
+                className="p-3 bg-white hover:bg-indigo-50 border-2 border-indigo-200 hover:border-indigo-400 rounded-xl text-left transition shadow-2xs cursor-pointer group"
+              >
+                <div className="text-xs font-black text-indigo-900 group-hover:text-indigo-600">
+                  🎯 100% लिखित (No Practical)
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  100 लिखित + 0 प्रयोगात्मक (पूर्णांक: 100)
+                </div>
+              </button>
+
+              {/* Preset 2: UP Board Standard (70 + 30) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = { ...subjectConfig };
+                  gradeSubjects.forEach((sub) => {
+                    const sName = sub.name.toUpperCase().trim();
+                    updated[sName] = { maxTheory: 70, maxPractical: 30, minPassPercent: 33 };
+                    updated[`${selectedGrade}_${sUpper}`] = { maxTheory: 70, maxPractical: 30, minPassPercent: 33 };
+                  });
+                  updated[`_GRADE_${selectedGrade}`] = { maxTheory: 70, maxPractical: 30, minPassPercent: 33 };
+                  setSubjectConfig(updated);
+                }}
+                className="p-3 bg-white hover:bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl text-left transition shadow-2xs cursor-pointer group"
+              >
+                <div className="text-xs font-black text-emerald-900 group-hover:text-emerald-700">
+                  📋 यूपी बोर्ड मानक (70 + 30)
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  70 थ्योरी + 30 प्रोजेक्ट/प्रैक्टिकल (पूर्णांक: 100)
+                </div>
+              </button>
+
+              {/* Preset 3: Half-Yearly / Monthly (50 + 0) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = { ...subjectConfig };
+                  gradeSubjects.forEach((sub) => {
+                    const sName = sub.name.toUpperCase().trim();
+                    updated[sName] = { maxTheory: 50, maxPractical: 0, minPassPercent: 33 };
+                    updated[`${selectedGrade}_${sUpper}`] = { maxTheory: 50, maxPractical: 0, minPassPercent: 33 };
+                  });
+                  updated[`_GRADE_${selectedGrade}`] = { maxTheory: 50, maxPractical: 0, minPassPercent: 33 };
+                  setSubjectConfig(updated);
+                }}
+                className="p-3 bg-white hover:bg-amber-50 border-2 border-amber-200 hover:border-amber-400 rounded-xl text-left transition shadow-2xs cursor-pointer group"
+              >
+                <div className="text-xs font-black text-amber-900 group-hover:text-amber-700">
+                  📝 अर्धवार्षिक / आंतरिक (50 + 0)
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  50 लिखित + 0 प्रयोगात्मक (पूर्णांक: 50)
+                </div>
+              </button>
+
+              {/* Preset 4: 20 OMR + 50 Theory */}
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = { ...subjectConfig };
+                  gradeSubjects.forEach((sub) => {
+                    const sName = sub.name.toUpperCase().trim();
+                    updated[sName] = { maxTheory: 50, maxPractical: 20, minPassPercent: 33 };
+                    updated[`${selectedGrade}_${sUpper}`] = { maxTheory: 50, maxPractical: 20, minPassPercent: 33 };
+                  });
+                  updated[`_GRADE_${selectedGrade}`] = { maxTheory: 50, maxPractical: 20, minPassPercent: 33 };
+                  setSubjectConfig(updated);
+                }}
+                className="p-3 bg-white hover:bg-purple-50 border-2 border-purple-200 hover:border-purple-400 rounded-xl text-left transition shadow-2xs cursor-pointer group"
+              >
+                <div className="text-xs font-black text-purple-900 group-hover:text-purple-700">
+                  📊 20 OMR + 50 लिखित
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  50 वर्णनात्मक + 20 बहुविकल्पीय OMR (पूर्णांक: 70)
+                </div>
+              </button>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+              <span>* किसी भी प्रीसेट पर क्लिक करते ही वर्तमान कक्षा <strong>{selectedGrade || 'चयनित कक्षा'}</strong> के समस्त विषयों पर तत्काल लागू हो जाता है।</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('क्या आप इस पैटर्न को पूरे विद्यालय की सभी कक्षाओं (6वीं से 12वीं) पर लागू करना चाहते हैं?')) {
+                    const currentGradeCfg = subjectConfig[`_GRADE_${selectedGrade}`] || { maxTheory: 100, maxPractical: 0, minPassPercent: 33 };
+                    setSubjectConfig((prev) => ({
+                      ...prev,
+                      GLOBAL_PRESET: currentGradeCfg
+                    }));
+                    alert('पैटर्न संपूर्ण विद्यालय हेतु ग्लोबल रूप से लागू हो गया!');
+                  }
+                }}
+                className="text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+              >
+                🌐 इसे पूरे विद्यालय (सभी कक्षाओं) पर लागू करें
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -2146,8 +2331,8 @@ export default function ResultMarksheetManager({
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-black uppercase text-[11px]">
                   <th className="px-4 py-3">विषय (Subject)</th>
-                  <th className="px-4 py-3 w-40">थ्योरी पूर्णांक (Max Theory)</th>
-                  <th className="px-4 py-3 w-44">प्रोजेक्ट/प्रायोगिक (Max Practical)</th>
+                  <th className="px-4 py-3 w-40">थ्योरी / लिखित पूर्णांक (Max Theory)</th>
+                  <th className="px-4 py-3 w-44">प्रोजेक्ट / प्रयोगात्मक (Max Practical)</th>
                   <th className="px-4 py-3 w-32">कुल पूर्णांक (Total)</th>
                   <th className="px-4 py-3 w-36">पासिंग % (Min Pass %)</th>
                 </tr>
@@ -2158,12 +2343,17 @@ export default function ResultMarksheetManager({
                   const cfg = getSubjectMaxMarks(sName);
 
                   const handleConfigChange = (field, val) => {
+                    const updatedVal = Number(val) || 0;
                     setSubjectConfig((prev) => ({
                       ...prev,
                       [sName]: {
                         ...cfg,
-                        [field]: Number(val) || 0,
+                        [field]: updatedVal,
                       },
+                      [`${selectedGrade}_${sName.toUpperCase().trim()}`]: {
+                        ...cfg,
+                        [field]: updatedVal,
+                      }
                     }));
                   };
 
@@ -2214,7 +2404,7 @@ export default function ResultMarksheetManager({
 
           <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              * सेटिंग्स स्वतः LocalStorage में सुरक्षित होती हैं और पेज रिफ्रेश करने पर भी बनी रहती हैं।
+              * सेटिंग्स स्वतः LocalStorage एवं MongoDB Atlas में सुरक्षित होती हैं।
             </span>
             <button
               onClick={() => {

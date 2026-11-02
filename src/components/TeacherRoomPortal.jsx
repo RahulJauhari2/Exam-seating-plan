@@ -36,7 +36,10 @@ import {
   Minus,
   ChevronRight,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Phone,
+  Bell,
+  X
 } from 'lucide-react';
 
 export default function TeacherRoomPortal({
@@ -56,6 +59,7 @@ export default function TeacherRoomPortal({
   evaluationAllotment = {},
   marksLocks = {},
   classes = [],
+  examDetails = {},
 }) {
   const { currentUser, canAccessAllRooms } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +70,10 @@ export default function TeacherRoomPortal({
 
   const [summaryScope, setSummaryScope] = useState('school'); // 'school' (all classes for class teachers) | 'room'
   const [copiedClassKey, setCopiedClassKey] = useState(null);
+
+  // Reliever direct calling modal & Handover slip modal
+  const [isRelieverModalOpen, setIsRelieverModalOpen] = useState(false);
+  const [isHandoverModalOpen, setIsHandoverModalOpen] = useState(false);
 
   // Centralized safe absentee checker (declared before useMemo hooks)
   const isStudentAbsent = (rollNo) => {
@@ -237,7 +245,7 @@ export default function TeacherRoomPortal({
   const handleCopyClassAbsent = (cls) => {
     const absentListText = cls.absentStudents.length > 0
       ? cls.absentStudents.map((st, i) => `${i + 1}. रोल #${st.rollNo} - ${st.name || 'परीक्षार्थी'} (${st.roomName || selectedRoomName || 'कमरा'}, बेंच #${st.benchNumber || '—'})`).join('\n')
-      : '✅ सभी छात्र उपस्थित हैं (निरंक)';
+      : '✅ सभी छात्र उपस्थित हैं (कोई अनुपस्थित नहीं)';
 
     const text = `*${examSession?.sessionName || 'ए.बी.वी.आई.सी. मीरांपुर कटरा'}*\n*कक्षा-वार अनुपस्थिति रिपोर्ट (Class Absentee List)*\n📅 दिनांक: ${activeDate || ''} | पाली: ${activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}\n🎓 कक्षा: ${cls.displayName}${cls.classTeacherName ? `\n👨‍🏫 कक्षाध्यापक: ${cls.classTeacherName}` : ''}\n----------------------------------\n👥 कुल नामांकित: ${cls.total}\n✅ उपस्थित: ${cls.presentCount}\n❌ अनुपस्थित: ${cls.absentCount}\n----------------------------------\n*अनुपस्थित छात्र सूची:*\n${absentListText}\n----------------------------------\n_रिपोर्ट समय: ${new Date().toLocaleTimeString('hi-IN')}_`;
 
@@ -371,37 +379,46 @@ export default function TeacherRoomPortal({
       return null;
     };
 
-    // 1. Check exact day + shift
-    let match = checkTeacherInAlloc(alloc);
-    if (match) return match;
+    // 1. Identify all valid keys that represent TODAY for this shift
+    const todayKeys = [
+      `${preferredDayId}_${targetShift}`,
+      `${activeDate}_${targetShift}`,
+      `2026-11-02_${targetShift}`,
+      `02-11-2026_${targetShift}`,
+      `02-11-26_${targetShift}`,
+    ];
 
-    // 2. Check all other day keys for this shift (e.g. if duty was saved under d1 instead of d2)
-    const shiftKeys = Object.keys(dutyRoster).filter((k) => k.endsWith(`_${targetShift}`) && k !== exactKey);
-    for (const altKey of shiftKeys) {
-      const altAlloc = dutyRoster[altKey];
-      match = checkTeacherInAlloc(altAlloc);
-      if (match) return match;
+    // Find if TODAY's roster exists
+    let todayAlloc = null;
+    for (const k of todayKeys) {
+      if (dutyRoster[k]?.rooms && Object.keys(dutyRoster[k].rooms).length > 0) {
+        todayAlloc = dutyRoster[k];
+        break;
+      }
     }
 
-    // If duty for this specific shift has not been created/published yet
-    const anyAllocForShift = [exactKey, ...shiftKeys].some((k) => dutyRoster[k]?.rooms && Object.keys(dutyRoster[k].rooms).length > 0);
-    if (!anyAllocForShift) {
+    if (todayAlloc) {
+      // Today's roster is published! Check teacher's duty in TODAY's allocation ONLY.
+      const match = checkTeacherInAlloc(todayAlloc);
+      if (match) return match;
+
+      // Teacher is NOT assigned in today's roster -> Duty is strictly Off Duty (ड्यूटी मुक्त)
       return {
         hasDuty: false,
         isReliever: false,
         roomName: null,
-        isRosterPublished: false,
-        statusText: `${targetShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
+        isRosterPublished: true,
+        statusText: 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (ड्यूटी मुक्त)',
       };
     }
 
-    // Duty roster is published for this shift, but teacher is off duty (निरंक)
+    // If duty for this specific shift has not been created/published yet
     return {
       hasDuty: false,
       isReliever: false,
       roomName: null,
-      isRosterPublished: true,
-      statusText: 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)',
+      isRosterPublished: false,
+      statusText: `${targetShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
     };
   };
 
@@ -446,6 +463,48 @@ export default function TeacherRoomPortal({
       clean(r.id) === target
     ) || null;
   }, [rooms, selectedRoomName]);
+
+  // Reliever Range Mapping (3 Rooms per Reliever):
+  // Range 1 (Rooms 1 - 3): Reliever 1
+  // Range 2 (Rooms 4 - 6): Reliever 2
+  // Range 3 (Rooms 7 - 9): Reliever 3
+  // Range 4 (Rooms 10 - 12): Reliever 4
+  // Floating / All Rooms: Reliever 5
+  const currentSlotRelievers = useMemo(() => {
+    const key = `${preferredDayId}_${portalShift}`;
+    const alloc = dutyRoster[key] || dutyRoster[`2026-11-02_${portalShift}`] || {};
+    const relIds = alloc.relievers || [];
+    return relIds.map((id, idx) => {
+      const t = (teachers || []).find(teach => String(teach.id) === String(id) || String(teach._id) === String(id));
+      let rangeLabel = 'फ्लोटिंग (सभी कमरे)';
+      if (idx === 0) rangeLabel = 'रेंज 1 (कमरा 01 - 03)';
+      else if (idx === 1) rangeLabel = 'रेंज 2 (कमरा 04 - 06)';
+      else if (idx === 2) rangeLabel = 'रेंज 3 (कमरा 07 - 09)';
+      else if (idx === 3) rangeLabel = 'रेंज 4 (कमरा 10 - 12)';
+      return {
+        id,
+        index: idx + 1,
+        name: t ? t.name : 'रिलीवर शिक्षक',
+        mobile: t ? (t.mobile || t.phone) : '',
+        rangeLabel,
+      };
+    });
+  }, [dutyRoster, preferredDayId, portalShift, teachers]);
+
+  const myAssignedZoneReliever = useMemo(() => {
+    if (!currentRoom) return currentSlotRelievers[0] || null;
+    const rName = currentRoom.roomName || currentRoom.name || selectedRoomName || '';
+    const match = rName.match(/\d+/);
+    const roomNum = match ? parseInt(match[0], 10) : 1;
+    let targetIdx = 0;
+    if (roomNum >= 1 && roomNum <= 3) targetIdx = 0;
+    else if (roomNum >= 4 && roomNum <= 6) targetIdx = 1;
+    else if (roomNum >= 7 && roomNum <= 9) targetIdx = 2;
+    else if (roomNum >= 10 && roomNum <= 12) targetIdx = 3;
+    else targetIdx = 4;
+
+    return currentSlotRelievers[targetIdx] || currentSlotRelievers[0] || null;
+  }, [currentRoom, selectedRoomName, currentSlotRelievers]);
 
   // Flatten all students in this room
   const roomStudents = useMemo(() => {
@@ -774,6 +833,50 @@ export default function TeacherRoomPortal({
           </div>
         )}
 
+        {/* Dynamic Exam Timing & Warning Bell Alert Card */}
+        {currentShiftDutyInfo.hasDuty && (
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Bell className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <div className="font-black text-amber-950 flex items-center gap-1.5">
+                  <span>⏰ परीक्षा समय: {examDetails?.timeRange || (portalShift === 'shift_1' ? (examDetails?.shift1Time || '08:30 AM - 11:45 AM') : (examDetails?.shift2Time || '01:30 PM - 04:45 PM'))}</span>
+                </div>
+                <div className="text-[11px] text-amber-900 font-medium mt-0.5">
+                  🔔 चेतावनी अलर्ट ({examDetails?.warningMinutes || 15} मिनट पूर्व): परीक्षार्थियों से उत्तर-पुस्तिकाएं नत्थी (बांधना) कराएं एवं 'B' कॉपी वितरण बंद करें।
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Action Buttons for Active Invigilators */}
+        {currentShiftDutyInfo.hasDuty && (
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2">
+            {/* 1-Tap Zone Reliever Call */}
+            <button
+              type="button"
+              onClick={() => setIsRelieverModalOpen(true)}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <Phone className="w-3.5 h-3.5 animate-bounce" />
+              <span>📞 रिलीवर सहायता (Call Reliever)</span>
+            </button>
+
+            {/* Handover Receipt Slip */}
+            <button
+              type="button"
+              onClick={() => setIsHandoverModalOpen(true)}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>📦 कॉपी जमा पावती (Handover Slip)</span>
+            </button>
+          </div>
+        )}
+
         {/* Room & Shift Selection Bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
           {/* Room Selector */}
@@ -794,7 +897,7 @@ export default function TeacherRoomPortal({
                 <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
                   canAccessAllRooms ? 'bg-blue-200 text-blue-900' : currentShiftDutyInfo.hasDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
                 }`} title="आपकी आवंटित ड्यूटी">
-                  {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 लॉक' : 'निरंक'}
+                  {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 लॉक' : '☕ ड्यूटी मुक्त'}
                 </span>
                 {onRefreshDuty && (
                   <button
@@ -885,7 +988,7 @@ export default function TeacherRoomPortal({
                 title="सुबह की पाली (9वीं - 12वीं)"
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Shift 1 {s1DutyInfo.hasDuty ? `(${s1DutyInfo.roomName})` : '(निरंक)'}</span>
+                <span>Shift 1 {s1DutyInfo.hasDuty ? `(${s1DutyInfo.roomName})` : '(ड्यूटी मुक्त)'}</span>
               </button>
               <button
                 type="button"
@@ -898,7 +1001,7 @@ export default function TeacherRoomPortal({
                 title="दोपहर की पाली (6वीं - 8वीं)"
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Shift 2 {s2DutyInfo.hasDuty ? `(${s2DutyInfo.roomName})` : '(निरंक)'}</span>
+                <span>Shift 2 {s2DutyInfo.hasDuty ? `(${s2DutyInfo.roomName})` : '(ड्यूटी मुक्त)'}</span>
               </button>
             </div>
           </div>
@@ -941,7 +1044,7 @@ export default function TeacherRoomPortal({
           </div>
           <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
             {currentShiftDutyInfo.isRosterPublished
-              ? 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (निरंक)'
+              ? 'इस पाली में आपकी कोई कक्ष ड्यूटी नहीं है (ड्यूटी मुक्त)'
               : `${portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`}
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mb-5 max-w-md mx-auto leading-relaxed">
@@ -1714,6 +1817,172 @@ export default function TeacherRoomPortal({
 
           <div className="text-[11px] text-slate-400">
             कमरा: <strong className="text-white">{selectedRoomName}</strong>
+          </div>
+        </div>
+      )}
+
+      {/* 1-Tap Zone Reliever Calling Modal */}
+      {isRelieverModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 p-5 sm:p-6 relative">
+            <button
+              type="button"
+              onClick={() => setIsRelieverModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 shadow-xs">
+                <Phone className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-base font-black text-slate-900">
+                📞 रिलीवर सहायता (Zone Reliever Call)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                कमरा: <strong>{selectedRoomName}</strong> • पानी पीने या आवश्यक कार्य हेतु तुरंत कॉल लगाएं
+              </p>
+            </div>
+
+            {/* Primary: Designated Zone Reliever (3 rooms per reliever) */}
+            {myAssignedZoneReliever ? (
+              <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 mb-4 text-center shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                  ⭐ आपके ब्लॉक का निर्धारित रिलीवर ({myAssignedZoneReliever.rangeLabel})
+                </span>
+                <h4 className="text-base font-black text-slate-900 mt-1">
+                  {myAssignedZoneReliever.name}
+                </h4>
+                <div className="text-xs text-slate-700 font-black mt-0.5 font-mono">
+                  मो० {myAssignedZoneReliever.mobile || 'नंबर उपलब्ध नहीं'}
+                </div>
+                {myAssignedZoneReliever.mobile && (
+                  <a
+                    href={`tel:${myAssignedZoneReliever.mobile}`}
+                    className="mt-3 inline-flex items-center justify-center gap-2 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-sm rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>सीधे फोन कॉल लगाएं (Call Now)</span>
+                  </a>
+                )}
+              </div>
+            ) : null}
+
+            {/* Other Relievers & Control Room Emergency */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-700">अन्य रिलीवर शिक्षक सूची:</div>
+              <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {currentSlotRelievers
+                  .filter(r => r.id !== myAssignedZoneReliever?.id)
+                  .map(r => (
+                    <div key={r.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold">
+                      <div>
+                        <div className="text-slate-900">{r.name}</div>
+                        <div className="text-[10px] text-slate-500 font-normal">{r.rangeLabel}</div>
+                      </div>
+                      {r.mobile ? (
+                        <a href={`tel:${r.mobile}`} className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-black flex items-center gap-1 shadow-2xs">
+                          <Phone className="w-3 h-3" /> कॉल
+                        </a>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsRelieverModalOpen(false)}
+              className="mt-4 w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+            >
+              बंद करें (Close)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Digital Copy Handover Receipt Slip Modal */}
+      {isHandoverModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 p-5 sm:p-6 relative">
+            <button
+              type="button"
+              onClick={() => setIsHandoverModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-4 pb-2 border-b border-slate-200">
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full inline-block mb-1">
+                परीक्षा समाप्ति डिजिटल पावती
+              </span>
+              <h3 className="text-base font-black text-slate-900">
+                📦 उत्तर-पुस्तिका जमा रसीद (Handover Receipt)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                स्ट्रॉन्ग रूम / वितरण लिपिक को जमा करने हेतु तैयार समरी
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-slate-500 font-bold">कमरा संख्या:</span>
+                <span className="text-slate-900 font-black text-sm">{selectedRoomName}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-slate-500 font-bold">दिनांक व पाली:</span>
+                <span className="text-slate-900 font-bold">{activeDate === '2026-11-02' ? '02-11-2026' : activeDate} | {portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-slate-500 font-bold">कक्ष निरीक्षक:</span>
+                <span className="text-slate-900 font-black">{currentUser?.name} (मो० {currentUser?.phone})</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-slate-500 font-bold">कुल नामांकित छात्र:</span>
+                <span className="text-slate-900 font-bold">{roomStudents.length} छात्र</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-emerald-700 font-bold">उपस्थित छात्र (A-कॉपी जारी):</span>
+                <span className="text-emerald-900 font-black">{presentCount}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-rose-700 font-bold">अनुपस्थित छात्र:</span>
+                <span className="text-rose-900 font-black">{absentCount}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-amber-800 font-bold">पूरक B-कॉपी कुल खपत:</span>
+                <span className="text-amber-950 font-black">{totalRoomBCopies}</span>
+              </div>
+              <div className="flex justify-between pt-1 text-sm bg-indigo-50 p-2.5 rounded-xl border border-indigo-200">
+                <span className="text-indigo-900 font-black">कुल जमा कॉपियां (A + B):</span>
+                <span className="text-indigo-950 font-black text-base">{presentCount + totalRoomBCopies} कॉपी</span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const slipText = `*ए.बी.वी.आई.सी. मीरांपुर कटरा*\n*उत्तर-पुस्तिका जमा पावती*\n---------------------------\n🏫 कमरा: ${selectedRoomName}\n📅 दिनांक: ${activeDate} | पाली: ${portalShift}\n👨‍🏫 कक्ष निरीक्षक: ${currentUser?.name} (${currentUser?.phone})\n👥 नामांकित छात्र: ${roomStudents.length}\n✅ उपस्थित छात्र (A-कॉपी): ${presentCount}\n❌ अनुपस्थित: ${absentCount}\n📑 B-कॉपी खपत: ${totalRoomBCopies}\n📦 कुल जमा कॉपियां: ${presentCount + totalRoomBCopies}\n---------------------------`;
+                  if (navigator?.clipboard?.writeText) {
+                    navigator.clipboard.writeText(slipText);
+                    alert('✅ जमा पावती क्लिपबोर्ड में कॉपी हो गई!');
+                  }
+                }}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer"
+              >
+                📋 पावती कॉपी करें
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsHandoverModalOpen(false)}
+                className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                बंद करें
+              </button>
+            </div>
           </div>
         </div>
       )}

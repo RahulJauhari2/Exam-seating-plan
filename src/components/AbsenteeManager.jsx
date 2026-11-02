@@ -341,7 +341,7 @@ export default function AbsenteeManager({
   const handleCopyClassAbsent = (cls) => {
     const absentListText = cls.absentStudents.length > 0
       ? cls.absentStudents.map((st, i) => `${i + 1}. रोल #${st.rollNo} - ${st.name || 'परीक्षार्थी'} (${st.roomName}, बेंच #${st.benchNumber || '—'})`).join('\n')
-      : '✅ सभी परीक्षार्थी उपस्थित हैं (निरंक)';
+      : '✅ सभी परीक्षार्थी उपस्थित हैं (शत-प्रतिशत उपस्थिति)';
 
     const text = `*${examDetails.schoolName || 'ए.बी.वी.आई.सी. मीरांपुर कटरा'}*\n*कक्षा-वार अनुपस्थिति व कॉपी रिपोर्ट (Class Absentee & Copy List)*\n📅 दिनांक: ${examDetails.date || ''} | समय: ${examDetails.timeRange || ''}\n🎓 कक्षा: ${cls.displayName}${cls.classTeacherName ? `\n👨‍🏫 कक्षाध्यापक: ${cls.classTeacherName}` : ''}\n----------------------------------\n👥 कुल छात्र: ${cls.totalStudents}\n✅ उपस्थित ('A' कॉपियां): ${cls.presentCount}\n📙 पूरक 'B' कॉपियां: ${cls.bCopiesCount || 0}\n❌ अनुपस्थित: ${cls.absentCount}\n----------------------------------\n*अनुपस्थित छात्र सूची:*\n${absentListText}\n----------------------------------\n_रिपोर्ट समय: ${new Date().toLocaleTimeString('hi-IN')}_`;
 
@@ -893,7 +893,7 @@ export default function AbsenteeManager({
                               ))}
                             </div>
                           ) : (
-                            <span className="text-slate-400 font-normal italic">निरंक (Nil)</span>
+                            <span className="text-slate-400 font-normal italic">✅ शून्य अनुपस्थित (100% उपस्थित)</span>
                           )}
                         </td>
                         <td className="px-3 py-2 border-r border-slate-200 text-center text-slate-300">
@@ -1028,7 +1028,7 @@ export default function AbsenteeManager({
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-slate-400 font-normal italic">निरंक (Nil)</span>
+                              <span className="text-slate-400 font-normal italic">✅ शून्य अनुपस्थित (100% उपस्थित)</span>
                             )}
                           </td>
                           <td className="px-3 py-2 border-r border-slate-200 text-center text-slate-300">
