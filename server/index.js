@@ -44,7 +44,7 @@ app.get('/api/health', (req, res) => {
 app.use(express.static(distPath));
 
 // SPA Client-side Routing Fallback (for non-API requests)
-app.get('*', (req, res, next) => {
+app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
