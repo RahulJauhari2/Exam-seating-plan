@@ -1478,7 +1478,7 @@ export default function TeacherDutyManager({
                         key={t.id}
                         className="px-2.5 py-0.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-purple-950 shadow-2xs print:border-none print:p-0 print:text-black print:font-bold"
                       >
-                        ⭐ {t.name} ({t.designation})
+                        ⭐ {t.name} (मो० {t.mobile || t.phone || '—'})
                       </span>
                     ))
                   ) : (
@@ -1570,7 +1570,7 @@ export default function TeacherDutyManager({
                           <div className="no-print">
                             {isDutyLocked ? (
                               <div className="w-full px-2.5 py-1.5 border border-slate-200 bg-slate-50/80 rounded-lg text-xs font-black text-slate-800 flex items-center justify-between shadow-2xs">
-                                <span className="truncate">{t1 ? `${t1.name} (${t1.designation})` : '— रिक्त —'}</span>
+                                <span className="truncate">{t1 ? `${t1.name} (मो० ${t1.mobile || t1.phone || '—'})` : '— रिक्त —'}</span>
                                 <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
                               </div>
                             ) : (
@@ -1584,7 +1584,7 @@ export default function TeacherDutyManager({
                                 {/* If currently assigned, always show at top */}
                                 {t1 && (
                                   <option value={t1.id}>
-                                    ✓ {t1.name} ({t1.designation}) [वर्तमान चयनित]
+                                    ✓ {t1.name} (मो० {t1.mobile || t1.phone || '—'}) [वर्तमान चयनित]
                                   </option>
                                 )}
 
@@ -1594,7 +1594,7 @@ export default function TeacherDutyManager({
                                     const workedInOther = otherShiftAssignedIds.has(String(t.id));
                                     return (
                                       <option key={t.id} value={t.id}>
-                                        {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
+                                        {t.name} (मो० {t.mobile || t.phone || '—'}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
                                       </option>
                                     );
                                   })}
@@ -1606,7 +1606,7 @@ export default function TeacherDutyManager({
                             {t1 ? (
                               <div>
                                 <span className="font-bold text-black block">{t1.name}</span>
-                                <span className="text-[9px] text-slate-700 block">{t1.designation}{t1.subject ? ` • ${t1.subject}` : ''}</span>
+                                <span className="text-[10px] font-bold text-slate-800 block">मो० {t1.mobile || t1.phone || '—'}</span>
                               </div>
                             ) : (
                               <span className="text-slate-400 font-normal italic">_________________</span>
@@ -1621,7 +1621,7 @@ export default function TeacherDutyManager({
                               <div className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-black flex items-center justify-between shadow-2xs ${
                                 isLarge ? 'border-indigo-200 bg-indigo-50/50 text-indigo-900' : 'border-slate-200 bg-slate-50/60 text-slate-600'
                               }`}>
-                                <span className="truncate">{t2 ? `${t2.name} (${t2.designation})` : '— रिक्त (वैकल्पिक) —'}</span>
+                                <span className="truncate">{t2 ? `${t2.name} (मो० ${t2.mobile || t2.phone || '—'})` : '— रिक्त (वैकल्पिक) —'}</span>
                                 <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
                               </div>
                             ) : (
@@ -1639,7 +1639,7 @@ export default function TeacherDutyManager({
                                 {/* If currently assigned, always show at top */}
                                 {t2 && (
                                   <option value={t2.id}>
-                                    ✓ {t2.name} ({t2.designation}) [वर्तमान चयनित]
+                                    ✓ {t2.name} (मो० {t2.mobile || t2.phone || '—'}) [वर्तमान चयनित]
                                   </option>
                                 )}
 
@@ -1649,7 +1649,7 @@ export default function TeacherDutyManager({
                                     const workedInOther = otherShiftAssignedIds.has(String(t.id));
                                     return (
                                       <option key={t.id} value={t.id}>
-                                        {t.name} ({t.designation}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
+                                        {t.name} (मो० {t.mobile || t.phone || '—'}) {workedInOther ? `• [${otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} में ड्यूटी थी]` : '• ✨ [फ्रेश]'}
                                       </option>
                                     );
                                   })}
@@ -1661,7 +1661,7 @@ export default function TeacherDutyManager({
                             {t2 ? (
                               <div>
                                 <span className="font-bold text-black block">{t2.name}</span>
-                                <span className="text-[9px] text-slate-700 block">{t2.designation}{t2.subject ? ` • ${t2.subject}` : ''}</span>
+                                <span className="text-[10px] font-bold text-slate-800 block">मो० {t2.mobile || t2.phone || '—'}</span>
                               </div>
                             ) : isLarge ? (
                               <span className="text-slate-400 font-normal italic">_________________</span>
@@ -1726,7 +1726,7 @@ export default function TeacherDutyManager({
                       >
                         <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                         <span>
-                          {t.name} <span className="text-[10px] text-slate-500 font-normal">({t.designation})</span>
+                          {t.name} <span className="text-[10px] text-slate-800 font-bold">मो० {t.mobile || t.phone || '—'}</span>
                         </span>
                         {!isDutyLocked && (
                           <button
@@ -1756,7 +1756,7 @@ export default function TeacherDutyManager({
                       <option value="">+ रिलीवर शिक्षक जोड़ें (मुक्त शिक्षकों में से)...</option>
                       {freeTeachers.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.name} ({t.designation})
+                          {t.name} (मो० {t.mobile || t.phone || '—'})
                         </option>
                       ))}
                     </select>
@@ -1781,7 +1781,7 @@ export default function TeacherDutyManager({
                     return (
                       <div key={tid} className="flex items-center justify-between border-b border-black/40 pb-0.5">
                         <span className="font-bold text-black">
-                          {rIdx + 1}. {t.name} <span className="font-normal text-slate-700">({t.designation})</span>
+                          {rIdx + 1}. {t.name} <span className="font-bold text-slate-800"> (मो० {t.mobile || t.phone || '—'})</span>
                         </span>
                         <span className="text-slate-700 text-[10px] italic">ह०: ________________</span>
                       </div>
@@ -1827,7 +1827,7 @@ export default function TeacherDutyManager({
                       >
                         <UserCheck className={`w-3.5 h-3.5 ${workedInOther ? 'text-amber-600' : 'text-emerald-600'}`} />
                         <span>{t.name}</span>
-                        <span className="text-[10px] text-slate-500 font-normal">({t.designation})</span>
+                        <span className="text-[10px] text-slate-800 font-bold">मो० {t.mobile || t.phone || '—'}</span>
                         {workedInOther ? (
                           <span className="text-[9px] px-1 py-0.2 bg-amber-200 text-amber-900 rounded font-semibold">
                             {otherShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} ड्यूटी थी
