@@ -21,6 +21,24 @@ const distPath = path.join(__dirname, '../dist');
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
+// Auto-parse multiline string if saved under 'Env' or 'ENV' in Coolify modal
+const rawEnvBlock = process.env.Env || process.env.ENV || process.env.env || '';
+if (rawEnvBlock && rawEnvBlock.includes('=')) {
+  rawEnvBlock.split('\n').forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const idx = trimmed.indexOf('=');
+      if (idx !== -1) {
+        const k = trimmed.slice(0, idx).trim();
+        const v = trimmed.slice(idx + 1).trim();
+        if (k && !process.env[k]) {
+          process.env[k] = v;
+        }
+      }
+    }
+  });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 

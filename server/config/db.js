@@ -7,6 +7,16 @@ export let lastConnectionError = null;
 export const getLastConnectionError = () => lastConnectionError;
 
 export const getMongoUri = () => {
+  // Parse multiline string if saved under process.env.Env or ENV (as seen in Coolify modal)
+  const rawEnv = process.env.Env || process.env.ENV || process.env.env || '';
+  if (rawEnv.includes('MONGODB_URI=')) {
+    const match = rawEnv.split('\n').find(l => l.trim().startsWith('MONGODB_URI='));
+    if (match) {
+      const val = match.trim().slice('MONGODB_URI='.length).trim();
+      if (val) process.env.MONGODB_URI = val;
+    }
+  }
+
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || 'mongodb://127.0.0.1:27017/exam_seating_db';
   return uri.trim();
 };
