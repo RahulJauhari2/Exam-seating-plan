@@ -193,6 +193,19 @@ export default function App() {
   }, [dutyRoster, activeShift, examDetails?.examName]);
 
   // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
+  const reloadDutyRoster = () => {
+    loadExamSessionFromDB(examDetails.examName || 'Half_Yearly_2026_27', activeShift)
+      .then((res) => {
+        if (res && res.success && res.data && res.data.dutyRoster) {
+          setDutyRoster(res.data.dutyRoster);
+          try {
+            localStorage.setItem('exam_duty_roster_v1', JSON.stringify(res.data.dutyRoster));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     loadExamSessionFromDB(examDetails.examName || 'Half_Yearly_2026_27', activeShift)
       .then((res) => {
@@ -214,10 +227,10 @@ export default function App() {
             }));
           }
           if (s.dutyRoster && Object.keys(s.dutyRoster).length > 0) {
-            setDutyRoster((prev) => ({
-              ...s.dutyRoster,
-              ...prev,
-            }));
+            setDutyRoster(s.dutyRoster);
+            try {
+              localStorage.setItem('exam_duty_roster_v1', JSON.stringify(s.dutyRoster));
+            } catch {}
           }
           if (s.evaluationAllotment && Object.keys(s.evaluationAllotment).length > 0) {
             setEvaluationAllotment(s.evaluationAllotment);
@@ -231,6 +244,20 @@ export default function App() {
       })
       .catch(() => {});
   }, [activeShift]);
+
+  // Auto-sync fresh duty roster from server on window focus or periodically (every 12s)
+  useEffect(() => {
+    const handleFocus = () => reloadDutyRoster();
+    window.addEventListener('focus', handleFocus);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      reloadDutyRoster();
+    }, 12000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [activeShift, examDetails.examName]);
 
   // Active view tab — default to 'student-home' for welcoming student storytelling portal
   const [activeTab, setActiveTab] = useState('student-home');
@@ -758,6 +785,7 @@ export default function App() {
                 evaluationAllotment={evaluationAllotment}
                 marksLocks={marksLocks}
                 classes={classes}
+                onRefreshDuty={reloadDutyRoster}
                 onGoToEvaluation={(target) => {
                   if (target) setEvaluationTarget(target);
                   setActiveTab('result-marksheet');

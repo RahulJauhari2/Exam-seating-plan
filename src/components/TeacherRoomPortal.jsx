@@ -33,7 +33,8 @@ import {
   Plus,
   Minus,
   ChevronRight,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 
 export default function TeacherRoomPortal({
@@ -49,6 +50,7 @@ export default function TeacherRoomPortal({
   onLogout,
   onSwitchToAdminView,
   onGoToEvaluation,
+  onRefreshDuty,
   evaluationAllotment = {},
   marksLocks = {},
   classes = [],
@@ -694,11 +696,24 @@ export default function TeacherRoomPortal({
               }`}>
                 {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : currentShiftDutyInfo.hasDuty ? 'आवंटित परीक्षा कक्ष:' : 'कक्ष ड्यूटी स्थिति:'}
               </span>
-              <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
-                canAccessAllRooms ? 'bg-blue-200 text-blue-900' : currentShiftDutyInfo.hasDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
-              }`} title="आपकी आवंटित ड्यूटी">
-                {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 ड्यूटी लॉक' : 'निरंक'}
-              </span>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                  canAccessAllRooms ? 'bg-blue-200 text-blue-900' : currentShiftDutyInfo.hasDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                }`} title="आपकी आवंटित ड्यूटी">
+                  {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 ड्यूटी लॉक' : 'निरंक'}
+                </span>
+                {onRefreshDuty && (
+                  <button
+                    type="button"
+                    onClick={onRefreshDuty}
+                    className="text-[9px] font-bold bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                    title="ताज़ा ड्यूटी लोड करें"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    <span>रिफ्रेश</span>
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
               <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : currentShiftDutyInfo.hasDuty ? 'text-emerald-700' : 'text-amber-700'}`} />
