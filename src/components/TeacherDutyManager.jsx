@@ -32,7 +32,8 @@ import {
   RotateCcw,
   Lock,
   Unlock,
-  KeyRound
+  KeyRound,
+  Filter
 } from 'lucide-react';
 import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
