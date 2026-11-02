@@ -31,6 +31,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Pre-warm serverless backend and MongoDB connection in background as soon as modal opens
+  // While the user enters their 10-digit number & PIN, the API container is already hot!
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/health').catch(() => {});
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
@@ -60,10 +68,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       const res = await login(creds);
       if (res.success) {
         setSuccessMsg(res.message);
-        setTimeout(() => {
-          onClose();
-          if (onLoginSuccess) onLoginSuccess(res.user);
-        }, 700);
+        // Instant close on mobile with zero artificial delay
+        onClose();
+        if (onLoginSuccess) onLoginSuccess(res.user);
       } else {
         setError(res.message || 'लॉगिन विफल। कृपया क्रेडेंशियल्स जांचें।');
       }
@@ -79,7 +86,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     setError('');
     if (type === 'teacher1') {
       setTab('teacher');
-      setPhone('9800000001');
+      setPhone('9919353599');
       setPin('1234');
     } else if (type === 'principal') {
       setTab('admin');

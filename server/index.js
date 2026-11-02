@@ -30,6 +30,10 @@ app.use('/api/absentees', absenteeRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/copies', copyRoutes);
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: Date.now() });
+});
+
 // Root test endpoint
 app.get('/', (req, res) => {
   res.json({

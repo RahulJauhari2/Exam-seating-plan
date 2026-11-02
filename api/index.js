@@ -67,6 +67,15 @@ app.use('/api/absentees', absenteeRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/copies', copyRoutes);
 
+// Health check endpoint for instant pre-warming from mobile login modal
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    database: isConnected ? 'connected' : 'connecting',
+    time: Date.now(),
+  });
+});
+
 // Root health check
 app.get('/', (req, res) => {
   res.json({

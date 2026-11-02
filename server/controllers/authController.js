@@ -29,6 +29,12 @@ export const seedInitialUsers = async () => {
   if (mongoose.connection.readyState !== 1) return;
 
   try {
+    // If users already exist in the collection, skip immediately to prevent cold-start delay
+    const count = await User.estimatedDocumentCount();
+    if (count > 0) {
+      return;
+    }
+
     const hashedAdminPass = await bcrypt.hash('admin@123', 10);
     const hashedPrincipalPass = await bcrypt.hash('principal@123', 10);
     const hashedCoordPass = await bcrypt.hash('exam@123', 10);

@@ -263,6 +263,9 @@ export default function App() {
 
   // Auto-sync fresh duty roster from server on window focus or periodically (every 12s)
   useEffect(() => {
+    // When login modal is open, pause polling so mobile network pipe is fully dedicated to login
+    if (isLoginOpen) return;
+
     const handleFocus = () => reloadDutyRoster();
     window.addEventListener('focus', handleFocus);
     const interval = setInterval(() => {
@@ -273,7 +276,7 @@ export default function App() {
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
-  }, [activeShift, examDetails.examName]);
+  }, [activeShift, examDetails.examName, isLoginOpen]);
 
   // Active view tab — default to 'student-home' for welcoming student storytelling portal
   const [activeTab, setActiveTab] = useState('student-home');
@@ -290,8 +293,11 @@ export default function App() {
     }
   }, [isTeacher, canAccessAllRooms, activeTab]);
 
-  // Real-time Live Absentee Polling (every 2.5 seconds)
+  // Real-time Live Absentee Polling (every 4 seconds)
   useEffect(() => {
+    // Pause live polling while login modal is open to avoid mobile network choking
+    if (isLoginOpen) return;
+
     let isSubscribed = true;
 
     const pollLiveAbsentees = async () => {
@@ -390,7 +396,7 @@ export default function App() {
       previousAbsentCount.current = 0;
       isInitialPoll.current = true;
     };
-  }, [examDetails.examName, examDetails.date, activeShift, isTeacher]);
+  }, [examDetails.examName, examDetails.date, activeShift, isTeacher, isLoginOpen]);
 
   // Handle Answer Book B-Copy update from Teacher Room Portal or Admin
   const handleUpdateBCopy = async (copyData) => {
