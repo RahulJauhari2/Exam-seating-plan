@@ -172,6 +172,28 @@ export default function TeacherDutyManager({
   // Is current shift's duty locked with a PIN?
   const isDutyLocked = Boolean(currentAllocation?.isLocked);
 
+  // Centralized state update + immediate persistent save to MongoDB Atlas & localStorage
+  const applyAndSaveRosterUpdate = (updater, targetSh = selectedShift) => {
+    setDutyRoster((prev) => {
+      const nextRoster = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem('exam_duty_roster_v1', JSON.stringify(nextRoster));
+      } catch {}
+      saveDutyRosterToDB(
+        examDetails?.examName || 'Half_Yearly_2026_27',
+        targetSh,
+        nextRoster
+      ).then((res) => {
+        if (res && res.success) {
+          const timeStr = new Date().toLocaleTimeString('hi-IN');
+          setLastSavedTime(timeStr);
+          try { localStorage.setItem('duty_last_db_sync_time', timeStr); } catch {}
+        }
+      }).catch(() => {});
+      return nextRoster;
+    });
+  };
+
   const handleLockDuty = (pin) => {
     const cleanPin = String(pin || '').trim();
     if (cleanPin.length < 4) {
@@ -189,17 +211,10 @@ export default function TeacherDutyManager({
         lockedAt: new Date().toISOString(),
       },
     };
-    setDutyRoster(updatedRoster);
+    applyAndSaveRosterUpdate(updatedRoster);
     setIsPinModalOpen(false);
     setEnteredPin('1234');
     setPinError('');
-
-    // Save to DB immediately
-    saveDutyRosterToDB(
-      examDetails?.examName || 'Half_Yearly_2026_27',
-      selectedShift,
-      updatedRoster
-    );
   };
 
   const handleUnlockDuty = (pin) => {
@@ -216,17 +231,10 @@ export default function TeacherDutyManager({
           unlockedAt: new Date().toISOString(),
         },
       };
-      setDutyRoster(updatedRoster);
+      applyAndSaveRosterUpdate(updatedRoster);
       setIsPinModalOpen(false);
       setEnteredPin('1234');
       setPinError('');
-
-      // Save to DB immediately
-      saveDutyRosterToDB(
-        examDetails?.examName || 'Half_Yearly_2026_27',
-        selectedShift,
-        updatedRoster
-      );
     } else {
       setPinError('गलत पिन! कृपया सही 4 अंकों का पिन दर्ज करें (Default PIN: 1234)');
     }
@@ -577,22 +585,62 @@ export default function TeacherDutyManager({
     }
 
     // Allocate rooms from remaining candidates (Fresh first)
+    // Rule: "jiski last day kisi room me lagi ho fir se same room me nahi lagni chhaiye"
+    const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDay.id);
+    const prevDayRoomTeachers = new Map();
+    if (currentDayIdx > 0) {
+      const prevDay = EXAM_TIMETABLE[currentDayIdx - 1];
+      ['shift_1', 'shift_2'].forEach((sh) => {
+        const pKey = `${prevDay.id}_${sh}`;
+        const pAlloc = dutyRoster[pKey];
+        if (pAlloc && pAlloc.rooms) {
+          Object.entries(pAlloc.rooms).forEach(([rId, rData]) => {
+            if (!prevDayRoomTeachers.has(rId)) {
+              prevDayRoomTeachers.set(rId, new Set());
+            }
+            if (rData?.invigilator1) prevDayRoomTeachers.get(rId).add(String(rData.invigilator1));
+            if (rData?.invigilator2) prevDayRoomTeachers.get(rId).add(String(rData.invigilator2));
+          });
+        }
+      });
+    }
+
     const roomCandidates = candidatePool.filter((t) => !usedIds.has(String(t.id)));
-    let tIdx = 0;
+    const availablePool = [...roomCandidates];
     const roomAssignments = {};
 
     targetRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      
-      const inv1 = roomCandidates[tIdx % roomCandidates.length]?.id || null;
-      if (inv1) usedIds.add(String(inv1));
-      tIdx++;
+      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
 
+      // Find best candidate for invigilator 1 (who was not in this room on previous day)
+      let inv1 = null;
+      let cand1Idx = availablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+      if (cand1Idx === -1 && availablePool.length > 0) {
+        cand1Idx = 0; // Fallback if no fresh candidate available
+      }
+      if (cand1Idx !== -1) {
+        inv1 = availablePool[cand1Idx].id;
+        availablePool.splice(cand1Idx, 1);
+      } else if (roomCandidates.length > 0) {
+        const fb = roomCandidates.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || roomCandidates[0];
+        inv1 = fb?.id || null;
+      }
+
+      // Find best candidate for invigilator 2 if large room and enough teachers
       let inv2 = null;
-      if (isLarge && roomCandidates.length > targetRooms.length) {
-        inv2 = roomCandidates[tIdx % roomCandidates.length]?.id || null;
-        if (inv2) usedIds.add(String(inv2));
-        tIdx++;
+      if (isLarge) {
+        let cand2Idx = availablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+        if (cand2Idx === -1 && availablePool.length > 0) {
+          cand2Idx = 0;
+        }
+        if (cand2Idx !== -1) {
+          inv2 = availablePool[cand2Idx].id;
+          availablePool.splice(cand2Idx, 1);
+        } else if (roomCandidates.length > 1) {
+          const fb = roomCandidates.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || roomCandidates.find((t) => String(t.id) !== String(inv1));
+          inv2 = fb?.id || null;
+        }
       }
 
       roomAssignments[rm.roomId] = {
@@ -609,20 +657,7 @@ export default function TeacherDutyManager({
       },
     };
 
-    setDutyRoster(updatedRoster);
-
-    // Immediate DB Sync to MongoDB Atlas so all devices get the duty roster right away
-    saveDutyRosterToDB(
-      examDetails?.examName || 'Half_Yearly_2026_27',
-      targetShift,
-      updatedRoster
-    ).then((res) => {
-      if (res && res.success) {
-        const timeStr = new Date().toLocaleTimeString('hi-IN');
-        setLastSavedTime(timeStr);
-        try { localStorage.setItem('duty_last_db_sync_time', timeStr); } catch {}
-      }
-    }).catch(() => {});
+    applyAndSaveRosterUpdate(updatedRoster, targetShift);
   };
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
@@ -666,17 +701,55 @@ export default function TeacherDutyManager({
       }
     }
 
+    // Previous Day Room Inhabitation tracking to strictly prevent consecutive-day same-room assignments
+    const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDay.id);
+    const prevDayRoomTeachers = new Map();
+    if (currentDayIdx > 0) {
+      const prevDay = EXAM_TIMETABLE[currentDayIdx - 1];
+      ['shift_1', 'shift_2'].forEach((sh) => {
+        const pKey = `${prevDay.id}_${sh}`;
+        const pAlloc = dutyRoster[pKey];
+        if (pAlloc && pAlloc.rooms) {
+          Object.entries(pAlloc.rooms).forEach(([rId, rData]) => {
+            if (!prevDayRoomTeachers.has(rId)) {
+              prevDayRoomTeachers.set(rId, new Set());
+            }
+            if (rData?.invigilator1) prevDayRoomTeachers.get(rId).add(String(rData.invigilator1));
+            if (rData?.invigilator2) prevDayRoomTeachers.get(rId).add(String(rData.invigilator2));
+          });
+        }
+      });
+    }
+
     const s1RoomCand = poolShift1.filter((t) => !s1Used.has(String(t.id)));
-    let s1Idx = 0;
+    const s1AvailablePool = [...s1RoomCand];
     const s1Rooms = {};
     s1ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      const inv1 = s1RoomCand[s1Idx % s1RoomCand.length]?.id || null;
-      s1Idx++;
+      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
+
+      let inv1 = null;
+      let c1Idx = s1AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+      if (c1Idx === -1 && s1AvailablePool.length > 0) c1Idx = 0;
+      if (c1Idx !== -1) {
+        inv1 = s1AvailablePool[c1Idx].id;
+        s1AvailablePool.splice(c1Idx, 1);
+      } else if (s1RoomCand.length > 0) {
+        const fb = s1RoomCand.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || s1RoomCand[0];
+        inv1 = fb?.id || null;
+      }
+
       let inv2 = null;
-      if (isLarge && s1RoomCand.length > s1ActiveRooms.length) {
-        inv2 = s1RoomCand[s1Idx % s1RoomCand.length]?.id || null;
-        s1Idx++;
+      if (isLarge) {
+        let c2Idx = s1AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+        if (c2Idx === -1 && s1AvailablePool.length > 0) c2Idx = 0;
+        if (c2Idx !== -1) {
+          inv2 = s1AvailablePool[c2Idx].id;
+          s1AvailablePool.splice(c2Idx, 1);
+        } else if (s1RoomCand.length > 1) {
+          const fb = s1RoomCand.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || s1RoomCand.find((t) => String(t.id) !== String(inv1));
+          inv2 = fb?.id || null;
+        }
       }
       s1Rooms[rm.roomId] = { invigilator1: inv1, invigilator2: inv2 };
     });
@@ -691,18 +764,35 @@ export default function TeacherDutyManager({
     }
 
     const s2RoomCand = poolShift2.filter((t) => !s2Used.has(String(t.id)));
-    let s2Idx = 0;
+    const s2CandidateList = s2RoomCand.length >= s2ActiveRooms.length ? [...s2RoomCand] : [...s2RoomCand, ...poolShift1];
+    const s2AvailablePool = [...s2CandidateList];
     const s2Rooms = {};
     s2ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      // If poolShift2 runs out, gracefully fallback to poolShift1
-      const candidateList = s2RoomCand.length >= s2ActiveRooms.length ? s2RoomCand : [...s2RoomCand, ...poolShift1];
-      const inv1 = candidateList[s2Idx % candidateList.length]?.id || null;
-      s2Idx++;
+      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
+
+      let inv1 = null;
+      let c1Idx = s2AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+      if (c1Idx === -1 && s2AvailablePool.length > 0) c1Idx = 0;
+      if (c1Idx !== -1) {
+        inv1 = s2AvailablePool[c1Idx].id;
+        s2AvailablePool.splice(c1Idx, 1);
+      } else if (s2CandidateList.length > 0) {
+        const fb = s2CandidateList.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || s2CandidateList[0];
+        inv1 = fb?.id || null;
+      }
+
       let inv2 = null;
-      if (isLarge && candidateList.length > s2ActiveRooms.length) {
-        inv2 = candidateList[s2Idx % candidateList.length]?.id || null;
-        s2Idx++;
+      if (isLarge) {
+        let c2Idx = s2AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
+        if (c2Idx === -1 && s2AvailablePool.length > 0) c2Idx = 0;
+        if (c2Idx !== -1) {
+          inv2 = s2AvailablePool[c2Idx].id;
+          s2AvailablePool.splice(c2Idx, 1);
+        } else if (s2CandidateList.length > 1) {
+          const fb = s2CandidateList.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || s2CandidateList.find((t) => String(t.id) !== String(inv1));
+          inv2 = fb?.id || null;
+        }
       }
       s2Rooms[rm.roomId] = { invigilator1: inv1, invigilator2: inv2 };
     });
@@ -716,20 +806,7 @@ export default function TeacherDutyManager({
       [k2]: { rooms: s2Rooms, relievers: s2Relievers },
     };
 
-    setDutyRoster(updatedRoster);
-
-    // Immediate DB Sync for both shifts to MongoDB Atlas
-    saveDutyRosterToDB(
-      examDetails?.examName || 'Half_Yearly_2026_27',
-      selectedShift,
-      updatedRoster
-    ).then((res) => {
-      if (res && res.success) {
-        const timeStr = new Date().toLocaleTimeString('hi-IN');
-        setLastSavedTime(timeStr);
-        try { localStorage.setItem('duty_last_db_sync_time', timeStr); } catch {}
-      }
-    }).catch(() => {});
+    applyAndSaveRosterUpdate(updatedRoster, selectedShift);
 
     alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${s1ActiveRooms.length} कक्ष (${poolShift1.length} शिक्षक)\n• Shift 2 (दोपहर): ${s2ActiveRooms.length} कक्ष (${poolShift2.length} शिक्षक - बिना किसी दोहराव के)`);
   };
@@ -748,12 +825,7 @@ export default function TeacherDutyManager({
     }
     const next = { ...dutyRoster };
     delete next[currentAllocKey];
-    setDutyRoster(next);
-    saveDutyRosterToDB(
-      examDetails?.examName || 'Half_Yearly_2026_27',
-      selectedShift,
-      next
-    ).catch(() => {});
+    applyAndSaveRosterUpdate(next);
   };
 
   // 2. Completely delete all test duty roster data (All dates & shifts) from state, localStorage & MongoDB Atlas
@@ -767,30 +839,15 @@ export default function TeacherDutyManager({
     );
     if (!ok) return;
 
-    // Reset local state
-    setDutyRoster({});
+    // Reset local state and clear DB
+    applyAndSaveRosterUpdate({});
 
     // Clear localStorage
     try {
       localStorage.removeItem('exam_duty_roster_v1');
     } catch {}
 
-    // Clear from MongoDB Atlas
-    try {
-      setIsSavingDB(true);
-      await saveDutyRosterToDB(
-        examDetails?.examName || 'Half_Yearly_2026_27',
-        activeShift,
-        {}
-      );
-      setLastSavedTime(new Date().toLocaleTimeString('hi-IN'));
-      alert('✅ सभी टेस्ट ड्यूटी डेटा सफलतापूर्वक डिलीट कर दिया गया है! अब परीक्षा के लिए डेटाबेस पूरी तरह क्लीन (Clean) है।');
-    } catch (err) {
-      console.error('Failed to clear duty roster from DB:', err);
-      alert('स्थानीय टेस्ट ड्यूटी डेटा साफ कर दिया गया है।');
-    } finally {
-      setIsSavingDB(false);
-    }
+    alert('✅ सभी टेस्ट ड्यूटी डेटा सफलतापूर्वक डिलीट कर दिया गया है! अब परीक्षा के लिए डेटाबेस पूरी तरह क्लीन (Clean) है।');
   };
 
   // Handle manual dropdown change for a room
@@ -825,7 +882,7 @@ export default function TeacherDutyManager({
       [slot]: teacherId || null,
     };
 
-    setDutyRoster((prev) => ({
+    applyAndSaveRosterUpdate((prev) => ({
       ...prev,
       [currentAllocKey]: {
         ...curr,
@@ -860,7 +917,7 @@ export default function TeacherDutyManager({
       currRelievers.push(teacherId);
     }
 
-    setDutyRoster((prev) => ({
+    applyAndSaveRosterUpdate((prev) => ({
       ...prev,
       [currentAllocKey]: {
         ...curr,
@@ -881,7 +938,7 @@ export default function TeacherDutyManager({
     const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
     const currRelievers = (curr.relievers || []).filter((tid) => String(tid) !== String(teacherId));
 
-    setDutyRoster((prev) => ({
+    applyAndSaveRosterUpdate((prev) => ({
       ...prev,
       [currentAllocKey]: {
         ...curr,
@@ -908,7 +965,7 @@ export default function TeacherDutyManager({
       });
     });
 
-    setDutyRoster((prev) => ({
+    applyAndSaveRosterUpdate((prev) => ({
       ...prev,
       [currentAllocKey]: {
         ...curr,

@@ -169,11 +169,13 @@ export default function App() {
   });
 
   const [evaluationTarget, setEvaluationTarget] = useState(null);
+  const lastLocalDutyUpdateRef = useRef(0);
 
   // Automatically persist dutyRoster changes locally AND to MongoDB Atlas (debounced)
   useEffect(() => {
     try {
       if (dutyRoster && Object.keys(dutyRoster).length > 0) {
+        lastLocalDutyUpdateRef.current = Date.now();
         localStorage.setItem('exam_duty_roster_v1', JSON.stringify(dutyRoster));
         // Auto-sync debounce to MongoDB so newly assigned duties are never lost
         const timer = setTimeout(() => {
@@ -182,7 +184,7 @@ export default function App() {
             activeShift || 'shift_1',
             dutyRoster
           ).catch(() => {});
-        }, 2000);
+        }, 1500);
         return () => clearTimeout(timer);
       } else {
         localStorage.removeItem('exam_duty_roster_v1');
@@ -194,17 +196,24 @@ export default function App() {
 
   // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
   const reloadDutyRoster = () => {
+    // PROTECT MANUAL EDITS: If duty was edited locally in last 25 seconds, NEVER overwrite with server polling!
+    if (Date.now() - lastLocalDutyUpdateRef.current < 25000) {
+      return;
+    }
     const sName = examDetails.examName || 'Half_Yearly_2026_27';
     loadExamSessionFromDB(sName, activeShift)
       .then((res) => {
         if (res && res.success && res.data && res.data.dutyRoster && Object.keys(res.data.dutyRoster).length > 0) {
-          setDutyRoster(res.data.dutyRoster);
-          try {
-            localStorage.setItem('exam_duty_roster_v1', JSON.stringify(res.data.dutyRoster));
-          } catch {}
+          // Double check timing before applying
+          if (Date.now() - lastLocalDutyUpdateRef.current >= 25000) {
+            setDutyRoster(res.data.dutyRoster);
+            try {
+              localStorage.setItem('exam_duty_roster_v1', JSON.stringify(res.data.dutyRoster));
+            } catch {}
+          }
         } else {
           loadExamSessionFromDB('Half_Yearly_2026_27', activeShift).then((r2) => {
-            if (r2?.success && r2.data?.dutyRoster) {
+            if (r2?.success && r2.data?.dutyRoster && Date.now() - lastLocalDutyUpdateRef.current >= 25000) {
               setDutyRoster(r2.data.dutyRoster);
               try {
                 localStorage.setItem('exam_duty_roster_v1', JSON.stringify(r2.data.dutyRoster));
@@ -215,7 +224,7 @@ export default function App() {
       })
       .catch(() => {
         loadExamSessionFromDB('Half_Yearly_2026_27', activeShift).then((r2) => {
-          if (r2?.success && r2.data?.dutyRoster) {
+          if (r2?.success && r2.data?.dutyRoster && Date.now() - lastLocalDutyUpdateRef.current >= 25000) {
             setDutyRoster(r2.data.dutyRoster);
           }
         }).catch(() => {});
@@ -261,10 +270,13 @@ export default function App() {
       .catch(() => {});
   }, [activeShift]);
 
+  // Active view tab — default to 'student-home' for welcoming student storytelling portal
+  const [activeTab, setActiveTab] = useState('student-home');
+
   // Auto-sync fresh duty roster from server on window focus or periodically (every 12s)
   useEffect(() => {
-    // When login modal is open, pause polling so mobile network pipe is fully dedicated to login
-    if (isLoginOpen) return;
+    // When login modal is open or when admin is on 'teacher-duty' tab, pause polling to protect manual duty edits
+    if (isLoginOpen || activeTab === 'teacher-duty') return;
 
     const handleFocus = () => reloadDutyRoster();
     window.addEventListener('focus', handleFocus);
@@ -276,10 +288,7 @@ export default function App() {
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
-  }, [activeShift, examDetails.examName, isLoginOpen]);
-
-  // Active view tab — default to 'student-home' for welcoming student storytelling portal
-  const [activeTab, setActiveTab] = useState('student-home');
+  }, [activeShift, examDetails.examName, isLoginOpen, activeTab]);
 
   // MongoDB Database Sync Modal state
   const [isDBSyncOpen, setIsDBSyncOpen] = useState(false);
