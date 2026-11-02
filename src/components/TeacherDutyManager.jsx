@@ -1693,7 +1693,15 @@ export default function TeacherDutyManager({
                 <button
                   key={d.id}
                   type="button"
-                  onClick={() => setSelectedDateId(d.id)}
+                  onClick={() => {
+                    setSelectedDateId(d.id);
+                    if (setExamDetails) {
+                      setExamDetails((prev) => ({
+                        ...prev,
+                        date: d.fullDate || d.date,
+                      }));
+                    }
+                  }}
                   className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
                     isSelected
                       ? 'border-indigo-600 bg-indigo-50/90 shadow-sm ring-2 ring-indigo-500/20'

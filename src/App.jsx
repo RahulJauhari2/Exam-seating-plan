@@ -110,7 +110,7 @@ export default function App() {
     schoolName: initialDefaultData.schoolName,
     examName: initialDefaultData.examName,
     timeRange: initialDefaultData.timeRange,
-    date: '2026-11-02',
+    date: '2026-11-03',
   });
 
   // Reset live attendance and toast memory when date or shift changes so all students start fresh as PRESENT

@@ -75,6 +75,31 @@ export default function TeacherRoomPortal({
   const [isRelieverModalOpen, setIsRelieverModalOpen] = useState(false);
   const [isHandoverModalOpen, setIsHandoverModalOpen] = useState(false);
 
+  // Selected Exam Day State (Defaults to 'd3' or matches activeDate prop)
+  const [selectedDayId, setSelectedDayId] = useState(() => {
+    if (activeDate) {
+      const match = (EXAM_TIMETABLE || []).find(
+        (d) => d.fullDate === activeDate || d.date === activeDate || activeDate.includes(d.date)
+      );
+      if (match) return match.id;
+    }
+    return 'd3';
+  });
+
+  // Sync when activeDate prop updates
+  useEffect(() => {
+    if (activeDate) {
+      const match = (EXAM_TIMETABLE || []).find(
+        (d) => d.fullDate === activeDate || d.date === activeDate || activeDate.includes(d.date)
+      );
+      if (match) setSelectedDayId(match.id);
+    }
+  }, [activeDate]);
+
+  const selectedDay = useMemo(() => {
+    return (EXAM_TIMETABLE || []).find((d) => d.id === selectedDayId) || EXAM_TIMETABLE[2] || EXAM_TIMETABLE[0];
+  }, [selectedDayId]);
+
   // Centralized safe absentee checker (declared before useMemo hooks)
   const isStudentAbsent = (rollNo) => {
     if (rollNo === undefined || rollNo === null) return false;
@@ -82,9 +107,10 @@ export default function TeacherRoomPortal({
     const str = String(rollNo);
     const rec = liveAbsentees[rollNo] || liveAbsentees[str] || (!isNaN(num) && liveAbsentees[num]);
     if (!rec || !rec.isAbsent) return false;
-    // Strictly verify record date matches current active date
-    if (activeDate && rec.date) {
-      const match = rec.date === activeDate || activeDate.includes(rec.date) || rec.date.includes(activeDate);
+    // Verify record date matches currently selected exam date
+    if (rec.date) {
+      const targetDate = selectedDay.fullDate || selectedDay.date;
+      const match = rec.date === targetDate || rec.date === selectedDay.date || (activeDate && (rec.date === activeDate || activeDate.includes(rec.date)));
       if (!match) return false;
     }
     return true;
@@ -299,23 +325,8 @@ export default function TeacherRoomPortal({
     return set;
   }, [currentUser, teachers]);
 
-  // Preferred day ID (e.g. 'd2' for 02-11-26)
-  const preferredDayId = useMemo(() => {
-    const norm = (s) => String(s || '').replace(/[-/\s]/g, '').toLowerCase();
-    const actNorm = norm(activeDate);
-    const matchedDay = (EXAM_TIMETABLE || []).find((d) => {
-      const fn = norm(d.fullDate);
-      const dn = norm(d.date);
-      return (
-        d.fullDate === activeDate ||
-        d.date === activeDate ||
-        (actNorm && (actNorm.includes(dn) || fn.includes(actNorm) || actNorm.includes(fn)))
-      );
-    });
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayDay = (EXAM_TIMETABLE || []).find((d) => d.fullDate === todayStr || d.date === todayStr);
-    return matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (Object.keys(dutyRoster).some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
-  }, [activeDate, dutyRoster]);
+  // Preferred day ID for backward compatibility
+  const preferredDayId = selectedDay.id;
 
   // Automatically refresh duty from DB on mount so mobile portals always display latest live duty
   useEffect(() => {
@@ -329,9 +340,6 @@ export default function TeacherRoomPortal({
     if (!currentUser) {
       return { hasDuty: false, isReliever: false, roomName: null, isRosterPublished: false, statusText: 'लॉगिन नहीं हैं' };
     }
-
-    const exactKey = `${preferredDayId}_${targetShift}`;
-    let alloc = dutyRoster[exactKey];
 
     // Helper to inspect an allocation object for this teacher
     const checkTeacherInAlloc = (allocation) => {
@@ -379,18 +387,17 @@ export default function TeacherRoomPortal({
       return null;
     };
 
-    // 1. Identify all valid keys that represent TODAY for this shift
-    const todayKeys = [
-      `${preferredDayId}_${targetShift}`,
-      `${activeDate}_${targetShift}`,
-      `2026-11-02_${targetShift}`,
-      `02-11-2026_${targetShift}`,
-      `02-11-26_${targetShift}`,
+    // 1. Identify all valid keys that represent the selected day for this shift
+    const candidateKeys = [
+      `${selectedDay.id}_${targetShift}`,
+      `${selectedDay.fullDate}_${targetShift}`,
+      `${selectedDay.date}_${targetShift}`,
+      `${selectedDayId}_${targetShift}`,
     ];
 
-    // Find if TODAY's roster exists
+    // Find if roster exists for the selected day
     let todayAlloc = null;
-    for (const k of todayKeys) {
+    for (const k of candidateKeys) {
       if (dutyRoster[k]?.rooms && Object.keys(dutyRoster[k].rooms).length > 0) {
         todayAlloc = dutyRoster[k];
         break;
@@ -424,11 +431,11 @@ export default function TeacherRoomPortal({
 
   const s1DutyInfo = useMemo(() => {
     return getDutyInfoForShift('shift_1', seatingShift1?.rooms || []);
-  }, [preferredDayId, dutyRoster, teacherIdSet, seatingShift1]);
+  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift1]);
 
   const s2DutyInfo = useMemo(() => {
     return getDutyInfoForShift('shift_2', seatingShift2?.rooms || []);
-  }, [preferredDayId, dutyRoster, teacherIdSet, seatingShift2]);
+  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift2]);
 
   const currentShiftDutyInfo = portalShift === 'shift_1' ? s1DutyInfo : s2DutyInfo;
 
@@ -955,15 +962,27 @@ export default function TeacherRoomPortal({
             </div>
           </div>
 
-          {/* Date */}
+          {/* Date Selector */}
           <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-2.5 sm:p-3">
-            <span className="text-purple-700 block text-xs font-black uppercase tracking-wider">
-              परीक्षा तिथि (Date)
-            </span>
-            <span className="text-xs sm:text-sm font-black text-purple-950 flex items-center gap-1.5 mt-1.5">
-              <Calendar className="w-4 h-4 text-purple-600 shrink-0" />
-              {activeDate === '2026-11-02' ? '02-11-2026 (सोमवार)' : activeDate || '02-11-2026'}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-purple-700 block text-xs font-black uppercase tracking-wider">
+                परीक्षा तिथि (Date)
+              </span>
+              <span className="text-[10px] font-bold text-purple-900 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-300">
+                {selectedDay.day}
+              </span>
+            </div>
+            <select
+              value={selectedDayId}
+              onChange={(e) => setSelectedDayId(e.target.value)}
+              className="mt-1.5 w-full bg-white border border-purple-300 text-purple-950 font-black text-xs sm:text-sm rounded-lg py-1 px-2 focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+            >
+              {EXAM_TIMETABLE.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.date} ({d.day}) {dutyRoster[`${d.id}_shift_1`] ? '• ड्यूटी जारी' : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Shift */}
@@ -1049,8 +1068,8 @@ export default function TeacherRoomPortal({
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mb-5 max-w-md mx-auto leading-relaxed">
             {currentShiftDutyInfo.isRosterPublished
-              ? `दिनांक ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} में आपको किसी कक्ष का प्रभार नहीं दिया गया है।`
-              : `कंट्रोल रूम द्वारा ${activeDate === '2026-11-02' ? '02-11-2026' : activeDate} के ${portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} की कक्ष ड्यूटी अभी जारी नहीं की गई है। जैसे ही ड्यूटी लगाई जाएगी, आपका कमरा यहाँ स्वतः दिखाई देगा।`}
+              ? `दिनांक ${selectedDay.date} के ${portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} में आपको किसी कक्ष का प्रभार नहीं दिया गया है।`
+              : `कंट्रोल रूम द्वारा दिनांक ${selectedDay.date} के ${portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'} की कक्ष ड्यूटी अभी जारी नहीं की गई है। जैसे ही ड्यूटी लगाई जाएगी, आपका कमरा यहाँ स्वतः दिखाई देगा।`}
           </p>
 
           <div className="inline-flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold">
@@ -1355,7 +1374,7 @@ export default function TeacherRoomPortal({
                   कक्षा-वार अनुपस्थिति पत्रक (Class-Wise Absentee Register)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  परीक्षा तिथि: <strong className="text-slate-800">{activeDate}</strong> • पाली: <strong>{activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</strong>
+                  परीक्षा तिथि: <strong className="text-slate-800">{selectedDay.date}</strong> • पाली: <strong>{activeShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</strong>
                 </p>
               </div>
 
@@ -1933,7 +1952,7 @@ export default function TeacherRoomPortal({
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-1.5">
                 <span className="text-slate-500 font-bold">दिनांक व पाली:</span>
-                <span className="text-slate-900 font-bold">{activeDate === '2026-11-02' ? '02-11-2026' : activeDate} | {portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</span>
+                <span className="text-slate-900 font-bold">{selectedDay.date} | {portalShift === 'shift_1' ? 'Shift 1' : 'Shift 2'}</span>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-1.5">
                 <span className="text-slate-500 font-bold">कक्ष निरीक्षक:</span>
@@ -1965,7 +1984,7 @@ export default function TeacherRoomPortal({
               <button
                 type="button"
                 onClick={() => {
-                  const slipText = `*ए.बी.वी.आई.सी. मीरांपुर कटरा*\n*उत्तर-पुस्तिका जमा पावती*\n---------------------------\n🏫 कमरा: ${selectedRoomName}\n📅 दिनांक: ${activeDate} | पाली: ${portalShift}\n👨‍🏫 कक्ष निरीक्षक: ${currentUser?.name} (${currentUser?.phone})\n👥 नामांकित छात्र: ${roomStudents.length}\n✅ उपस्थित छात्र (A-कॉपी): ${presentCount}\n❌ अनुपस्थित: ${absentCount}\n📑 B-कॉपी खपत: ${totalRoomBCopies}\n📦 कुल जमा कॉपियां: ${presentCount + totalRoomBCopies}\n---------------------------`;
+                  const slipText = `*ए.बी.वी.आई.सी. मीरांपुर कटरा*\n*उत्तर-पुस्तिका जमा पावती*\n---------------------------\n🏫 कमरा: ${selectedRoomName}\n📅 दिनांक: ${selectedDay.date} | पाली: ${portalShift}\n👨‍🏫 कक्ष निरीक्षक: ${currentUser?.name} (${currentUser?.phone})\n👥 नामांकित छात्र: ${roomStudents.length}\n✅ उपस्थित छात्र (A-कॉपी): ${presentCount}\n❌ अनुपस्थित: ${absentCount}\n📑 B-कॉपी खपत: ${totalRoomBCopies}\n📦 कुल जमा कॉपियां: ${presentCount + totalRoomBCopies}\n---------------------------`;
                   if (navigator?.clipboard?.writeText) {
                     navigator.clipboard.writeText(slipText);
                     alert('✅ जमा पावती क्लिपबोर्ड में कॉपी हो गई!');
