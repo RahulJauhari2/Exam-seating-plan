@@ -265,12 +265,14 @@ export default function App() {
   // MongoDB Database Sync Modal state
   const [isDBSyncOpen, setIsDBSyncOpen] = useState(false);
 
-  // If a teacher logs in, automatically switch to Teacher Room Portal view
+  // If a teacher logs in, automatically switch to Teacher Room Portal view and restrict unauthorized tabs
   useEffect(() => {
-    if (isTeacher) {
-      setActiveTab('teacher-portal');
+    if (isTeacher && !canAccessAllRooms) {
+      if (activeTab !== 'teacher-portal' && activeTab !== 'result-marksheet' && activeTab !== 'search-student') {
+        setActiveTab('teacher-portal');
+      }
     }
-  }, [isTeacher]);
+  }, [isTeacher, canAccessAllRooms, activeTab]);
 
   // Real-time Live Absentee Polling (every 2.5 seconds)
   useEffect(() => {

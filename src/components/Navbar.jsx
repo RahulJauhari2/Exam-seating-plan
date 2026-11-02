@@ -192,16 +192,16 @@ export default function Navbar({
             {isAuthenticated ? (
               <div className="flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 p-1 rounded-xl">
                 {/* User info & role badge */}
-                <div className="flex items-center gap-1.5 px-2">
-                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                <div className="flex items-center gap-1.5 px-1.5 sm:px-2">
+                  <div className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
                     {currentUser?.name?.charAt(0) || 'U'}
                   </div>
-                  <div className="hidden sm:block text-left leading-tight">
-                    <span className="text-[11px] font-bold text-slate-800 block truncate max-w-[100px]">
+                  <div className="text-left leading-tight">
+                    <span className="text-xs font-bold text-slate-900 block truncate max-w-[85px] sm:max-w-[140px]">
                       {currentUser?.name}
                     </span>
                     {roleBadge && (
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold border inline-block ${roleBadge.bg}`}>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold border hidden sm:inline-block ${roleBadge.bg}`}>
                         {roleBadge.label}
                       </span>
                     )}
@@ -212,7 +212,7 @@ export default function Navbar({
                 {(isPrincipal || isSuperAdmin) && (
                   <button
                     onClick={onOpenUserMgmt}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
                     title="स्टाफ रोल एवं अनुमति प्रबंधन (RBAC)"
                   >
                     <Crown className="w-4 h-4 text-amber-500" />
@@ -222,7 +222,7 @@ export default function Navbar({
                 {/* Logout Button */}
                 <button
                   onClick={logout}
-                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                   title="लॉगआउट करें"
                 >
                   <LogOut className="w-4 h-4" />

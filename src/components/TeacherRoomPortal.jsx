@@ -727,7 +727,7 @@ export default function TeacherRoomPortal({
         {/* Room & Shift Selection Bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
           {/* Room Selector */}
-          <div className={`rounded-xl p-2.5 border ${
+          <div className={`rounded-xl p-2.5 sm:p-3 border ${
             canAccessAllRooms 
               ? 'bg-blue-50/80 border-blue-200' 
               : currentShiftDutyInfo.hasDuty
@@ -735,32 +735,32 @@ export default function TeacherRoomPortal({
                 : 'bg-amber-50/80 border-amber-300'
           }`}>
             <div className="flex items-center justify-between">
-              <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+              <span className={`block text-xs font-black uppercase tracking-wider ${
                 canAccessAllRooms ? 'text-blue-700' : currentShiftDutyInfo.hasDuty ? 'text-emerald-800' : 'text-amber-800'
               }`}>
-                {canAccessAllRooms ? 'कक्ष चयन (Admin Access):' : currentShiftDutyInfo.hasDuty ? 'आवंटित परीक्षा कक्ष:' : 'कक्ष ड्यूटी स्थिति:'}
+                {canAccessAllRooms ? 'कक्ष चयन (Admin):' : currentShiftDutyInfo.hasDuty ? 'आवंटित कक्ष:' : 'ड्यूटी स्थिति:'}
               </span>
               <div className="flex items-center gap-1.5 ml-auto">
-                <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
                   canAccessAllRooms ? 'bg-blue-200 text-blue-900' : currentShiftDutyInfo.hasDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
                 }`} title="आपकी आवंटित ड्यूटी">
-                  {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 ड्यूटी लॉक' : 'निरंक'}
+                  {canAccessAllRooms ? `ड्यूटी: ${assignedRoomDefault}` : currentShiftDutyInfo.hasDuty ? '🔒 लॉक' : 'निरंक'}
                 </span>
                 {onRefreshDuty && (
                   <button
                     type="button"
                     onClick={onRefreshDuty}
-                    className="text-[9px] font-bold bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                    className="text-[10px] font-bold bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
                     title="ताज़ा ड्यूटी लोड करें"
                   >
-                    <RefreshCw className="w-2.5 h-2.5" />
+                    <RefreshCw className="w-3 h-3" />
                     <span>रिफ्रेश</span>
                   </button>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <MapPin className={`w-4 h-4 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : currentShiftDutyInfo.hasDuty ? 'text-emerald-700' : 'text-amber-700'}`} />
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <MapPin className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${canAccessAllRooms ? 'text-blue-600' : currentShiftDutyInfo.hasDuty ? 'text-emerald-700' : 'text-amber-700'}`} />
               {canAccessAllRooms ? (
                 <select
                   value={selectedRoomName}
@@ -768,7 +768,7 @@ export default function TeacherRoomPortal({
                     setSelectedRoomName(e.target.value);
                     setSelectedClassFilter('all');
                   }}
-                  className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
+                  className="w-full bg-white border border-blue-300 rounded-lg py-1 px-2 text-xs sm:text-sm font-black text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
                 >
                   {rooms.map((rm) => {
                     const isAssigned = rm.roomName === assignedRoomDefault;
@@ -780,21 +780,21 @@ export default function TeacherRoomPortal({
                   })}
                 </select>
               ) : currentShiftDutyInfo.hasDuty ? (
-                <div className="w-full bg-white border border-emerald-400 rounded-lg py-1.5 px-2 text-xs font-black text-emerald-950 flex items-center justify-between shadow-2xs">
+                <div className="w-full bg-white border border-emerald-400 rounded-lg py-1.5 px-2 text-xs sm:text-sm font-black text-emerald-950 flex items-center justify-between shadow-2xs">
                   <span className="flex items-center gap-1">
-                    <span>{assignedRoomDefault}</span>
-                    <span className="text-[10px] text-emerald-700 font-bold">
+                    <span className="text-sm sm:text-base font-black">{assignedRoomDefault}</span>
+                    <span className="text-xs text-emerald-700 font-bold">
                       ({currentRoom?.benchesCount || 20} बेंच • {currentRoom?.seatedCount || 0} छात्र)
                     </span>
                   </span>
-                  <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
-                    🔒 केवल आपका कक्ष
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                    🔒 आपका कक्ष
                   </span>
                 </div>
               ) : (
-                <div className="w-full bg-white border border-amber-300 rounded-lg py-1.5 px-2 text-xs font-black text-amber-950 flex items-center justify-between shadow-2xs">
+                <div className="w-full bg-white border border-amber-300 rounded-lg py-1.5 px-2 text-xs sm:text-sm font-black text-amber-950 flex items-center justify-between shadow-2xs">
                   <span className="truncate">{currentShiftDutyInfo.statusText}</span>
-                  <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 shrink-0 ml-1">
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 shrink-0 ml-1">
                     कोई कक्ष नहीं
                   </span>
                 </div>
@@ -803,31 +803,31 @@ export default function TeacherRoomPortal({
           </div>
 
           {/* Date */}
-          <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-2.5">
-            <span className="text-purple-700 block text-[10px] font-bold uppercase tracking-wider">
+          <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-2.5 sm:p-3">
+            <span className="text-purple-700 block text-xs font-black uppercase tracking-wider">
               परीक्षा तिथि (Date)
             </span>
-            <span className="text-xs sm:text-sm font-black text-purple-950 flex items-center gap-1.5 mt-1">
-              <Calendar className="w-4 h-4 text-purple-600" />
+            <span className="text-xs sm:text-sm font-black text-purple-950 flex items-center gap-1.5 mt-1.5">
+              <Calendar className="w-4 h-4 text-purple-600 shrink-0" />
               {activeDate === '2026-11-02' ? '02-11-2026 (सोमवार)' : activeDate || '02-11-2026'}
             </span>
           </div>
 
           {/* Shift */}
-          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5">
+          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 sm:p-3">
             <div className="flex items-center justify-between">
-              <span className="text-amber-800 block text-[10px] font-bold uppercase tracking-wider">
-                परीक्षा पाली (Meeting Shift)
+              <span className="text-amber-800 block text-xs font-black uppercase tracking-wider">
+                परीक्षा पाली (Shift)
               </span>
-              <span className="text-[10px] text-amber-700 font-bold">
+              <span className="text-xs text-amber-800 font-bold">
                 {portalShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'}
               </span>
             </div>
-            <div className="flex items-center gap-1 mt-1">
+            <div className="flex items-center gap-1 mt-1.5">
               <button
                 type="button"
                 onClick={() => setPortalShift('shift_1')}
-                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[34px] ${
                   portalShift === 'shift_1'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
@@ -840,7 +840,7 @@ export default function TeacherRoomPortal({
               <button
                 type="button"
                 onClick={() => setPortalShift('shift_2')}
-                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[34px] ${
                   portalShift === 'shift_2'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
@@ -854,27 +854,27 @@ export default function TeacherRoomPortal({
           </div>
 
           {/* Attendance Stats & Copy Meter */}
-          <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5">
-            <span className="text-emerald-700 block text-[10px] font-bold uppercase tracking-wider">
+          <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 sm:p-3">
+            <span className="text-emerald-700 block text-xs font-black uppercase tracking-wider">
               उपस्थिति व कॉपी खपत (Live)
             </span>
-            <div className="text-xs font-black mt-1 flex items-center justify-between gap-1 flex-wrap">
+            <div className="text-xs sm:text-sm font-black mt-1.5 flex items-center justify-between gap-1 flex-wrap">
               <span className="text-emerald-800" title="1 A-कॉपी प्रति उपस्थित छात्र">
-                A-कॉपी: <strong className="text-sm">{presentCount}</strong>
+                A-कॉपी: <strong className="text-sm sm:text-base font-black text-emerald-950">{presentCount}</strong>
               </span>
-              <span className="text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded" title="वितरित पूरक B-कॉपियां">
-                B-कॉपी: <strong className="text-sm">{totalRoomBCopies}</strong>
+              <span className="text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded font-black" title="वितरित पूरक B-कॉपियां">
+                B-कॉपी: <strong className="text-sm sm:text-base font-black text-amber-950">{totalRoomBCopies}</strong>
               </span>
               <span className="text-rose-700">
-                अनु.: <strong className="text-sm">{absentCount}</strong>
+                अनु.: <strong className="text-sm sm:text-base font-black text-rose-800">{absentCount}</strong>
               </span>
             </div>
           </div>
         </div>
 
-        {/* Why multiple classes note */}
+        {/* Why multiple classes note - Hidden on mobile to remove clutter */}
         {currentRoom && roomClasses.length > 0 && (
-          <div className="mt-3 p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-start gap-2 text-xs text-indigo-900">
+          <div className="hidden md:flex mt-3 p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl items-start gap-2 text-xs text-indigo-900">
             <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
             <div className="leading-relaxed">
               <strong>नकल विहीन परीक्षा (Anti-Adjacent Pairing):</strong> इस कमरे में <strong>{roomClasses.map((c) => c.displayName).join(' एवं ')}</strong> के छात्र एक साथ अगल-बगल बेंच पर बैठे हैं। नीचे सूची को <strong>कक्षा-वार</strong> और <strong>रोल नंबर के बढ़ते क्रम</strong> में व्यवस्थित कर दिया गया है।
@@ -915,67 +915,70 @@ export default function TeacherRoomPortal({
       <div className="max-w-6xl mx-auto space-y-4">
         
         {/* View Mode Navigation Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-2.5">
           
           {/* 3 View Tabs */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200 text-xs font-bold">
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200 text-xs sm:text-sm font-bold w-full sm:w-auto">
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px] ${
                 viewMode === 'list'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <List className="w-3.5 h-3.5" />
-              <span>कक्षा-वार छात्र सूची (Class & Roll Sorted)</span>
+              <List className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">छात्र सूची</span>
+              <span className="hidden sm:inline">कक्षा-वार छात्र सूची</span>
             </button>
 
             <button
               onClick={() => setViewMode('absent-summary')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px] ${
                 viewMode === 'absent-summary'
                   ? 'bg-rose-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>कक्षा-वार अनुपस्थिति पत्रक ({absentCount})</span>
+              <ClipboardList className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">अनुपस्थिति ({absentCount})</span>
+              <span className="hidden sm:inline">अनुपस्थिति पत्रक ({absentCount})</span>
             </button>
 
             <button
               onClick={() => setViewMode('bench')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px] ${
                 viewMode === 'bench'
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>सीटिंग प्लान लेआउट (Bench View)</span>
+              <LayoutGrid className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">सीटिंग लेआउट</span>
+              <span className="hidden sm:inline">सीटिंग लेआउट (Bench)</span>
             </button>
           </div>
 
           {/* Quick Search */}
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="relative flex-1 min-w-[200px] w-full sm:max-w-xs">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="रोल नंबर या नाम खोजें..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
             />
           </div>
         </div>
 
         {/* Class Filter Tabs (Pills) */}
         {viewMode !== 'absent-summary' && roomClasses.length > 1 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-            <span className="font-bold text-slate-500 text-[11px] shrink-0 mr-1">कक्षा फ़िल्टर:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs sm:text-sm no-scrollbar">
+            <span className="font-bold text-slate-500 text-xs shrink-0 mr-1">कक्षा फ़िल्टर:</span>
             <button
               onClick={() => setSelectedClassFilter('all')}
-              className={`px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer min-h-[34px] ${
                 selectedClassFilter === 'all'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -987,15 +990,15 @@ export default function TeacherRoomPortal({
               <button
                 key={cls.key}
                 onClick={() => setSelectedClassFilter(cls.key)}
-                className={`px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 min-h-[34px] ${
                   selectedClassFilter === cls.key
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                <GraduationCap className="w-3.5 h-3.5" />
+                <GraduationCap className="w-4 h-4 shrink-0" />
                 <span>{cls.displayName}</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/15">
+                <span className="px-1.5 py-0.2 rounded-full text-xs bg-black/15">
                   {cls.count}
                 </span>
               </button>
@@ -1003,13 +1006,13 @@ export default function TeacherRoomPortal({
 
             <button
               onClick={() => setFilterOnlyAbsent(!filterOnlyAbsent)}
-              className={`ml-auto px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              className={`ml-auto px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] ${
                 filterOnlyAbsent
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100'
               }`}
             >
-              <UserX className="w-3.5 h-3.5" />
+              <UserX className="w-4 h-4 shrink-0" />
               <span>केवल अनुपस्थित ({absentCount})</span>
             </button>
           </div>
@@ -1019,7 +1022,7 @@ export default function TeacherRoomPortal({
         {/* VIEW 1: CLASS-WISE & ROLL NO-WISE SORTED STUDENT LIST    */}
         {/* ======================================================== */}
         {viewMode === 'list' && (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {filteredClassGroups.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 text-slate-500 text-sm">
                 कोई परीक्षार्थी नहीं मिला।
@@ -1034,18 +1037,18 @@ export default function TeacherRoomPortal({
                     {/* Class Header Banner */}
                     <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-3 sm:px-4 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <GraduationCap className="w-5 h-5 text-amber-400" />
+                        <GraduationCap className="w-5 h-5 text-amber-400 shrink-0" />
                         <div>
                           <h3 className="text-sm sm:text-base font-black tracking-tight">
                             {grp.displayName}
                           </h3>
-                          <span className="text-[11px] text-blue-200">
+                          <span className="text-xs text-blue-200 block">
                             रोल नंबर अनुसार व्यवस्थित ({grp.students[0]?.rollNo} से {grp.students[grp.students.length - 1]?.rollNo})
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
                         <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
                           उपस्थित: {classPresentCount}
                         </span>
@@ -1063,7 +1066,7 @@ export default function TeacherRoomPortal({
                     </div>
 
                     {/* Students Grid strictly sorted by Roll Number ASC */}
-                    <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {grp.students.map((st) => {
                         const roll = Number(st.rollNo) || st.rollNo;
                         const isAbsent = isStudentAbsent(st.rollNo);
@@ -1073,7 +1076,7 @@ export default function TeacherRoomPortal({
                           <div
                             key={`${st.rollNo}-${st.benchNumber}`}
                             onClick={() => !isToggling && handleToggle(st)}
-                            className={`p-3 rounded-xl border-2 transition-all flex items-center justify-between gap-2 shadow-2xs cursor-pointer select-none active:scale-[0.99] ${
+                            className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-2.5 shadow-2xs cursor-pointer select-none active:scale-[0.99] ${
                               isAbsent
                                 ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-400/50 shadow-sm'
                                 : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
@@ -1082,14 +1085,14 @@ export default function TeacherRoomPortal({
                             {/* Student Info */}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-base font-black text-slate-900 font-mono tracking-tight">
+                                <span className="text-lg sm:text-xl font-black text-slate-900 font-mono tracking-tight">
                                   #{st.rollNo}
                                 </span>
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
                                   बेंच #{st.benchNumber} ({st.side?.includes('Left') ? 'L' : 'R'})
                                 </span>
                                 <span
-                                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
+                                  className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-black uppercase tracking-wider ${
                                     isAbsent
                                       ? 'bg-rose-600 text-white'
                                       : 'bg-emerald-600 text-white'
@@ -1099,35 +1102,35 @@ export default function TeacherRoomPortal({
                                 </span>
                               </div>
 
-                              <div className="text-xs font-bold text-slate-800 truncate mt-1">
+                              <div className="text-sm sm:text-base font-bold text-slate-900 truncate mt-1">
                                 {st.name || 'परीक्षार्थी'}
                               </div>
 
-                              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                              <div className="text-xs sm:text-sm text-slate-600 truncate mt-0.5">
                                 {st.className} {st.section ? `(${st.section})` : ''} • {st.subject || 'सामान्य विषय'}
                               </div>
 
                               {isAbsent ? (
-                                <div className="text-[10px] font-bold text-rose-600 mt-1 flex items-center gap-1">
-                                  <UserX className="w-3 h-3" />
-                                  अनुपस्थित (ABSENT)
+                                <div className="text-xs sm:text-sm font-bold text-rose-600 mt-1 flex items-center gap-1">
+                                  <UserX className="w-3.5 h-3.5" />
+                                  <span>अनुपस्थित (ABSENT)</span>
                                 </div>
                               ) : (
-                                <div className="mt-1.5 pt-1 border-t border-slate-100 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-blue-50 text-blue-800 border border-blue-200">
+                                <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200">
                                     📘 A-कॉपी: 1
                                   </span>
                                   {getStudentBCopies(st.rollNo) > 0 && (
-                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-500 text-white animate-pulse">
+                                    <span className="px-2 py-0.5 rounded text-xs font-black bg-amber-500 text-white animate-pulse">
                                       📙 B: +{getStudentBCopies(st.rollNo)}
                                     </span>
                                   )}
-                                  <div className="ml-auto flex items-center gap-1">
+                                  <div className="ml-auto flex items-center gap-1.5">
                                     {getStudentBCopies(st.rollNo) > 0 && (
                                       <button
                                         type="button"
                                         onClick={() => handleUpdateStudentBCopy(st, -1)}
-                                        className="w-5 h-5 rounded bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-800 font-black text-sm flex items-center justify-center cursor-pointer active:scale-95"
                                         title="B-कॉपी घटाएं (-1)"
                                       >
                                         -
@@ -1136,10 +1139,10 @@ export default function TeacherRoomPortal({
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateStudentBCopy(st, 1)}
-                                      className="px-2 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black flex items-center gap-0.5 shadow-xs cursor-pointer active:scale-95"
+                                      className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 min-h-[30px]"
                                       title="पूरक उत्तर पुस्तिका B-कॉपी दें (+1)"
                                     >
-                                      <Plus className="w-3 h-3" />
+                                      <Plus className="w-3.5 h-3.5" />
                                       <span>B-कॉपी (+1)</span>
                                     </button>
                                   </div>
@@ -1155,23 +1158,23 @@ export default function TeacherRoomPortal({
                                 handleToggle(st);
                               }}
                               disabled={isToggling}
-                              className={`px-3 py-2 rounded-xl font-black text-[11px] shadow-sm transition-all flex items-center gap-1 active:scale-95 cursor-pointer shrink-0 ${
+                              className={`px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl font-black text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer shrink-0 min-h-[44px] ${
                                 isAbsent
                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
                                   : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/20'
                               }`}
                             >
                               {isToggling ? (
-                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               ) : isAbsent ? (
                                 <>
-                                  <UserCheck className="w-3.5 h-3.5" />
-                                  <span>उपस्थित करें</span>
+                                  <UserCheck className="w-4 h-4" />
+                                  <span>उपस्थित</span>
                                 </>
                               ) : (
                                 <>
-                                  <UserX className="w-3.5 h-3.5" />
-                                  <span>अनुपस्थित करें</span>
+                                  <UserX className="w-4 h-4" />
+                                  <span>अनुपस्थित</span>
                                 </>
                               )}
                             </button>
@@ -1354,28 +1357,28 @@ export default function TeacherRoomPortal({
                           <span className="text-[11px] font-black text-rose-900 block">
                             अनुपस्थित परीक्षार्थियों के रोल नंबर (Roll Numbers):
                           </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {clsSummary.absentStudents.map((st) => (
                               <div
                                 key={`${st.rollNo}-${st.roomName || ''}`}
-                                className="px-3 py-2 bg-rose-50 border-2 border-rose-300 rounded-xl shadow-xs flex items-center justify-between gap-2 text-xs"
+                                className="px-3.5 py-2.5 bg-rose-50 border-2 border-rose-300 rounded-xl shadow-xs flex items-center justify-between gap-2 text-xs sm:text-sm"
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-mono font-black text-rose-900 text-sm">
+                                    <span className="font-mono font-black text-rose-950 text-base sm:text-lg">
                                       #{st.rollNo}
                                     </span>
                                     {st.roomName && (
-                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                                      <span className="px-2 py-0.5 rounded text-xs font-bold bg-white text-slate-800 border border-slate-200">
                                         {st.roomName}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="font-semibold text-slate-800 truncate mt-0.5">
+                                  <div className="font-bold text-slate-900 truncate mt-0.5">
                                     {st.name || 'परीक्षार्थी'}
                                   </div>
                                   {st.benchNumber && (
-                                    <div className="text-[10px] text-slate-500 font-mono">
+                                    <div className="text-xs text-slate-500 font-mono">
                                       बेंच #{st.benchNumber}
                                     </div>
                                   )}
@@ -1384,7 +1387,7 @@ export default function TeacherRoomPortal({
                                 <button
                                   type="button"
                                   onClick={() => handleToggle(st)}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs cursor-pointer active:scale-95 shrink-0"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer active:scale-95 shrink-0 min-h-[36px]"
                                   title="उपस्थित करें"
                                 >
                                   उपस्थित करें
@@ -1478,7 +1481,7 @@ export default function TeacherRoomPortal({
                                 type="button"
                                 onClick={() => handleToggle(left)}
                                 disabled={togglingRoll === left.rollNo}
-                                className={`p-2 rounded-xl border text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between ${
+                                className={`p-2.5 rounded-xl border-2 text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between ${
                                   leftIsAbsent
                                     ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-400/50'
                                     : 'bg-emerald-50/40 hover:bg-emerald-50 border-emerald-300'
@@ -1486,9 +1489,9 @@ export default function TeacherRoomPortal({
                               >
                                 <div>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase">बायां (Left)</span>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase">बायां (Left)</span>
                                     <span
-                                      className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
                                         leftIsAbsent
                                           ? 'bg-rose-600 text-white'
                                           : 'bg-emerald-600 text-white'
@@ -1498,32 +1501,32 @@ export default function TeacherRoomPortal({
                                     </span>
                                   </div>
 
-                                  <div className="mt-1 text-base font-black font-mono text-slate-900 leading-tight">
-                                    {left.rollNo}
+                                  <div className="mt-1 text-lg sm:text-xl font-black font-mono text-slate-900 leading-tight">
+                                    #{left.rollNo}
                                   </div>
 
-                                  <div className="text-[11px] font-bold text-slate-800 truncate mt-0.5">
-                                    {left.name || 'छात्र'}
+                                  <div className="text-xs sm:text-sm font-bold text-slate-900 truncate mt-0.5">
+                                    {left.name || 'परीक्षार्थी'}
                                   </div>
 
-                                  <div className="text-[10px] text-slate-500 truncate">
+                                  <div className="text-xs text-slate-600 truncate mt-0.5">
                                     {left.className} {left.section ? `(${left.section})` : ''} • {left.subject}
                                   </div>
 
                                   {!leftIsAbsent && (
-                                    <div className="mt-1 flex items-center justify-between text-[10px] font-bold" onClick={(e) => e.stopPropagation()}>
-                                      <span className="text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
-                                        A:1
+                                    <div className="mt-1.5 flex items-center justify-between text-xs font-bold" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                        A: 1
                                       </span>
                                       {getStudentBCopies(left.rollNo) > 0 && (
-                                        <span className="text-white bg-amber-500 px-1 py-0.2 rounded font-black">
-                                          B:+{getStudentBCopies(left.rollNo)}
+                                        <span className="text-white bg-amber-500 px-1.5 py-0.5 rounded font-black">
+                                          B: +{getStudentBCopies(left.rollNo)}
                                         </span>
                                       )}
                                       <button
                                         type="button"
                                         onClick={() => handleUpdateStudentBCopy(left, 1)}
-                                        className="px-1.5 py-0.2 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
+                                        className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
                                         title="+ B-कॉपी दें"
                                       >
                                         +B
@@ -1532,22 +1535,22 @@ export default function TeacherRoomPortal({
                                   )}
                                 </div>
 
-                                <div className="mt-2 pt-1 border-t border-slate-200/60 text-[10px] font-bold text-center">
+                                <div className="mt-2.5 pt-1.5 border-t border-slate-200 text-xs font-black text-center min-h-[30px] flex items-center justify-center">
                                   {leftIsAbsent ? (
                                     <span className="text-emerald-700 flex items-center justify-center gap-1">
-                                      <UserCheck className="w-3 h-3" />
-                                      उपस्थित करें
+                                      <UserCheck className="w-3.5 h-3.5" />
+                                      उपस्थित
                                     </span>
                                   ) : (
                                     <span className="text-rose-700 flex items-center justify-center gap-1">
-                                      <UserX className="w-3 h-3" />
-                                      अनुपस्थित करें
+                                      <UserX className="w-3.5 h-3.5" />
+                                      अनुपस्थित
                                     </span>
                                   )}
                                 </div>
                               </button>
                             ) : (
-                              <div className="p-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-slate-400 font-bold">
+                              <div className="p-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-xs text-slate-400 font-bold">
                                 खाली सीट
                               </div>
                             )}
@@ -1558,7 +1561,7 @@ export default function TeacherRoomPortal({
                                 type="button"
                                 onClick={() => handleToggle(right)}
                                 disabled={togglingRoll === right.rollNo}
-                                className={`p-2 rounded-xl border text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between ${
+                                className={`p-2.5 rounded-xl border-2 text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between ${
                                   rightIsAbsent
                                     ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-400/50'
                                     : 'bg-emerald-50/40 hover:bg-emerald-50 border-emerald-300'
@@ -1566,9 +1569,9 @@ export default function TeacherRoomPortal({
                               >
                                 <div>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase">दायां (Right)</span>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase">दायां (Right)</span>
                                     <span
-                                      className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
                                         rightIsAbsent
                                           ? 'bg-rose-600 text-white'
                                           : 'bg-emerald-600 text-white'
@@ -1578,32 +1581,32 @@ export default function TeacherRoomPortal({
                                     </span>
                                   </div>
 
-                                  <div className="mt-1 text-base font-black font-mono text-slate-900 leading-tight">
-                                    {right.rollNo}
+                                  <div className="mt-1 text-lg sm:text-xl font-black font-mono text-slate-900 leading-tight">
+                                    #{right.rollNo}
                                   </div>
 
-                                  <div className="text-[11px] font-bold text-slate-800 truncate mt-0.5">
-                                    {right.name || 'छात्र'}
+                                  <div className="text-xs sm:text-sm font-bold text-slate-900 truncate mt-0.5">
+                                    {right.name || 'परीक्षार्थी'}
                                   </div>
 
-                                  <div className="text-[10px] text-slate-500 truncate">
+                                  <div className="text-xs text-slate-600 truncate mt-0.5">
                                     {right.className} {right.section ? `(${right.section})` : ''} • {right.subject}
                                   </div>
 
                                   {!rightIsAbsent && (
-                                    <div className="mt-1 flex items-center justify-between text-[10px] font-bold" onClick={(e) => e.stopPropagation()}>
-                                      <span className="text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
-                                        A:1
+                                    <div className="mt-1.5 flex items-center justify-between text-xs font-bold" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                        A: 1
                                       </span>
                                       {getStudentBCopies(right.rollNo) > 0 && (
-                                        <span className="text-white bg-amber-500 px-1 py-0.2 rounded font-black">
-                                          B:+{getStudentBCopies(right.rollNo)}
+                                        <span className="text-white bg-amber-500 px-1.5 py-0.5 rounded font-black">
+                                          B: +{getStudentBCopies(right.rollNo)}
                                         </span>
                                       )}
                                       <button
                                         type="button"
                                         onClick={() => handleUpdateStudentBCopy(right, 1)}
-                                        className="px-1.5 py-0.2 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
+                                        className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-black cursor-pointer shadow-xs active:scale-95 ml-auto"
                                         title="+ B-कॉपी दें"
                                       >
                                         +B
@@ -1612,22 +1615,22 @@ export default function TeacherRoomPortal({
                                   )}
                                 </div>
 
-                                <div className="mt-2 pt-1 border-t border-slate-200/60 text-[10px] font-bold text-center">
+                                <div className="mt-2.5 pt-1.5 border-t border-slate-200 text-xs font-black text-center min-h-[30px] flex items-center justify-center">
                                   {rightIsAbsent ? (
                                     <span className="text-emerald-700 flex items-center justify-center gap-1">
-                                      <UserCheck className="w-3 h-3" />
-                                      उपस्थित करें
+                                      <UserCheck className="w-3.5 h-3.5" />
+                                      उपस्थित
                                     </span>
                                   ) : (
                                     <span className="text-rose-700 flex items-center justify-center gap-1">
-                                      <UserX className="w-3 h-3" />
-                                      अनुपस्थित करें
+                                      <UserX className="w-3.5 h-3.5" />
+                                      अनुपस्थित
                                     </span>
                                   )}
                                 </div>
                               </button>
                             ) : (
-                              <div className="p-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-slate-400 font-bold">
+                              <div className="p-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-xs text-slate-400 font-bold">
                                 खाली सीट
                               </div>
                             )}

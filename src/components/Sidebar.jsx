@@ -34,6 +34,37 @@ export default function Sidebar({
   const canManageAdmin = isAuthenticated && (isPrincipal || isSuperAdmin || isCoordinator);
   const canAccessStaff = isAuthenticated;
 
+  // Dedicated focused tabs for Teachers only
+  const teacherNavItems = [
+    {
+      id: 'teacher-portal',
+      number: '1',
+      title: 'Teacher Room Portal',
+      hindi: 'मेरा परीक्षा कक्ष एवं लाइव उपस्थिति',
+      icon: '📱',
+      badge: 'Live',
+      badgeColor: 'bg-emerald-600',
+    },
+    {
+      id: 'result-marksheet',
+      number: '2',
+      title: 'Result & Marksheet',
+      hindi: 'कॉपी मूल्यांकन व अंक प्रविष्टि',
+      icon: '🎓',
+      badge: 'Allotted',
+      badgeColor: 'bg-indigo-600',
+    },
+    {
+      id: 'search-student',
+      number: '3',
+      title: 'Search Roll No',
+      hindi: 'छात्र रोल नंबर से कमरा खोजें',
+      icon: '🔍',
+      badge: 'Help',
+      badgeColor: 'bg-blue-600',
+    },
+  ];
+
   // Tabs for students & public (always accessible without login)
   const studentNavItems = [
     {
@@ -239,58 +270,90 @@ export default function Sidebar({
           </div>
 
           <div className="flex items-center gap-1">
-            <span className="text-[9px] text-emerald-700 font-black px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded-md">
-              {isAuthenticated ? 'स्टाफ सक्रिय' : 'छात्र मोड'}
+            <span className="text-[10px] text-emerald-700 font-black px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-md">
+              {isTeacher && !canManageAdmin ? '👨‍🏫 शिक्षक' : isAuthenticated ? 'स्टाफ सक्रिय' : 'छात्र मोड'}
             </span>
 
             {/* Close Button on Mobile Drawer */}
             <button
               onClick={onClose}
-              className="lg:hidden p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+              className="lg:hidden p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
               title="बंद करें"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* SECTION 1: छात्र अनुभाग (Public / Student Access) */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-            <span>👨‍🎓 छात्र अनुभाग (Student View)</span>
-            <span className="text-[9px] text-emerald-600 font-normal">सुरक्षित</span>
+        {/* Dedicated Teacher Navigation when logged in as Teacher */}
+        {isTeacher && !canManageAdmin ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1 text-xs font-black uppercase tracking-wider text-emerald-700 pb-1.5 border-b border-emerald-100">
+              <span className="flex items-center gap-1.5">
+                <span>📋</span>
+                <span>शिक्षक कार्य मेन्यू (Only Relevant)</span>
+              </span>
+              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                सक्रिय
+              </span>
+            </div>
+            <nav className="space-y-1.5">
+              {teacherNavItems.map(renderNavButton)}
+            </nav>
           </div>
-          <nav className="space-y-1">
-            {studentNavItems.map(renderNavButton)}
-          </nav>
-        </div>
+        ) : (
+          <>
+            {/* SECTION 1: छात्र अनुभाग (Public / Student Access) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                <span>👨‍🎓 छात्र अनुभाग (Student View)</span>
+                <span className="text-[9px] text-emerald-600 font-normal">सुरक्षित</span>
+              </div>
+              <nav className="space-y-1">
+                {studentNavItems.map(renderNavButton)}
+              </nav>
+            </div>
 
-        {/* SECTION 2: स्टाफ व एडमिन पैनल (Protected) */}
-        <div className="space-y-1 pt-1">
-          <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
-            <span className="flex items-center gap-1">
-              <Lock className="w-3 h-3 text-slate-400" />
-              <span>स्टाफ / एडमिन पैनल</span>
-            </span>
-            {!isAuthenticated && (
-              <button
-                type="button"
-                onClick={() => { if (onOpenLogin) onOpenLogin(); if (onClose) onClose(); }}
-                className="text-[9px] text-indigo-600 font-bold hover:underline"
-              >
-                लॉगिन करें
-              </button>
-            )}
-          </div>
-          <nav className="space-y-1">
-            {staffNavItems.map(renderNavButton)}
-          </nav>
-        </div>
+            {/* SECTION 2: स्टाफ व एडमिन पैनल (Protected) */}
+            <div className="space-y-1 pt-1">
+              <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <span className="flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>स्टाफ / एडमिन पैनल</span>
+                </span>
+                {!isAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={() => { if (onOpenLogin) onOpenLogin(); if (onClose) onClose(); }}
+                    className="text-[9px] text-indigo-600 font-bold hover:underline"
+                  >
+                    लॉगिन करें
+                  </button>
+                )}
+              </div>
+              <nav className="space-y-1">
+                {staffNavItems.map(renderNavButton)}
+              </nav>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Bottom Section: Shift Switcher + Live Stats + Print Button */}
-      <div className="pt-2.5 mt-3 border-t border-slate-200/80 space-y-2">
-        {/* Shift Switcher */}
+      {isTeacher && !canManageAdmin ? (
+        <div className="pt-3 mt-4 border-t border-slate-200/80 space-y-2">
+          <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl text-center space-y-1">
+            <span className="text-xs font-black text-emerald-900 block">
+              ✅ केवल आवश्यक शिक्षक जानकारी सक्रिय
+            </span>
+            <span className="text-[11px] text-emerald-700 block leading-tight">
+              कंट्रोल रूम या अन्य एडमिन टैब आपकी स्क्रीन से छुपा दिए गए हैं।
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="pt-2.5 mt-3 border-t border-slate-200/80 space-y-2">
+          {/* Shift Switcher */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -364,6 +427,7 @@ export default function Sidebar({
           <span>प्रिंट वर्तमान शीट (Print)</span>
         </button>
       </div>
+      )}
     </div>
   );
 
