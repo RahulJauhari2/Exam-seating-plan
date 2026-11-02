@@ -305,7 +305,7 @@ export default function TeacherRoomPortal({
         (uPhone && tPhone && uPhone === tPhone) ||
         (currentUser.assignedTeacherId && (String(t.id) === String(currentUser.assignedTeacherId) || String(t._id) === String(currentUser.assignedTeacherId))) ||
         (currentUser.id && (String(t.id) === String(currentUser.id) || String(t._id) === String(currentUser.id))) ||
-        (uCleanName && tCleanName && (uCleanName === tCleanName || uCleanName.includes(tCleanName) || tCleanName.includes(uCleanName)));
+        (uCleanName && tCleanName && uCleanName === tCleanName);
 
       if (isMatch) {
         if (t.id) set.add(String(t.id));
@@ -478,8 +478,8 @@ export default function TeacherRoomPortal({
   // Range 4 (Rooms 10 - 12): Reliever 4
   // Floating / All Rooms: Reliever 5
   const currentSlotRelievers = useMemo(() => {
-    const key = `${preferredDayId}_${portalShift}`;
-    const alloc = dutyRoster[key] || dutyRoster[`2026-11-02_${portalShift}`] || {};
+    const key = `${selectedDay.id}_${portalShift}`;
+    const alloc = dutyRoster[key] || dutyRoster[`${selectedDay.fullDate}_${portalShift}`] || dutyRoster[`${selectedDay.date}_${portalShift}`] || {};
     const relIds = alloc.relievers || [];
     return relIds.map((id, idx) => {
       const t = (teachers || []).find(teach => String(teach.id) === String(id) || String(teach._id) === String(id));
