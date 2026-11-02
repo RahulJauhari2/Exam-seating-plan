@@ -1,5 +1,5 @@
 import { useAuth } from '../context/AuthContext';
-import { saveMarksToDB, saveEvaluationAllotmentAPI } from '../services/api';
+import { saveMarksToDB, saveEvaluationAllotmentAPI, saveExamSessionToDB, loadExamSessionFromDB } from '../services/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Lock,
@@ -24,11 +24,13 @@ import {
   ChevronRight,
   Filter,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Save,
+  Archive,
+  History
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { EXAM_TIMETABLE, UP_BOARD_SUBJECT_CODES } from '../data/examSchemeData';
-import { saveExamSessionToDB } from '../services/api';
 
 // Grade calculation helper
 export function calculateGrade(percentage) {
@@ -159,6 +161,14 @@ export default function ResultMarksheetManager({
       return {};
     }
   });
+
+  // OMR + Written Copy Split Mode (20 OMR + 50 Copy for Class 9th & 10th)
+  const [isOmrSplitMode, setIsOmrSplitMode] = useState(true);
+
+  // Multi-Year & Session Archiving state (सत्र व गत वर्ष आर्काइव)
+  const [activeSessionName, setActiveSessionName] = useState(() => examDetails?.examName || 'Half_Yearly_2026_27');
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [newSessionInput, setNewSessionInput] = useState('');
 
   // Dynamic Subject Configuration: { [subjectName]: { maxTheory: number, maxPractical: number, minPassPercent: number } }
   const [subjectConfig, setSubjectConfig] = useState(() => {
@@ -752,23 +762,94 @@ export default function ResultMarksheetManager({
 
     const sName = subjectName.toUpperCase().trim();
     const cfg = getSubjectMaxMarks(sName);
-    const maxVal = field === 'theory' ? cfg.maxTheory : cfg.maxPractical;
-    let numVal = value === '' ? '' : Math.max(0, Math.min(maxVal, Number(value) || 0));
 
     setMarksData((prev) => {
       const stMarks = prev[studentKey] || {};
-      const currentSubMarks = stMarks[sName] || { theory: '', practical: '' };
+      const currentSubMarks = stMarks[sName] || { theory: '', practical: '', omr: '', theoryCopy: '' };
+      let updatedSub = { ...currentSubMarks };
+
+      if (field === 'omr') {
+        const numVal = value === '' ? '' : Math.max(0, Math.min(20, Number(value) || 0));
+        updatedSub.omr = numVal;
+        const copyPart = updatedSub.theoryCopy !== '' && updatedSub.theoryCopy !== undefined ? Number(updatedSub.theoryCopy) : 0;
+        const omrPart = numVal !== '' ? Number(numVal) : 0;
+        updatedSub.theory = (numVal !== '' || updatedSub.theoryCopy !== '') ? Math.min(cfg.maxTheory, omrPart + copyPart) : '';
+      } else if (field === 'theoryCopy') {
+        const numVal = value === '' ? '' : Math.max(0, Math.min(50, Number(value) || 0));
+        updatedSub.theoryCopy = numVal;
+        const omrPart = updatedSub.omr !== '' && updatedSub.omr !== undefined ? Number(updatedSub.omr) : 0;
+        const copyPart = numVal !== '' ? Number(numVal) : 0;
+        updatedSub.theory = (numVal !== '' || updatedSub.omr !== '') ? Math.min(cfg.maxTheory, omrPart + copyPart) : '';
+      } else if (field === 'theory') {
+        const numVal = value === '' ? '' : Math.max(0, Math.min(cfg.maxTheory, Number(value) || 0));
+        updatedSub.theory = numVal;
+      } else if (field === 'practical') {
+        const numVal = value === '' ? '' : Math.max(0, Math.min(cfg.maxPractical, Number(value) || 0));
+        updatedSub.practical = numVal;
+      }
+
       return {
         ...prev,
         [studentKey]: {
           ...stMarks,
-          [sName]: {
-            ...currentSubMarks,
-            [field]: numVal,
-          },
+          [sName]: updatedSub,
         },
       };
     });
+  };
+
+  // Archive and Multi-Year Session Switchers
+  const handleArchiveToSession = async (targetSession) => {
+    if (!targetSession) return;
+    if (!window.confirm(`क्या आप वर्तमान परीक्षाफल को सत्र "${targetSession}" में सुरक्षित आर्काइव करना चाहते हैं? इससे पिछला/गत वर्ष का रिकॉर्ड हमेशा सुरक्षित रहेगा।`)) {
+      return;
+    }
+    setIsCloudSaving(true);
+    try {
+      await saveExamSessionToDB({
+        sessionName: targetSession,
+        activeShift,
+        marksData,
+        subjectConfig,
+        classes,
+        rooms,
+        teachers,
+        examDetails: {
+          ...examDetails,
+          examName: targetSession,
+        }
+      });
+      setActiveSessionName(targetSession);
+      setCloudSaveMessage(`✅ सत्र "${targetSession}" में रिजल्ट सुरक्षित आर्काइव हो गया!`);
+      setTimeout(() => setCloudSaveMessage(''), 4000);
+      setShowSessionModal(false);
+    } catch (err) {
+      alert('आर्काइव करने में त्रुटि: ' + (err.message || err));
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  const handleLoadSessionData = async (sessionToLoad) => {
+    if (!sessionToLoad) return;
+    setIsCloudSaving(true);
+    try {
+      const res = await loadExamSessionFromDB(sessionToLoad, activeShift);
+      if (res && res.success && res.data) {
+        if (res.data.marksData) setMarksData(res.data.marksData);
+        if (res.data.subjectConfig) setSubjectConfig(res.data.subjectConfig);
+        setActiveSessionName(sessionToLoad);
+        setCloudSaveMessage(`✅ सत्र "${sessionToLoad}" का रिकॉर्ड सफलतापूर्वक लोड हो गया!`);
+        setTimeout(() => setCloudSaveMessage(''), 4000);
+        setShowSessionModal(false);
+      } else {
+        alert(`सत्र "${sessionToLoad}" का कोई डेटा डेटाबेस में नहीं मिला।`);
+      }
+    } catch (err) {
+      alert('सत्र लोड करने में त्रुटि: ' + (err.message || err));
+    } finally {
+      setIsCloudSaving(false);
+    }
   };
 
   // Generate realistic demo marks in 1-click for testing
@@ -793,12 +874,24 @@ export default function ResultMarksheetManager({
           const theoryRatio = 0.5 + Math.random() * 0.45; // 50% to 95%
           const pracRatio = 0.7 + Math.random() * 0.28;   // 70% to 98%
 
-          const tMarks = Math.round(cfg.maxTheory * theoryRatio);
+          const isHighSchool = ['9', '10'].includes(selectedGrade);
+          let omrVal = '';
+          let copyVal = '';
+          let tMarks = Math.round(cfg.maxTheory * theoryRatio);
+
+          if (isHighSchool && cfg.maxTheory === 70) {
+            omrVal = Math.min(20, Math.round(14 + Math.random() * 5.8));
+            copyVal = Math.min(50, Math.round(28 + Math.random() * 19));
+            tMarks = omrVal + copyVal;
+          }
+
           const pMarks = cfg.maxPractical > 0 ? Math.round(cfg.maxPractical * pracRatio) : 0;
 
           stMarks[sub.name] = {
             theory: tMarks,
             practical: pMarks,
+            omr: omrVal,
+            theoryCopy: copyVal,
           };
         });
 
@@ -1441,6 +1534,34 @@ export default function ResultMarksheetManager({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Academic Session & Year Switcher Pill */}
+              <button
+                type="button"
+                onClick={() => setShowSessionModal(true)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition-all cursor-pointer shadow-2xs"
+                title="सत्र बदलें या गत वर्ष का रिजल्ट आर्काइव करें"
+              >
+                <Archive className="w-3.5 h-3.5 text-indigo-600" />
+                <span>सत्र: <strong>{activeSessionName}</strong></span>
+              </button>
+
+              {/* OMR (20) + Written Copy (50) Split Mode Toggle for Class 9th & 10th */}
+              {['9', '10'].includes(selectedGrade) && (
+                <button
+                  type="button"
+                  onClick={() => setIsOmrSplitMode(!isOmrSplitMode)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                    isOmrSplitMode
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                  }`}
+                  title="20 OMR + 50 लिखित कॉपी विभाजन मोड चालू/बंद करें"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{isOmrSplitMode ? '✅ OMR(20) + कॉपी(50) मोड' : '📝 OMR+कॉपी मोड चालू करें'}</span>
+                </button>
+              )}
+
               {isAdmin && (
                 <button
                   onClick={handleGenerateDemoMarks}
@@ -1579,9 +1700,23 @@ export default function ResultMarksheetManager({
                     <th className="px-4 py-3">छात्र का नाम (Student Name)</th>
                     <th className="px-4 py-3">पिता का नाम (Father Name)</th>
                     <th className="px-4 py-3 w-24 text-center">माध्यम</th>
-                    <th className="px-4 py-3 w-36 text-center bg-indigo-50/50 text-indigo-900 border-x border-indigo-100">
-                      लिखित / Theory (Max: {currentSubjectConfig.maxTheory})
-                    </th>
+                    {isOmrSplitMode && ['9', '10'].includes(selectedGrade) && currentSubjectConfig.maxTheory === 70 ? (
+                      <>
+                        <th className="px-3 py-3 w-28 text-center bg-purple-50/70 text-purple-950 border-l border-purple-200">
+                          OMR अंक (Max: 20)
+                        </th>
+                        <th className="px-3 py-3 w-28 text-center bg-indigo-50/70 text-indigo-950 border-x border-indigo-200">
+                          कॉपी अंक (Max: 50)
+                        </th>
+                        <th className="px-3 py-3 w-32 text-center bg-indigo-100/60 text-indigo-950 font-black border-r border-indigo-200">
+                          लिखित कुल (Max: 70)
+                        </th>
+                      </>
+                    ) : (
+                      <th className="px-4 py-3 w-36 text-center bg-indigo-50/50 text-indigo-900 border-x border-indigo-100">
+                        लिखित / Theory (Max: {currentSubjectConfig.maxTheory})
+                      </th>
+                    )}
                     {currentSubjectConfig.maxPractical > 0 && (
                       <th className="px-4 py-3 w-36 text-center bg-emerald-50/50 text-emerald-900 border-r border-emerald-100">
                         प्रोजेक्ट / Practical (Max: {currentSubjectConfig.maxPractical})
@@ -1639,25 +1774,73 @@ export default function ResultMarksheetManager({
                             {st.medium === 'English' ? 'English' : 'हिन्दी'}
                           </span>
                         </td>
-                        {/* Theory Marks Input */}
-                        <td className="px-4 py-2.5 text-center bg-indigo-50/30 border-x border-indigo-100">
-                          <input
-                            id={`input_theory_${idx}`}
-                            type="number"
-                            min="0"
-                            max={currentSubjectConfig.maxTheory}
-                            value={tVal}
-                            placeholder="0"
-                            onChange={(e) => handleUpdateMarks(key, selectedSubject, 'theory', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, idx, 'theory')}
-                            disabled={isCurrentSubjectLocked && !isAdmin}
-                            className={`w-20 px-2 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
-                              isCurrentSubjectLocked && !isAdmin
-                                ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
-                                : 'bg-white border border-indigo-200 text-indigo-950 focus:ring-indigo-500'
-                            }`}
-                          />
-                        </td>
+                        {/* OMR + Theory Copy Split Mode vs Standard Theory */}
+                        {isOmrSplitMode && ['9', '10'].includes(selectedGrade) && currentSubjectConfig.maxTheory === 70 ? (
+                          <>
+                            {/* OMR Input (Max 20) */}
+                            <td className="px-2 py-2.5 text-center bg-purple-50/30 border-l border-purple-200">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={stMarks.omr !== undefined ? stMarks.omr : ''}
+                                placeholder="0"
+                                onChange={(e) => handleUpdateMarks(key, selectedSubject, 'omr', e.target.value)}
+                                disabled={isCurrentSubjectLocked && !isAdmin}
+                                className={`w-16 px-1.5 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
+                                  isCurrentSubjectLocked && !isAdmin
+                                    ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                    : 'bg-white border border-purple-300 text-purple-950 focus:ring-purple-500'
+                                }`}
+                                title="20 अंकों के OMR बहुविकल्पीय प्रश्न"
+                              />
+                            </td>
+                            {/* Theory Copy Input (Max 50) */}
+                            <td className="px-2 py-2.5 text-center bg-indigo-50/30 border-x border-indigo-200">
+                              <input
+                                type="number"
+                                min="0"
+                                max="50"
+                                value={stMarks.theoryCopy !== undefined ? stMarks.theoryCopy : ''}
+                                placeholder="0"
+                                onChange={(e) => handleUpdateMarks(key, selectedSubject, 'theoryCopy', e.target.value)}
+                                disabled={isCurrentSubjectLocked && !isAdmin}
+                                className={`w-16 px-1.5 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
+                                  isCurrentSubjectLocked && !isAdmin
+                                    ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                    : 'bg-white border border-indigo-300 text-indigo-950 focus:ring-indigo-500'
+                                }`}
+                                title="50 अंकों की लिखित उत्तर-पुस्तिका"
+                              />
+                            </td>
+                            {/* Auto-sum Theory Display (Max 70) */}
+                            <td className="px-3 py-2.5 text-center bg-indigo-100/40 border-r border-indigo-200">
+                              <span className="font-mono font-black text-indigo-950 px-2 py-1 rounded bg-white border border-indigo-200 inline-block">
+                                {tVal !== '' ? tVal : 0} <span className="text-[10px] text-slate-500 font-normal">/ 70</span>
+                              </span>
+                            </td>
+                          </>
+                        ) : (
+                          /* Standard Unified Theory Input */
+                          <td className="px-4 py-2.5 text-center bg-indigo-50/30 border-x border-indigo-100">
+                            <input
+                              id={`input_theory_${idx}`}
+                              type="number"
+                              min="0"
+                              max={currentSubjectConfig.maxTheory}
+                              value={tVal}
+                              placeholder="0"
+                              onChange={(e) => handleUpdateMarks(key, selectedSubject, 'theory', e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, idx, 'theory')}
+                              disabled={isCurrentSubjectLocked && !isAdmin}
+                              className={`w-20 px-2 py-1.5 rounded-lg text-center font-mono font-black focus:ring-2 focus:outline-none ${
+                                isCurrentSubjectLocked && !isAdmin
+                                  ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                  : 'bg-white border border-indigo-200 text-indigo-950 focus:ring-indigo-500'
+                              }`}
+                            />
+                          </td>
+                        )}
                         {/* Practical Marks Input */}
                         {currentSubjectConfig.maxPractical > 0 && (
                           <td className="px-4 py-2.5 text-center bg-emerald-50/30 border-r border-emerald-100">
@@ -2688,6 +2871,118 @@ export default function ResultMarksheetManager({
                     ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Academic Session & Previous Year Archive Modal */}
+      {showSessionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 p-6 relative">
+            <button
+              type="button"
+              onClick={() => setShowSessionModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Archive className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  शैक्षणिक सत्र व परीक्षा आर्काइव (Multi-Year Result Sessions)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  वर्तमान परीक्षाफल को गत वर्ष (Last Year) में सुरक्षित करें या पिछला रिकॉर्ड लोड करें
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              <div>
+                <span className="font-bold text-slate-700 block mb-1.5">सक्रिय सत्र (Current Active Session):</span>
+                <span className="px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-xl font-mono font-black text-indigo-900 block">
+                  {activeSessionName}
+                </span>
+              </div>
+
+              {/* Quick Session Switching Presets */}
+              <div>
+                <span className="font-bold text-slate-700 block mb-1.5">उपलब्ध सत्र चुनें व लोड करें:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { key: 'Half_Yearly_2026_27', label: 'सत्र 2026-27: अर्धवार्षिक' },
+                    { key: 'Annual_2026_27', label: 'सत्र 2026-27: वार्षिक परीक्षा' },
+                    { key: 'Archive_2025_26', label: 'सत्र 2025-26: गत वर्ष (Last Year)' },
+                    { key: 'Archive_2024_25', label: 'सत्र 2024-25: पूर्व वर्ष' }
+                  ].map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => handleLoadSessionData(s.key)}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                        activeSessionName === s.key
+                          ? 'border-indigo-600 bg-indigo-50/80 font-black text-indigo-950'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs">{s.label}</div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{s.key}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Archive Current Result to Last Year 2025-26 */}
+              <div className="pt-3 border-t border-slate-200 bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200">
+                <span className="font-black text-amber-950 block mb-1">
+                  📦 गत वर्ष में आर्काइव करें (Archive as Previous Year):
+                </span>
+                <p className="text-[11px] text-slate-600 mb-2.5">
+                  वर्तमान परीक्षाफल की एक सुरक्षित प्रतिलिपि गत वर्ष सत्र (Archive_2025_26) में क्लाउड पर सुरक्षित करें ताकि भविष्य में कभी भी पुराना परिणाम देखा जा सके।
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleArchiveToSession('Archive_2025_26')}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    <span>सत्र 2025-26 (गत वर्ष) में आर्काइव करें</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Session Input */}
+              <div className="pt-2">
+                <label className="block font-bold text-slate-700 mb-1">
+                  नया कस्टम सत्र / परीक्षा नाम जोड़ें:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSessionInput}
+                    onChange={(e) => setNewSessionInput(e.target.value)}
+                    placeholder="उदा. Pre_Board_2026_27 या Unit_Test_1"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-xl font-bold focus:outline-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newSessionInput.trim()) {
+                        handleArchiveToSession(newSessionInput.trim());
+                      }
+                    }}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition cursor-pointer shrink-0"
+                  >
+                    बनाएं व सेव करें
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

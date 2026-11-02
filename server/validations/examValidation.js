@@ -68,11 +68,13 @@ export const SubjectConfigValidationSchema = z.record(
   z.object({
     maxTheory: z.coerce.number().min(0).default(70),
     maxPractical: z.coerce.number().min(0).default(30),
+    maxOmr: z.coerce.number().optional().default(20),
+    maxTheoryCopy: z.coerce.number().optional().default(50),
     minPassPercent: z.coerce.number().min(0).max(100).default(33),
-  })
+  }).passthrough()
 );
 
-// 7. Student Subject Marks Schema
+// 7. Student Subject Marks Schema (Supports 20 OMR + 50 Written Copy auto-sum)
 export const MarksDataValidationSchema = z.record(
   z.string(), // studentKey (e.g. "9_A_9101")
   z.record(
@@ -80,7 +82,9 @@ export const MarksDataValidationSchema = z.record(
     z.object({
       theory: z.union([z.coerce.number(), z.literal('')]).optional().default(''),
       practical: z.union([z.coerce.number(), z.literal('')]).optional().default(''),
-    })
+      omr: z.union([z.coerce.number(), z.literal('')]).optional().default(''),
+      theoryCopy: z.union([z.coerce.number(), z.literal('')]).optional().default(''),
+    }).passthrough()
   )
 );
 
