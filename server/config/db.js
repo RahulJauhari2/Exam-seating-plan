@@ -6,6 +6,8 @@ dotenv.config();
 export let lastConnectionError = null;
 export const getLastConnectionError = () => lastConnectionError;
 
+const ATLAS_PRODUCTION_URI = 'mongodb+srv://abvickatra_db_user:FP0z9iFqJDHUJVDc@cluster0.cfu86u4.mongodb.net/seatingPlan?retryWrites=true&w=majority';
+
 export const getMongoUri = () => {
   // Parse multiline string if saved under process.env.Env or ENV (as seen in Coolify modal)
   const rawEnv = process.env.Env || process.env.ENV || process.env.env || '';
@@ -17,7 +19,7 @@ export const getMongoUri = () => {
     }
   }
 
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || 'mongodb://127.0.0.1:27017/exam_seating_db';
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || ATLAS_PRODUCTION_URI;
   return uri.trim();
 };
 
