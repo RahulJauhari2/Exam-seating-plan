@@ -194,16 +194,32 @@ export default function App() {
 
   // Primary: Load entire session (classes, rooms, examDetails, dutyRoster, allotment) directly from MongoDB as Single Source of Truth
   const reloadDutyRoster = () => {
-    loadExamSessionFromDB(examDetails.examName || 'Half_Yearly_2026_27', activeShift)
+    const sName = examDetails.examName || 'Half_Yearly_2026_27';
+    loadExamSessionFromDB(sName, activeShift)
       .then((res) => {
-        if (res && res.success && res.data && res.data.dutyRoster) {
+        if (res && res.success && res.data && res.data.dutyRoster && Object.keys(res.data.dutyRoster).length > 0) {
           setDutyRoster(res.data.dutyRoster);
           try {
             localStorage.setItem('exam_duty_roster_v1', JSON.stringify(res.data.dutyRoster));
           } catch {}
+        } else {
+          loadExamSessionFromDB('Half_Yearly_2026_27', activeShift).then((r2) => {
+            if (r2?.success && r2.data?.dutyRoster) {
+              setDutyRoster(r2.data.dutyRoster);
+              try {
+                localStorage.setItem('exam_duty_roster_v1', JSON.stringify(r2.data.dutyRoster));
+              } catch {}
+            }
+          }).catch(() => {});
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        loadExamSessionFromDB('Half_Yearly_2026_27', activeShift).then((r2) => {
+          if (r2?.success && r2.data?.dutyRoster) {
+            setDutyRoster(r2.data.dutyRoster);
+          }
+        }).catch(() => {});
+      });
   };
 
   useEffect(() => {

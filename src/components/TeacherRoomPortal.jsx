@@ -279,13 +279,28 @@ export default function TeacherRoomPortal({
 
   // Preferred day ID (e.g. 'd2' for 02-11-26)
   const preferredDayId = useMemo(() => {
-    const matchedDay = (EXAM_TIMETABLE || []).find(
-      (d) => d.fullDate === activeDate || d.date === activeDate || (activeDate && activeDate.includes(d.date))
-    );
+    const norm = (s) => String(s || '').replace(/[-/\s]/g, '').toLowerCase();
+    const actNorm = norm(activeDate);
+    const matchedDay = (EXAM_TIMETABLE || []).find((d) => {
+      const fn = norm(d.fullDate);
+      const dn = norm(d.date);
+      return (
+        d.fullDate === activeDate ||
+        d.date === activeDate ||
+        (actNorm && (actNorm.includes(dn) || fn.includes(actNorm) || actNorm.includes(fn)))
+      );
+    });
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDay = (EXAM_TIMETABLE || []).find((d) => d.fullDate === todayStr || d.date === todayStr);
     return matchedDay ? matchedDay.id : (todayDay ? todayDay.id : (Object.keys(dutyRoster).some(k => k.startsWith('d2')) ? 'd2' : 'd1'));
   }, [activeDate, dutyRoster]);
+
+  // Automatically refresh duty from DB on mount so mobile portals always display latest live duty
+  useEffect(() => {
+    if (onRefreshDuty) {
+      onRefreshDuty();
+    }
+  }, []);
 
   // Helper to resolve duty status for any specific shift (shift_1 or shift_2)
   const getDutyInfoForShift = (targetShift, targetRooms = []) => {
@@ -299,6 +314,7 @@ export default function TeacherRoomPortal({
     // Helper to inspect an allocation object for this teacher
     const checkTeacherInAlloc = (allocation) => {
       if (!allocation || !allocation.rooms) return null;
+      const clean = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
       for (const [rId, dInfo] of Object.entries(allocation.rooms)) {
         const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
         const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
@@ -306,7 +322,13 @@ export default function TeacherRoomPortal({
           (inv1 && teacherIdSet.has(inv1)) ||
           (inv2 && teacherIdSet.has(inv2))
         ) {
-          const foundRoom = targetRooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
+          const targetId = clean(rId);
+          const foundRoom = targetRooms.find((r) => 
+            clean(r.roomId) === targetId || 
+            clean(r.id) === targetId || 
+            clean(r.roomName) === targetId || 
+            clean(r.name) === targetId
+          );
           const rName = foundRoom ? (foundRoom.roomName || foundRoom.name) : rId;
           return {
             hasDuty: true,
@@ -401,7 +423,14 @@ export default function TeacherRoomPortal({
   // Current active room object
   const currentRoom = useMemo(() => {
     if (!selectedRoomName) return null;
-    return rooms.find((r) => r.roomName === selectedRoomName) || null;
+    const clean = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+    const target = clean(selectedRoomName);
+    return rooms.find((r) => 
+      clean(r.roomName) === target || 
+      clean(r.name) === target || 
+      clean(r.roomId) === target || 
+      clean(r.id) === target
+    ) || null;
   }, [rooms, selectedRoomName]);
 
   // Flatten all students in this room
