@@ -296,16 +296,60 @@ export default function TeacherRoomPortal({
     const exactKey = `${preferredDayId}_${targetShift}`;
     let alloc = dutyRoster[exactKey];
 
-    // Fallback: If not found under exact day, check other day keys for this shift (e.g. d1 vs d2)
-    if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {
-      const altDayKey = preferredDayId === 'd2' ? `d1_${targetShift}` : `d2_${targetShift}`;
-      if (dutyRoster[altDayKey]?.rooms && Object.keys(dutyRoster[altDayKey].rooms).length > 0) {
-        alloc = dutyRoster[altDayKey];
+    // Helper to inspect an allocation object for this teacher
+    const checkTeacherInAlloc = (allocation) => {
+      if (!allocation || !allocation.rooms) return null;
+      for (const [rId, dInfo] of Object.entries(allocation.rooms)) {
+        const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
+        const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
+        if (
+          (inv1 && teacherIdSet.has(inv1)) ||
+          (inv2 && teacherIdSet.has(inv2))
+        ) {
+          const foundRoom = targetRooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
+          const rName = foundRoom ? (foundRoom.roomName || foundRoom.name) : rId;
+          return {
+            hasDuty: true,
+            isReliever: false,
+            roomName: rName,
+            role: inv1 && teacherIdSet.has(inv1) ? 'कक्ष निरीक्षक 1' : 'कक्ष निरीक्षक 2',
+            isRosterPublished: true,
+            statusText: rName,
+          };
+        }
       }
+      if (allocation.relievers && Array.isArray(allocation.relievers)) {
+        for (const relId of allocation.relievers) {
+          if (teacherIdSet.has(String(relId))) {
+            return {
+              hasDuty: true,
+              isReliever: true,
+              roomName: null,
+              role: 'उड़नदस्ता / रिलीवर',
+              isRosterPublished: true,
+              statusText: 'उड़नदस्ता / रिलीवर ड्यूटी',
+            };
+          }
+        }
+      }
+      return null;
+    };
+
+    // 1. Check exact day + shift
+    let match = checkTeacherInAlloc(alloc);
+    if (match) return match;
+
+    // 2. Check all other day keys for this shift (e.g. if duty was saved under d1 instead of d2)
+    const shiftKeys = Object.keys(dutyRoster).filter((k) => k.endsWith(`_${targetShift}`) && k !== exactKey);
+    for (const altKey of shiftKeys) {
+      const altAlloc = dutyRoster[altKey];
+      match = checkTeacherInAlloc(altAlloc);
+      if (match) return match;
     }
 
     // If duty for this specific shift has not been created/published yet
-    if (!alloc || !alloc.rooms || Object.keys(alloc.rooms).length === 0) {
+    const anyAllocForShift = [exactKey, ...shiftKeys].some((k) => dutyRoster[k]?.rooms && Object.keys(dutyRoster[k].rooms).length > 0);
+    if (!anyAllocForShift) {
       return {
         hasDuty: false,
         isReliever: false,
@@ -313,43 +357,6 @@ export default function TeacherRoomPortal({
         isRosterPublished: false,
         statusText: `${targetShift === 'shift_1' ? 'Shift 1 (सुबह)' : 'Shift 2 (दोपहर)'} की ड्यूटी अभी निर्धारित नहीं हुई है`,
       };
-    }
-
-    // Check if invigilator in any room for this shift
-    for (const [rId, dInfo] of Object.entries(alloc.rooms)) {
-      const inv1 = dInfo.invigilator1 ? String(dInfo.invigilator1) : null;
-      const inv2 = dInfo.invigilator2 ? String(dInfo.invigilator2) : null;
-      if (
-        (inv1 && teacherIdSet.has(inv1)) ||
-        (inv2 && teacherIdSet.has(inv2))
-      ) {
-        const foundRoom = targetRooms.find((r) => r.roomId === rId || r.roomName === rId || r.id === rId);
-        const rName = foundRoom ? (foundRoom.roomName || foundRoom.name) : rId;
-        return {
-          hasDuty: true,
-          isReliever: false,
-          roomName: rName,
-          role: inv1 && teacherIdSet.has(inv1) ? 'कक्ष निरीक्षक 1' : 'कक्ष निरीक्षक 2',
-          isRosterPublished: true,
-          statusText: rName,
-        };
-      }
-    }
-
-    // Check if reliever in this shift
-    if (alloc.relievers && Array.isArray(alloc.relievers)) {
-      for (const relId of alloc.relievers) {
-        if (teacherIdSet.has(String(relId))) {
-          return {
-            hasDuty: true,
-            isReliever: true,
-            roomName: null,
-            role: 'उड़नदस्ता / रिलीवर',
-            isRosterPublished: true,
-            statusText: 'उड़नदस्ता / रिलीवर ड्यूटी',
-          };
-        }
-      }
     }
 
     // Duty roster is published for this shift, but teacher is off duty (निरंक)

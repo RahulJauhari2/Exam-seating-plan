@@ -860,11 +860,11 @@ export default function App() {
       <button
         type="button"
         onClick={() => setSidebarOpen(true)}
-        className="lg:hidden fixed bottom-4 left-4 z-30 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
+        className="lg:hidden fixed bottom-4 left-4 z-30 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center gap-2 text-xs font-black transition-all active:scale-95 no-print"
       >
         <Compass className="w-4 h-4" />
-        <span>मेन्यू (10 Tabs)</span>
-        {Object.keys(absentStudents).length > 0 && (
+        <span>मेन्यू</span>
+        {Object.keys(absentStudents).length > 0 && !isTeacher && (
           <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-black">
             {Object.keys(absentStudents).length}
           </span>
