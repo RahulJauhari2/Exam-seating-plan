@@ -477,14 +477,28 @@ export const saveDutyRoster = async (req, res) => {
         }
       });
 
-      // 3. Deep-merge incoming slots
+      // 3. Deep-merge incoming slots with Server-Side PIN Lock Protection
       for (const [slotKey, slotData] of Object.entries(dutyRoster)) {
         if (slotData && typeof slotData === 'object') {
+          const existingSlot = mergedRoster[slotKey];
+          const isCurrentlyLocked = Boolean(existingSlot?.isLocked);
+          const isUnlocking = slotData.isLocked === false;
+
+          // If slot is locked in database and not explicitly being unlocked, protect rooms and relievers
+          if (isCurrentlyLocked && !isUnlocking) {
+            const incomingPin = slotData.lockPin || slotData.pin || req.body.lockPin || req.body.pin;
+            const savedPin = existingSlot?.lockPin || existingSlot?.pin;
+            if (savedPin && String(incomingPin || '').trim() !== String(savedPin).trim()) {
+              // Keep locked slot safe from background auto-sync overwrites
+              continue;
+            }
+          }
+
           mergedRoster[slotKey] = {
-            ...(mergedRoster[slotKey] || {}),
+            ...(existingSlot || {}),
             ...slotData,
             rooms: {
-              ...(mergedRoster[slotKey]?.rooms || {}),
+              ...(existingSlot?.rooms || {}),
               ...(slotData.rooms || {})
             }
           };
@@ -492,10 +506,12 @@ export const saveDutyRoster = async (req, res) => {
             mergedRoster[slotKey].relievers = slotData.relievers;
           }
           if (slotData.isLocked !== undefined) {
-            mergedRoster[slotKey].isLocked = slotData.isLocked;
+            mergedRoster[slotKey].isLocked = Boolean(slotData.isLocked);
           }
-          if (slotData.pin !== undefined) {
-            mergedRoster[slotKey].pin = slotData.pin;
+          const finalPin = slotData.lockPin !== undefined ? slotData.lockPin : slotData.pin;
+          if (finalPin !== undefined) {
+            mergedRoster[slotKey].lockPin = finalPin;
+            mergedRoster[slotKey].pin = finalPin;
           }
         }
       }

@@ -113,10 +113,11 @@ export default function App() {
     date: '2026-11-03',
   });
 
-  // Reset live attendance and toast memory when date or shift changes so all students start fresh as PRESENT
+  // Reset live attendance, toast memory, and B-copies when date or shift changes so all students start fresh
   useEffect(() => {
     setAbsentStudents({});
     setLiveAbsentees({});
+    setBCopyRecords({});
     knownAbsentRolls.current = new Set();
     previousAbsentCount.current = 0;
     isInitialPoll.current = true;
@@ -377,6 +378,7 @@ export default function App() {
         const res = await fetchLiveCopiesAPI({
           sessionName: examDetails.examName,
           shift: activeShift,
+          date: examDetails.date,
         });
         if (isSubscribed && res && res.success && res.copyMap) {
           setBCopyRecords(res.copyMap);

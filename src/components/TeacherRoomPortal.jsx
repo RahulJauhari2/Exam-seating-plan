@@ -120,6 +120,13 @@ export default function TeacherRoomPortal({
   const getStudentBCopies = (rollNo) => {
     if (rollNo === undefined || rollNo === null) return 0;
     const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
+    if (!rec) return 0;
+    // Check if record date matches currently selected exam date (reset to 0 for new day)
+    if (rec.date) {
+      const curDate = selectedDay.fullDate || selectedDay.date;
+      const match = rec.date === curDate || curDate.includes(rec.date) || rec.date.includes(curDate);
+      if (!match) return 0;
+    }
     return Number(rec?.bCopiesCount) || 0;
   };
 
@@ -638,8 +645,8 @@ export default function TeacherRoomPortal({
         isAbsent: newStatus,
         roomName: student.roomName || selectedRoomName || currentRoom?.roomName || 'Room 01',
         sessionName: examSession?.sessionName || 'Half Yearly  Examination 2026',
-        date: activeDate || new Date().toISOString().split('T')[0],
-        shift: activeShift || 'shift_1',
+        date: selectedDay.fullDate || selectedDay.date || activeDate || new Date().toISOString().split('T')[0],
+        shift: portalShift || activeShift || 'shift_1',
         studentName: student.name || '',
         className: student.className || '',
         section: student.section || '',
@@ -701,8 +708,8 @@ export default function TeacherRoomPortal({
         bCopiesCount: newCount,
         roomName: student.roomName || selectedRoomName || currentRoom?.roomName || 'Room 01',
         sessionName: examSession?.sessionName || 'Half Yearly  Examination 2026',
-        date: activeDate || new Date().toISOString().split('T')[0],
-        shift: activeShift || 'shift_1',
+        date: selectedDay.fullDate || selectedDay.date || activeDate || new Date().toISOString().split('T')[0],
+        shift: portalShift || activeShift || 'shift_1',
         studentName: student.name || '',
         className: student.className || '',
         section: student.section || '',

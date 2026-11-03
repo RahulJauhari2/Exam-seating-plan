@@ -314,6 +314,7 @@ export async function fetchLiveAbsenteesAPI(params = {}) {
     if (params.date) searchParams.append('date', params.date);
     if (params.shift) searchParams.append('shift', params.shift);
     if (params.roomName) searchParams.append('roomName', params.roomName);
+    if (params.date) searchParams.append('date', params.date);
 
     const res = await fetch(`${API_BASE_URL}/absentees?${searchParams.toString()}`, {
       method: 'GET',
@@ -358,6 +359,7 @@ export async function fetchLiveCopiesAPI(params = {}) {
     if (params.sessionName) searchParams.append('sessionName', params.sessionName);
     if (params.shift) searchParams.append('shift', params.shift);
     if (params.roomName) searchParams.append('roomName', params.roomName);
+    if (params.date) searchParams.append('date', params.date);
 
     const res = await fetch(`${API_BASE_URL}/copies?${searchParams.toString()}`, {
       method: 'GET',

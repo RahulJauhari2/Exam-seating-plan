@@ -67,6 +67,6 @@ const CopyRecordSchema = new mongoose.Schema(
   }
 );
 
-CopyRecordSchema.index({ rollNo: 1, shift: 1, sessionName: 1 });
+CopyRecordSchema.index({ rollNo: 1, shift: 1, date: 1, sessionName: 1 });
 
 export const CopyRecord = mongoose.model('CopyRecord', CopyRecordSchema);

@@ -83,18 +83,23 @@ export const updateStudentCopies = async (req, res) => {
       updatedAt: new Date(),
     };
 
+    const queryFilter = { rollNo: recordData.rollNo, shift };
+    if (recordData.date) {
+      queryFilter.date = recordData.date;
+    }
+
     let savedRecord = null;
 
     if (mongoose.connection.readyState === 1) {
       if (recordData.bCopiesCount > 0 || recordData.aCopyNumber) {
         savedRecord = await CopyRecord.findOneAndUpdate(
-          { rollNo: recordData.rollNo, shift },
+          queryFilter,
           recordData,
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
       } else {
-        // If count is 0 and no A-copy serial, remove record
-        await CopyRecord.deleteMany({ rollNo: recordData.rollNo, shift });
+        // If count is 0 and no A-copy serial, remove record for this date & shift
+        await CopyRecord.deleteMany(queryFilter);
         savedRecord = { ...recordData, bCopiesCount: 0 };
       }
     }
@@ -102,11 +107,11 @@ export const updateStudentCopies = async (req, res) => {
     // Mirror to local JSON
     let local = readLocalCopies();
     if (recordData.bCopiesCount > 0 || recordData.aCopyNumber) {
-      const idx = local.findIndex((r) => r.rollNo === recordData.rollNo && r.shift === shift);
+      const idx = local.findIndex((r) => r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || r.date === recordData.date));
       if (idx >= 0) local[idx] = { ...local[idx], ...recordData };
       else local.push(recordData);
     } else {
-      local = local.filter((r) => !(r.rollNo === recordData.rollNo && r.shift === shift));
+      local = local.filter((r) => !(r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || r.date === recordData.date)));
     }
     writeLocalCopies(local);
 
@@ -127,7 +132,7 @@ export const updateStudentCopies = async (req, res) => {
 // 2. Get Live Copies
 export const getLiveCopies = async (req, res) => {
   try {
-    const { sessionName, shift, roomName } = req.query;
+    const { sessionName, shift, roomName, date } = req.query;
 
     const filter = {};
     if (sessionName) {
@@ -139,6 +144,7 @@ export const getLiveCopies = async (req, res) => {
     }
     if (shift) filter.shift = shift;
     if (roomName) filter.roomName = roomName;
+    if (date) filter.date = date;
 
     let records = [];
 
@@ -147,6 +153,7 @@ export const getLiveCopies = async (req, res) => {
     } else {
       const local = readLocalCopies();
       records = local.filter((r) => {
+        if (date && r.date && r.date !== date) return false;
         if (shift && r.shift !== shift) return false;
         if (roomName && r.roomName !== roomName) return false;
         return true;

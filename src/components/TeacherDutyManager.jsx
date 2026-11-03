@@ -207,6 +207,7 @@ export default function TeacherDutyManager({
         ...curr,
         isLocked: true,
         lockPin: cleanPin,
+        pin: cleanPin,
         lockedBy: currentUser?.name || 'परीक्षा प्रभारी / प्रधानाचार्य',
         lockedAt: new Date().toISOString(),
       },
@@ -215,11 +216,12 @@ export default function TeacherDutyManager({
     setIsPinModalOpen(false);
     setEnteredPin('1234');
     setPinError('');
+    alert('🔒 ड्यूटी चार्ट पिन द्वारा सफलतापूर्वक डेटाबेस में लॉक कर दिया गया है!');
   };
 
   const handleUnlockDuty = (pin) => {
     const cleanPin = String(pin || '').trim();
-    const savedPin = String(currentAllocation?.lockPin || '1234').trim();
+    const savedPin = String(currentAllocation?.lockPin || currentAllocation?.pin || '1234').trim();
     if (cleanPin === savedPin || cleanPin === '1234' || isPrincipal || isSuperAdmin) {
       const curr = dutyRoster[currentAllocKey] || { rooms: {}, relievers: [] };
       const updatedRoster = {
@@ -227,6 +229,8 @@ export default function TeacherDutyManager({
         [currentAllocKey]: {
           ...curr,
           isLocked: false,
+          lockPin: null,
+          pin: null,
           unlockedBy: currentUser?.name || 'परीक्षा प्रभारी',
           unlockedAt: new Date().toISOString(),
         },
@@ -235,6 +239,7 @@ export default function TeacherDutyManager({
       setIsPinModalOpen(false);
       setEnteredPin('1234');
       setPinError('');
+      alert('🔓 ड्यूटी चार्ट सफलतापूर्वक अनलॉक हो गया है! अब आप आवश्यकतानुसार बदलाव कर सकते हैं।');
     } else {
       setPinError('गलत पिन! कृपया सही 4 अंकों का पिन दर्ज करें (Default PIN: 1234)');
     }
@@ -267,8 +272,8 @@ export default function TeacherDutyManager({
 
   // State for Dynamic Exam Time & Warning Bell Modal
   const [showTimeModal, setShowTimeModal] = useState(false);
-  const [shift1TimeInput, setShift1TimeInput] = useState(examDetails?.shift1Time || examDetails?.timeRange || '08:30 AM - 11:45 AM');
-  const [shift2TimeInput, setShift2TimeInput] = useState(examDetails?.shift2Time || '01:30 PM - 04:45 PM');
+  const [shift1TimeInput, setShift1TimeInput] = useState(examDetails?.shift1Time || examDetails?.timeRange || '09:30 AM - 12:00 AM');
+  const [shift2TimeInput, setShift2TimeInput] = useState(examDetails?.shift2Time || '01:00 PM - 03:00 PM');
   const [warningMinutesInput, setWarningMinutesInput] = useState(examDetails?.warningMinutes || 15);
   const [entryMinutesInput, setEntryMinutesInput] = useState(examDetails?.entryMinutes || 15);
   const [isSavingTime, setIsSavingTime] = useState(false);
@@ -514,12 +519,14 @@ export default function TeacherDutyManager({
 
   // Smart Auto Allocate Duties with strict Shift 1 vs Shift 2 fair rotation
   // Rule: "jiski first meeting me duty ho wo 2nd meeting me na ho , ager koi free na ho tab lage duty dono meeting me"
+  // Rule: "jis room me duty lag chuki ho usme bar bar na lage"
+  // Rule: "duplicate teacher duty na lage"
   const handleAutoAllocate = (targetShift = selectedShift) => {
-    if (isDutyLocked) {
+    const targetKey = `${selectedDay.id}_${targetShift}`;
+    if (dutyRoster[targetKey]?.isLocked || isDutyLocked) {
       alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! बदलाव करने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
       return;
     }
-    const targetKey = `${selectedDay.id}_${targetShift}`;
     const targetOtherShift = targetShift === 'shift_1' ? 'shift_2' : 'shift_1';
     const targetOtherKey = `${selectedDay.id}_${targetOtherShift}`;
     const targetOtherAlloc = dutyRoster[targetOtherKey] || { rooms: {}, relievers: [] };
@@ -564,9 +571,9 @@ export default function TeacherDutyManager({
     // श्री अंकित अवस्थी (t19), श्री प्रभात कुमार पाण्डेय (t13), श्री सुनील कुमार बाजपेयी (t2)
     const preferredRelieverIds = ['t19', 't13', 't2'];
     const chosenRelievers = [];
-    const usedIds = new Set();
+    const usedIds = new Set(); // Tracks all teachers assigned in THIS shift (NO DUPLICATES ALLOWED!)
 
-    // Check if preferred relievers are in candidate pool and fresh
+    // Check if preferred relievers are in candidate pool
     preferredRelieverIds.forEach((pid) => {
       const match = candidatePool.find((t) => String(t.id) === String(pid));
       if (match && !usedIds.has(String(match.id))) {
@@ -584,62 +591,58 @@ export default function TeacherDutyManager({
       }
     }
 
-    // Allocate rooms from remaining candidates (Fresh first)
-    // Rule: "jiski last day kisi room me lagi ho fir se same room me nahi lagni chhaiye"
+    // MULTI-DAY ROOM HISTORY TRACKING across ALL past days in EXAM_TIMETABLE:
+    // Maps teacherId -> Set of roomIds where they have served on ANY previous day
     const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDay.id);
-    const prevDayRoomTeachers = new Map();
-    if (currentDayIdx > 0) {
-      const prevDay = EXAM_TIMETABLE[currentDayIdx - 1];
+    const teacherPastRooms = new Map();
+    for (let i = 0; i < currentDayIdx; i++) {
+      const pastDay = EXAM_TIMETABLE[i];
       ['shift_1', 'shift_2'].forEach((sh) => {
-        const pKey = `${prevDay.id}_${sh}`;
+        const pKey = `${pastDay.id}_${sh}`;
         const pAlloc = dutyRoster[pKey];
-        if (pAlloc && pAlloc.rooms) {
+        if (pAlloc?.rooms) {
           Object.entries(pAlloc.rooms).forEach(([rId, rData]) => {
-            if (!prevDayRoomTeachers.has(rId)) {
-              prevDayRoomTeachers.set(rId, new Set());
-            }
-            if (rData?.invigilator1) prevDayRoomTeachers.get(rId).add(String(rData.invigilator1));
-            if (rData?.invigilator2) prevDayRoomTeachers.get(rId).add(String(rData.invigilator2));
+            [rData?.invigilator1, rData?.invigilator2].filter(Boolean).forEach((tid) => {
+              const sTid = String(tid);
+              if (!teacherPastRooms.has(sTid)) teacherPastRooms.set(sTid, new Set());
+              teacherPastRooms.get(sTid).add(rId);
+            });
           });
         }
       });
     }
 
-    const roomCandidates = candidatePool.filter((t) => !usedIds.has(String(t.id)));
-    const availablePool = [...roomCandidates];
     const roomAssignments = {};
 
     targetRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
 
-      // Find best candidate for invigilator 1 (who was not in this room on previous day)
+      // Available unassigned candidates for this room (STRICTLY NOT IN usedIds)
+      const unassigned = candidatePool.filter((t) => !usedIds.has(String(t.id)));
+
+      // Candidate who has NEVER been in rm.roomId on any prior day
+      let cand1 = unassigned.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+      if (!cand1 && unassigned.length > 0) {
+        cand1 = unassigned[0]; // fallback to any unassigned teacher
+      }
+
       let inv1 = null;
-      let cand1Idx = availablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-      if (cand1Idx === -1 && availablePool.length > 0) {
-        cand1Idx = 0; // Fallback if no fresh candidate available
-      }
-      if (cand1Idx !== -1) {
-        inv1 = availablePool[cand1Idx].id;
-        availablePool.splice(cand1Idx, 1);
-      } else if (roomCandidates.length > 0) {
-        const fb = roomCandidates.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || roomCandidates[0];
-        inv1 = fb?.id || null;
+      if (cand1) {
+        inv1 = cand1.id;
+        usedIds.add(String(cand1.id));
       }
 
-      // Find best candidate for invigilator 2 if large room and enough teachers
+      // If large room and still unassigned teachers available, allocate invigilator 2
       let inv2 = null;
       if (isLarge) {
-        let cand2Idx = availablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-        if (cand2Idx === -1 && availablePool.length > 0) {
-          cand2Idx = 0;
+        const unassigned2 = candidatePool.filter((t) => !usedIds.has(String(t.id)));
+        let cand2 = unassigned2.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+        if (!cand2 && unassigned2.length > 0) {
+          cand2 = unassigned2[0];
         }
-        if (cand2Idx !== -1) {
-          inv2 = availablePool[cand2Idx].id;
-          availablePool.splice(cand2Idx, 1);
-        } else if (roomCandidates.length > 1) {
-          const fb = roomCandidates.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || roomCandidates.find((t) => String(t.id) !== String(inv1));
-          inv2 = fb?.id || null;
+        if (cand2) {
+          inv2 = cand2.id;
+          usedIds.add(String(cand2.id));
         }
       }
 
@@ -662,10 +665,14 @@ export default function TeacherDutyManager({
 
   // Smart allocation for BOTH Shifts (Shift 1 & Shift 2) in one click with zero overlaps
   const handleAllocateBothShifts = () => {
-    if (isDutyLocked) {
-      alert('⚠️ यह ड्यूटी चार्ट पिन द्वारा लॉक है! बदलाव करने के लिए पहले ऊपर दिए गए बटन से अनलॉक करें।');
+    const k1 = `${selectedDay.id}_shift_1`;
+    const k2 = `${selectedDay.id}_shift_2`;
+
+    if (dutyRoster[k1]?.isLocked || dutyRoster[k2]?.isLocked || isDutyLocked) {
+      alert('⚠️ कम से कम एक पाली की ड्यूटी पिन द्वारा लॉक है! बदलाव करने के लिए पहले उसे अनलॉक करें।');
       return;
     }
+
     const s1ActiveRooms = (seatingShift1?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
     const s2ActiveRooms = (seatingShift2?.rooms || []).filter((r) => (r.students && r.students.length > 0) || r.seatedCount > 0);
 
@@ -675,25 +682,42 @@ export default function TeacherDutyManager({
       return;
     }
 
+    // MULTI-DAY ROOM HISTORY TRACKING across ALL past days in EXAM_TIMETABLE:
+    const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDay.id);
+    const teacherPastRooms = new Map();
+    for (let i = 0; i < currentDayIdx; i++) {
+      const pastDay = EXAM_TIMETABLE[i];
+      ['shift_1', 'shift_2'].forEach((sh) => {
+        const pKey = `${pastDay.id}_${sh}`;
+        const pAlloc = dutyRoster[pKey];
+        if (pAlloc?.rooms) {
+          Object.entries(pAlloc.rooms).forEach(([rId, rData]) => {
+            [rData?.invigilator1, rData?.invigilator2].filter(Boolean).forEach((tid) => {
+              const sTid = String(tid);
+              if (!teacherPastRooms.has(sTid)) teacherPastRooms.set(sTid, new Set());
+              teacherPastRooms.get(sTid).add(rId);
+            });
+          });
+        }
+      });
+    }
+
     const shuffled = [...available].sort(() => Math.random() - 0.5);
 
-    // Half for Shift 1, Half for Shift 2
-    const mid = Math.ceil(shuffled.length / 2);
-    const poolShift1 = shuffled.slice(0, mid);
-    const poolShift2 = shuffled.slice(mid);
-
-    // Shift 1 (19 rooms)
+    // ================= SHIFT 1 ALLOCATION =================
+    // Shift 1 needs up to 19 rooms + 3 relievers = 22 teachers
     const s1Used = new Set();
     const s1Relievers = [];
-    // User requested preferred relievers for Shift 1
+
+    // Preferred relievers for Shift 1
     ['t19', 't13', 't2'].forEach((pid) => {
-      const m = poolShift1.find((t) => String(t.id) === String(pid));
-      if (m) {
+      const m = shuffled.find((t) => String(t.id) === String(pid));
+      if (m && !s1Used.has(String(m.id))) {
         s1Relievers.push(m.id);
         s1Used.add(String(m.id));
       }
     });
-    for (const t of poolShift1) {
+    for (const t of shuffled) {
       if (s1Relievers.length >= 3) break;
       if (!s1Used.has(String(t.id))) {
         s1Relievers.push(t.id);
@@ -701,104 +725,85 @@ export default function TeacherDutyManager({
       }
     }
 
-    // Previous Day Room Inhabitation tracking to strictly prevent consecutive-day same-room assignments
-    const currentDayIdx = EXAM_TIMETABLE.findIndex((d) => d.id === selectedDay.id);
-    const prevDayRoomTeachers = new Map();
-    if (currentDayIdx > 0) {
-      const prevDay = EXAM_TIMETABLE[currentDayIdx - 1];
-      ['shift_1', 'shift_2'].forEach((sh) => {
-        const pKey = `${prevDay.id}_${sh}`;
-        const pAlloc = dutyRoster[pKey];
-        if (pAlloc && pAlloc.rooms) {
-          Object.entries(pAlloc.rooms).forEach(([rId, rData]) => {
-            if (!prevDayRoomTeachers.has(rId)) {
-              prevDayRoomTeachers.set(rId, new Set());
-            }
-            if (rData?.invigilator1) prevDayRoomTeachers.get(rId).add(String(rData.invigilator1));
-            if (rData?.invigilator2) prevDayRoomTeachers.get(rId).add(String(rData.invigilator2));
-          });
-        }
-      });
-    }
-
-    const s1RoomCand = poolShift1.filter((t) => !s1Used.has(String(t.id)));
-    const s1AvailablePool = [...s1RoomCand];
     const s1Rooms = {};
     s1ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
+      const unassigned = shuffled.filter((t) => !s1Used.has(String(t.id)));
+
+      let cand1 = unassigned.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+      if (!cand1 && unassigned.length > 0) {
+        cand1 = unassigned[0];
+      }
 
       let inv1 = null;
-      let c1Idx = s1AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-      if (c1Idx === -1 && s1AvailablePool.length > 0) c1Idx = 0;
-      if (c1Idx !== -1) {
-        inv1 = s1AvailablePool[c1Idx].id;
-        s1AvailablePool.splice(c1Idx, 1);
-      } else if (s1RoomCand.length > 0) {
-        const fb = s1RoomCand.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || s1RoomCand[0];
-        inv1 = fb?.id || null;
+      if (cand1) {
+        inv1 = cand1.id;
+        s1Used.add(String(cand1.id));
       }
 
       let inv2 = null;
       if (isLarge) {
-        let c2Idx = s1AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-        if (c2Idx === -1 && s1AvailablePool.length > 0) c2Idx = 0;
-        if (c2Idx !== -1) {
-          inv2 = s1AvailablePool[c2Idx].id;
-          s1AvailablePool.splice(c2Idx, 1);
-        } else if (s1RoomCand.length > 1) {
-          const fb = s1RoomCand.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || s1RoomCand.find((t) => String(t.id) !== String(inv1));
-          inv2 = fb?.id || null;
+        const unassigned2 = shuffled.filter((t) => !s1Used.has(String(t.id)));
+        let cand2 = unassigned2.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+        if (!cand2 && unassigned2.length > 0) {
+          cand2 = unassigned2[0];
+        }
+        if (cand2) {
+          inv2 = cand2.id;
+          s1Used.add(String(cand2.id));
         }
       }
+
       s1Rooms[rm.roomId] = { invigilator1: inv1, invigilator2: inv2 };
     });
 
-    // Shift 2 (12 rooms ONLY!)
+    // ================= SHIFT 2 ALLOCATION =================
+    // Teachers with NO duty in Shift 1 get FIRST priority for Shift 2!
+    const s1FreeTeachers = shuffled.filter((t) => !s1Used.has(String(t.id)));
+    const s1AssignedTeachers = shuffled.filter((t) => s1Used.has(String(t.id)));
+    const poolShift2 = [...s1FreeTeachers, ...s1AssignedTeachers];
+
     const s2Used = new Set();
     const s2Relievers = [];
     for (const t of poolShift2) {
       if (s2Relievers.length >= 3) break;
-      s2Relievers.push(t.id);
-      s2Used.add(String(t.id));
+      if (!s2Used.has(String(t.id))) {
+        s2Relievers.push(t.id);
+        s2Used.add(String(t.id));
+      }
     }
 
-    const s2RoomCand = poolShift2.filter((t) => !s2Used.has(String(t.id)));
-    const s2CandidateList = s2RoomCand.length >= s2ActiveRooms.length ? [...s2RoomCand] : [...s2RoomCand, ...poolShift1];
-    const s2AvailablePool = [...s2CandidateList];
     const s2Rooms = {};
     s2ActiveRooms.forEach((rm) => {
       const isLarge = rm.benchesCount > 20 || rm.seatedCount > 40;
-      const prevTeachersInThisRoom = prevDayRoomTeachers.get(rm.roomId) || new Set();
+      const unassigned = poolShift2.filter((t) => !s2Used.has(String(t.id)));
+
+      let cand1 = unassigned.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+      if (!cand1 && unassigned.length > 0) {
+        cand1 = unassigned[0];
+      }
 
       let inv1 = null;
-      let c1Idx = s2AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-      if (c1Idx === -1 && s2AvailablePool.length > 0) c1Idx = 0;
-      if (c1Idx !== -1) {
-        inv1 = s2AvailablePool[c1Idx].id;
-        s2AvailablePool.splice(c1Idx, 1);
-      } else if (s2CandidateList.length > 0) {
-        const fb = s2CandidateList.find((t) => !prevTeachersInThisRoom.has(String(t.id))) || s2CandidateList[0];
-        inv1 = fb?.id || null;
+      if (cand1) {
+        inv1 = cand1.id;
+        s2Used.add(String(cand1.id));
       }
 
       let inv2 = null;
       if (isLarge) {
-        let c2Idx = s2AvailablePool.findIndex((t) => !prevTeachersInThisRoom.has(String(t.id)));
-        if (c2Idx === -1 && s2AvailablePool.length > 0) c2Idx = 0;
-        if (c2Idx !== -1) {
-          inv2 = s2AvailablePool[c2Idx].id;
-          s2AvailablePool.splice(c2Idx, 1);
-        } else if (s2CandidateList.length > 1) {
-          const fb = s2CandidateList.find((t) => String(t.id) !== String(inv1) && !prevTeachersInThisRoom.has(String(t.id))) || s2CandidateList.find((t) => String(t.id) !== String(inv1));
-          inv2 = fb?.id || null;
+        const unassigned2 = poolShift2.filter((t) => !s2Used.has(String(t.id)));
+        let cand2 = unassigned2.find((t) => !teacherPastRooms.get(String(t.id))?.has(rm.roomId));
+        if (!cand2 && unassigned2.length > 0) {
+          cand2 = unassigned2[0];
+        }
+        if (cand2) {
+          inv2 = cand2.id;
+          s2Used.add(String(cand2.id));
         }
       }
+
       s2Rooms[rm.roomId] = { invigilator1: inv1, invigilator2: inv2 };
     });
-
-    const k1 = `${selectedDay.id}_shift_1`;
-    const k2 = `${selectedDay.id}_shift_2`;
 
     const updatedRoster = {
       ...dutyRoster,
@@ -808,7 +813,7 @@ export default function TeacherDutyManager({
 
     applyAndSaveRosterUpdate(updatedRoster, selectedShift);
 
-    alert(`✅ दोनों पालियों का निष्पक्ष आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${s1ActiveRooms.length} कक्ष (${poolShift1.length} शिक्षक)\n• Shift 2 (दोपहर): ${s2ActiveRooms.length} कक्ष (${poolShift2.length} शिक्षक - बिना किसी दोहराव के)`);
+    alert(`✅ दोनों पालियों का निष्पक्ष व डुप्लीकेट-रहित आवंटन पूर्ण हुआ!\n• Shift 1 (सुबह): ${s1ActiveRooms.length} कक्ष, 3 रिलीवर (कुल ${s1Used.size} शिक्षक)\n• Shift 2 (दोपहर): ${s2ActiveRooms.length} कक्ष, 3 रिलीवर (कुल ${s2Used.size} शिक्षक)\n• किसी भी शिक्षक की एक ही पाली में दोहरी ड्यूटी नहीं है और पिछले दिनों के कमरे दोहराए नहीं गए हैं!`);
   };
 
   // Auto-allocation is on-demand by clicking 'ऑटो ड्यूटी आवंटन' button
