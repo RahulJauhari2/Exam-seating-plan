@@ -423,12 +423,10 @@ const expandDutyRosterAliases = (roster = {}) => {
     ['shift_1', 'shift_2'].forEach((sh) => {
       const srcKey = `${dayId}_${sh}`;
       const srcData = roster[srcKey];
-      if (srcData && typeof srcData === 'object') {
+      if (srcData && typeof srcData === 'object' && Object.keys(srcData.rooms || {}).length > 0) {
         dateAliases.forEach((alias) => {
           const aliasKey = `${alias}_${sh}`;
-          if (!expanded[aliasKey]) {
-            expanded[aliasKey] = srcData;
-          }
+          expanded[aliasKey] = srcData;
         });
       }
     });
