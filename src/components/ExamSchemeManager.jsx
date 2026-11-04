@@ -18,7 +18,8 @@ import {
 import { 
   UP_BOARD_SUBJECT_CODES, 
   EXAM_SCHEME_METADATA, 
-  EXAM_TIMETABLE 
+  EXAM_TIMETABLE,
+  getTodayExamDay
 } from '../data/examSchemeData';
 
 // Helper to check if a class/section or student is English medium
@@ -272,7 +273,7 @@ export default function ExamSchemeManager({
   dutyRoster = {},
   teachers = []
 }) {
-  const [selectedDateId, setSelectedDateId] = useState('d1'); // Default to 31-10-26
+  const [selectedDateId, setSelectedDateId] = useState(() => getTodayExamDay().id);
   const [activeSubView, setActiveSubView] = useState('demand'); // 'demand', 'envelopes', 'full-scheme', 'codes'
   
   // Custom manual splits for optional multi-subjects on the selected day

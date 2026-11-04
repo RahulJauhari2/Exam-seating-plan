@@ -24,7 +24,7 @@ import {
   UserCheck,
   Printer
 } from 'lucide-react';
-import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA } from '../data/examSchemeData';
+import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay } from '../data/examSchemeData';
 
 export default function StudentHomePage({
   seatingResult = {},
@@ -425,18 +425,30 @@ export default function StudentHomePage({
               (shift2Subjects[selectedClassFilter] && shift2Subjects[selectedClassFilter].length > 0);
 
             if (!hasExamInSelectedClass) return null;
+            const isToday = row.id === getTodayExamDay().id;
 
             return (
               <div
                 key={row.id}
-                className="bg-slate-50/80 hover:bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-sm transition-all space-y-3"
+                className={`rounded-2xl border p-4 shadow-2xs hover:shadow-sm transition-all space-y-3 ${
+                  isToday 
+                    ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/50 shadow-md' 
+                    : 'bg-slate-50/80 hover:bg-white border-slate-200'
+                }`}
               >
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-900 rounded-lg text-xs font-black">
+                    <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${
+                      isToday ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-900'
+                    }`}>
                       {row.date}
                     </span>
                     <span className="text-xs font-bold text-slate-700">{row.day}</span>
+                    {isToday && (
+                      <span className="px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded-md text-[10px] font-black animate-pulse">
+                        आज की परीक्षा (Today)
+                      </span>
+                    )}
                   </div>
                   <span className="text-[10px] font-bold text-slate-400">
                     {row.fullDate}

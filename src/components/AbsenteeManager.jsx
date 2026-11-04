@@ -32,7 +32,7 @@ import {
   exportReExamListToExcel, 
   exportClassAttendanceMatrixToExcel 
 } from '../utils/excelExport';
-import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA } from '../data/examSchemeData';
+import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay } from '../data/examSchemeData';
 import { fetchLiveAbsenteesAPI } from '../services/api';
 
 export default function AbsenteeManager({ 
@@ -54,7 +54,7 @@ export default function AbsenteeManager({
   const [activeViewMode, setActiveViewMode] = useState('class-wise'); // 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [filterOnlyAbsentClasses, setFilterOnlyAbsentClasses] = useState(false);
-  const [selectedDateFilter, setSelectedDateFilter] = useState(examDetails?.date || '2026-11-02');
+  const [selectedDateFilter, setSelectedDateFilter] = useState(() => examDetails?.date || getTodayExamDay().fullDate || '2026-11-04');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('all'); // 'all' | 'absent' | 'present' | 'b-copy'
   const [copiedClassKey, setCopiedClassKey] = useState(null);
   const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
@@ -524,7 +524,7 @@ export default function AbsenteeManager({
           {EXAM_TIMETABLE.map((d) => {
             const dateStr = d.fullDate || d.date;
             const isSelected = selectedDateFilter === d.fullDate || selectedDateFilter === d.date;
-            const isToday = d.fullDate === new Date().toISOString().split('T')[0] || d.fullDate === (examDetails?.date || '2026-11-02');
+            const isToday = d.id === getTodayExamDay().id || d.fullDate === (examDetails?.date || getTodayExamDay().fullDate);
             return (
               <button
                 key={d.id}

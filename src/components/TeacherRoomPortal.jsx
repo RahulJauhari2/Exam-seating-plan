@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { EXAM_TIMETABLE } from '../data/examSchemeData';
+import { EXAM_TIMETABLE, getTodayExamDay } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
 import { generateSeatingPlan } from '../utils/seatingAlgorithm';
 import { 
@@ -75,7 +75,7 @@ export default function TeacherRoomPortal({
   const [isRelieverModalOpen, setIsRelieverModalOpen] = useState(false);
   const [isHandoverModalOpen, setIsHandoverModalOpen] = useState(false);
 
-  // Selected Exam Day State (Defaults to 'd3' or matches activeDate prop)
+  // Selected Exam Day State (Defaults to Today's scheduled exam day dynamically)
   const [selectedDayId, setSelectedDayId] = useState(() => {
     if (activeDate) {
       const match = (EXAM_TIMETABLE || []).find(
@@ -83,7 +83,8 @@ export default function TeacherRoomPortal({
       );
       if (match) return match.id;
     }
-    return 'd3';
+    const today = getTodayExamDay();
+    return today ? today.id : 'd4';
   });
 
   // Sync when activeDate prop updates
@@ -97,7 +98,7 @@ export default function TeacherRoomPortal({
   }, [activeDate]);
 
   const selectedDay = useMemo(() => {
-    return (EXAM_TIMETABLE || []).find((d) => d.id === selectedDayId) || EXAM_TIMETABLE[2] || EXAM_TIMETABLE[0];
+    return (EXAM_TIMETABLE || []).find((d) => d.id === selectedDayId) || getTodayExamDay();
   }, [selectedDayId]);
 
   // Centralized safe absentee checker (declared before useMemo hooks)

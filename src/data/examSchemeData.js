@@ -191,3 +191,24 @@ export const EXAM_TIMETABLE = [
     },
   },
 ];
+
+// Helper to dynamically get today's scheduled exam day in Indian Standard Time (IST)
+// Ensures teacher login, student search, and admin dashboards automatically open with today's date
+export const getTodayExamDay = () => {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + istOffset);
+  const todayISO = istDate.toISOString().split('T')[0];
+
+  const match = EXAM_TIMETABLE.find(
+    (d) => d.fullDate === todayISO || d.date === todayISO || (d.fullDate && todayISO.includes(d.fullDate))
+  );
+  if (match) return match;
+
+  const firstDay = EXAM_TIMETABLE[0];
+  const lastDay = EXAM_TIMETABLE[EXAM_TIMETABLE.length - 1];
+  if (todayISO < firstDay.fullDate) return firstDay;
+  if (todayISO > lastDay.fullDate) return lastDay;
+
+  return firstDay;
+};

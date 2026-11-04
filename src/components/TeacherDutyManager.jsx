@@ -35,7 +35,7 @@ import {
   KeyRound,
   Filter
 } from 'lucide-react';
-import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE } from '../data/examSchemeData';
+import { EXAM_SCHEME_METADATA, EXAM_TIMETABLE, getTodayExamDay } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
 import { generateSeatingPlan } from '../utils/seatingAlgorithm';
 import TeacherExcelImporterModal from './TeacherExcelImporterModal';
@@ -64,9 +64,8 @@ export default function TeacherDutyManager({
       );
       if (match) return match.id;
     }
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayMatch = EXAM_TIMETABLE.find((d) => d.fullDate === todayStr || d.date === todayStr);
-    return todayMatch ? todayMatch.id : 'd2';
+    const today = getTodayExamDay();
+    return today ? today.id : 'd4';
   }, [examDetails?.date]);
 
   const [selectedDateId, setSelectedDateId] = useState(() => targetDayId);

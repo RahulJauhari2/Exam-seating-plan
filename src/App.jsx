@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
+import { getTodayExamDay } from './data/examSchemeData';
 import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchLiveCopiesAPI, updateStudentCopiesAPI, fetchTeachersAPI, loadExamSessionFromDB, saveDutyRosterToDB } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
@@ -105,12 +106,15 @@ export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
 
-  // Exam details state (Defaults to Today's date dynamically)
+  // Automatically determine today's scheduled exam day
+  const todayExamDay = useMemo(() => getTodayExamDay(), []);
+
+  // Exam details state (Defaults to Today's scheduled exam date dynamically)
   const [examDetails, setExamDetails] = useState({
     schoolName: initialDefaultData.schoolName,
     examName: initialDefaultData.examName,
     timeRange: initialDefaultData.timeRange,
-    date: '2026-11-03',
+    date: todayExamDay.fullDate || todayExamDay.date || '2026-11-04',
   });
 
   // Reset live attendance, toast memory, and B-copies when date or shift changes so all students start fresh
