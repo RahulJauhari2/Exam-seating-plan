@@ -1126,31 +1126,31 @@ export default function AbsenteeManager({
         {/* PRINT SECTION 1: CLASS-WISE STATEMENT FOR CLASS TEACHERS */}
         {/* ===================================================== */}
         {(printOption === 'both' || printOption === 'class-wise') && (
-          <div className="mb-10 print:mb-12 print:page-break-after">
+          <div className="print-absentee-sheet mb-10 print:mb-0">
             {/* Header */}
-            <div className="text-center pb-4 border-b-2 border-slate-900 mb-5">
+            <div className="print-sheet-header text-center pb-3 border-b-2 border-slate-900 mb-4 print:mb-2">
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase">
                 {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
               </h1>
-              <p className="text-sm sm:text-base font-bold text-indigo-900 mt-1">
+              <p className="text-sm sm:text-base font-bold text-indigo-900 mt-0.5">
                 {examDetails.examName || 'Annual Examination 2026'}
               </p>
-              <div className="inline-flex items-center gap-4 mt-2 px-4 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-800 border border-slate-300">
-                <span>📅 दिनांक: {examDetails.date}</span>
+              <div className="print-meta inline-flex items-center gap-3 mt-1.5 px-3 py-0.5 bg-slate-100 rounded-full text-xs font-semibold text-slate-800 border border-slate-300">
+                <span>📅 दिनांक: {selectedDateFilter !== 'all' ? selectedDateFilter : examDetails.date}</span>
                 <span>•</span>
                 <span>⏰ समय / शिफ्ट: {examDetails.timeRange}</span>
               </div>
-              <div className="mt-3">
-                <span className="px-3 py-1 bg-indigo-900 text-white text-xs font-black tracking-widest uppercase rounded">
+              <div className="mt-2 print:mt-1">
+                <span className="print-banner px-3 py-0.5 bg-indigo-900 text-white text-xs font-black tracking-widest uppercase rounded">
                   CLASS-WISE ABSENTEE STATEMENT (कक्षावार अनुपस्थित छात्र विवरण पत्रक - कक्षाध्यापक पटल)
                 </span>
               </div>
             </div>
 
             {/* Class-Wise Master Table */}
-            <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[660px]">
+            <div className="border border-slate-900 rounded-xl print:rounded-none print:border-black overflow-hidden print:overflow-visible">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-900 text-white font-extrabold uppercase text-[11px]">
                     <tr>
                       <th className="px-2 py-2.5 border-r border-slate-700 w-10 text-center">क्र.</th>
@@ -1241,8 +1241,8 @@ export default function AbsenteeManager({
             </div>
 
             {/* Footer Notes & Signatures for Class Statement */}
-            <div className="mt-6 pt-3 border-t border-slate-300 flex items-center justify-between text-xs text-slate-600">
-              <p className="text-[11px] text-slate-500">
+            <div className="print-sheet-footer mt-4 pt-2 border-t border-slate-300 flex items-center justify-between text-xs text-slate-600">
+              <p className="text-[11px] text-slate-500 max-w-sm">
                 * सभी संबंधित कक्षाध्यापक परीक्षा उपरांत अपनी कक्षा के अनुपस्थित छात्रों की प्रविष्टि दैनिक उपस्थिति पंजिका (Attendance Register) में करें।
               </p>
               <div className="flex items-center gap-10 text-center">
@@ -1263,31 +1263,31 @@ export default function AbsenteeManager({
         {/* PRINT SECTION 2: ROOM-WISE STATEMENT FOR SUPERINTENDENT*/}
         {/* ===================================================== */}
         {(printOption === 'both' || printOption === 'room-wise') && (
-          <div>
+          <div className="print-absentee-sheet">
             {/* Header */}
-            <div className="text-center pb-4 border-b-2 border-slate-900 mb-5">
+            <div className="print-sheet-header text-center pb-3 border-b-2 border-slate-900 mb-4 print:mb-2">
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase">
                 {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
               </h1>
-              <p className="text-sm sm:text-base font-bold text-indigo-900 mt-1">
+              <p className="text-sm sm:text-base font-bold text-indigo-900 mt-0.5">
                 {examDetails.examName || 'Annual Examination 2026'}
               </p>
-              <div className="inline-flex items-center gap-4 mt-2 px-4 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-800 border border-slate-300">
-                <span>📅 दिनांक: {examDetails.date}</span>
+              <div className="print-meta inline-flex items-center gap-3 mt-1.5 px-3 py-0.5 bg-slate-100 rounded-full text-xs font-semibold text-slate-800 border border-slate-300">
+                <span>📅 दिनांक: {selectedDateFilter !== 'all' ? selectedDateFilter : examDetails.date}</span>
                 <span>•</span>
                 <span>⏰ समय / शिफ्ट: {examDetails.timeRange}</span>
               </div>
-              <div className="mt-3">
-                <span className="px-3 py-1 bg-rose-900 text-white text-xs font-black tracking-widest uppercase rounded">
+              <div className="mt-2 print:mt-1">
+                <span className="print-banner px-3 py-0.5 bg-rose-900 text-white text-xs font-black tracking-widest uppercase rounded">
                   ROOM-WISE ABSENTEE STATEMENT (कक्षवार अनुपस्थित छात्र विवरण पत्रक - परीक्षा अधीक्षक पटल)
                 </span>
               </div>
             </div>
 
             {/* Room-Wise Master Table */}
-            <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[660px]">
+            <div className="border border-slate-900 rounded-xl print:rounded-none print:border-black overflow-hidden print:overflow-visible">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-900 text-white font-extrabold uppercase text-[11px]">
                     <tr>
                       <th className="px-3 py-2.5 border-r border-slate-700 w-12 text-center">क्र.</th>
@@ -1377,21 +1377,21 @@ export default function AbsenteeManager({
             </div>
 
             {/* Footer Notes & Signatures for Room Statement */}
-            <div className="mt-8 pt-4 border-t-2 border-slate-300 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600">
+            <div className="print-sheet-footer mt-4 pt-2 border-t-2 border-slate-300 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600">
               <div>
-                <p className="font-bold text-slate-800">प्रमाण-पत्र (Certificate):</p>
-                <p className="text-[11px] text-slate-500 mt-1 max-w-md">
+                <p className="font-bold text-slate-800 text-xs">प्रमाण-पत्र (Certificate):</p>
+                <p className="text-[10.5px] text-slate-500 mt-0.5 max-w-md">
                   प्रमाणित किया जाता है कि उपरोक्त विवरण परीक्षा कक्षों में उपस्थित एवं अनुपस्थित छात्रों के वास्तविक सत्यापन उपरांत तैयार किया गया है।
                 </p>
               </div>
-              <div className="mt-6 sm:mt-0 flex items-center gap-12 text-center">
+              <div className="mt-4 sm:mt-0 flex items-center gap-12 text-center">
                 <div>
-                  <div className="w-36 h-8 border-b border-dashed border-slate-400"></div>
-                  <p className="text-[11px] font-bold text-slate-700 mt-1">हस्ताक्षर परीक्षा प्रभारी</p>
+                  <div className="w-32 h-6 border-b border-dashed border-slate-400"></div>
+                  <p className="text-[10px] font-bold text-slate-700 mt-0.5">हस्ताक्षर परीक्षा प्रभारी</p>
                 </div>
                 <div>
-                  <div className="w-36 h-8 border-b border-dashed border-slate-400"></div>
-                  <p className="text-[11px] font-bold text-slate-700 mt-1">हस्ताक्षर केंद्राध्यक्ष / सील</p>
+                  <div className="w-32 h-6 border-b border-dashed border-slate-400"></div>
+                  <p className="text-[10px] font-bold text-slate-700 mt-0.5">हस्ताक्षर केंद्राध्यक्ष / सील</p>
                 </div>
               </div>
             </div>
