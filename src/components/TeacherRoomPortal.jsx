@@ -146,6 +146,11 @@ export default function TeacherRoomPortal({
   const [isRelieverModalOpen, setIsRelieverModalOpen] = useState(false);
   const [isHandoverModalOpen, setIsHandoverModalOpen] = useState(false);
 
+  // Independent shift for teacher portal - defaults based on current time (>= 12:00 PM -> Shift 2)
+  const [portalShift, setPortalShift] = useState(() => {
+    return new Date().getHours() >= 12 ? 'shift_2' : (activeShift || 'shift_1');
+  });
+
   // Selected Exam Day State (Defaults to Today's scheduled exam day dynamically)
   const [selectedDayId, setSelectedDayId] = useState(() => {
     const today = getTodayExamDay();
@@ -277,11 +282,6 @@ export default function TeacherRoomPortal({
 
     return bundles;
   }, [currentUser, evaluationAllotment, marksLocks, classes]);
-
-  // Independent shift for teacher portal - defaults based on current time (>= 12:00 PM -> Shift 2)
-  const [portalShift, setPortalShift] = useState(() => {
-    return new Date().getHours() >= 12 ? 'shift_2' : (activeShift || 'shift_1');
-  });
 
   const seatingShift1 = useMemo(() => {
     return generateSeatingPlan({
