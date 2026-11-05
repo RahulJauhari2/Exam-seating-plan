@@ -33,7 +33,7 @@ import {
   exportClassAttendanceMatrixToExcel 
 } from '../utils/excelExport';
 import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay } from '../data/examSchemeData';
-import { fetchLiveAbsenteesAPI } from '../services/api';
+import { fetchLiveAbsenteesAPI, fetchLiveCopiesAPI } from '../services/api';
 
 export default function AbsenteeManager({ 
   seatingResult = {}, 
@@ -54,7 +54,8 @@ export default function AbsenteeManager({
   const [activeViewMode, setActiveViewMode] = useState('class-wise'); // 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [filterOnlyAbsentClasses, setFilterOnlyAbsentClasses] = useState(false);
-  const [selectedDateFilter, setSelectedDateFilter] = useState(() => examDetails?.date || getTodayExamDay().fullDate || '2026-11-04');
+  const todayDateStr = useMemo(() => getTodayExamDay().fullDate || '2026-11-05', []);
+  const [selectedDateFilter, setSelectedDateFilter] = useState(() => todayDateStr);
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('all'); // 'all' | 'absent' | 'present' | 'b-copy'
   const [copiedClassKey, setCopiedClassKey] = useState(null);
   const [printOption, setPrintOption] = useState('both'); // 'both' | 'class-wise' | 'room-wise' | 're-exam' | 'register-matrix'
@@ -89,17 +90,39 @@ export default function AbsenteeManager({
     return () => { isMounted = false; };
   }, [examDetails.examName, absentStudents]);
 
+  // Load date-wise B-copies dynamically when date filter changes
+  const [dateWiseCopyMap, setDateWiseCopyMap] = useState({});
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchLiveCopiesAPI({
+      sessionName: examDetails?.examName,
+      date: selectedDateFilter,
+      shift: activeShift,
+    }).then((res) => {
+      if (isMounted && res && res.success && res.copyMap) {
+        setDateWiseCopyMap(res.copyMap);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, [selectedDateFilter, activeShift, examDetails?.examName, bCopyRecords]);
+
+  const activeCopyMap = useMemo(() => {
+    if (dateWiseCopyMap && Object.keys(dateWiseCopyMap).length > 0) return dateWiseCopyMap;
+    return bCopyRecords || {};
+  }, [dateWiseCopyMap, bCopyRecords]);
+
   // Helper to fetch B-copies for a student
   const getStudentBCopies = (rollNo) => {
     const rollStr = String(rollNo);
-    const rec = bCopyRecords[rollStr] || bCopyRecords[Number(rollNo)];
+    const rec = activeCopyMap[rollStr] || activeCopyMap[Number(rollNo)];
     return rec?.bCopiesCount || 0;
   };
 
   // Center-wide total B-copies
   const totalCenterBCopies = useMemo(() => {
-    return Object.values(bCopyRecords || {}).reduce((sum, rec) => sum + (rec?.bCopiesCount || 0), 0);
-  }, [bCopyRecords]);
+    return Object.values(activeCopyMap || {}).reduce((sum, rec) => sum + (rec?.bCopiesCount || 0), 0);
+  }, [activeCopyMap]);
 
   // Toggle single student absent status (Synchronized to Backend & MongoDB)
   const toggleAbsent = async (rollNo) => {
@@ -191,10 +214,6 @@ export default function AbsenteeManager({
 
   // Compute effective absentees map for the selected date (supports single date & all dates)
   const effectiveAbsenteesMap = useMemo(() => {
-    const isCurrentDate = selectedDateFilter === (examDetails?.date || '2026-11-02');
-    if (isCurrentDate) {
-      return absentStudents;
-    }
     const map = {};
     if (selectedDateFilter === 'all') {
       (allDatesAbsentees || []).forEach((r) => {
@@ -204,19 +223,41 @@ export default function AbsenteeManager({
         }
       });
       Object.keys(absentStudents || {}).forEach((k) => {
-        if (absentStudents[k]) {
-          map[k] = true;
-        }
+        if (absentStudents[k]) map[k] = true;
       });
       return map;
     }
+
+    // Match selectedDateFilter against allDatesAbsentees (e.g. 2026-11-05 or 05-11-26)
     (allDatesAbsentees || []).forEach((r) => {
-      const match = r.date === selectedDateFilter || selectedDateFilter.includes(r.date) || (r.date && r.date.includes(selectedDateFilter));
+      const rDate = String(r.date || '');
+      const sFilter = String(selectedDateFilter || '');
+      const match =
+        rDate === sFilter ||
+        rDate.includes(sFilter) ||
+        sFilter.includes(rDate) ||
+        (rDate.replace(/-/g, '').slice(-4) === sFilter.replace(/-/g, '').slice(-4));
       if (match && r.rollNo) {
         map[String(r.rollNo)] = true;
         map[Number(r.rollNo)] = true;
       }
     });
+
+    // Also include live local absentStudents if on today's active date
+    const todayFullDate = getTodayExamDay().fullDate;
+    const isToday =
+      selectedDateFilter === todayFullDate ||
+      selectedDateFilter === getTodayExamDay().date ||
+      selectedDateFilter === examDetails?.date;
+    if (isToday) {
+      Object.keys(absentStudents || {}).forEach((k) => {
+        if (absentStudents[k]) {
+          map[String(k)] = true;
+          map[Number(k)] = true;
+        }
+      });
+    }
+
     return map;
   }, [selectedDateFilter, examDetails?.date, absentStudents, allDatesAbsentees]);
 
@@ -258,7 +299,7 @@ export default function AbsenteeManager({
         students: room.students || [],
       };
     });
-  }, [rooms, absentStudents, bCopyRecords]);
+  }, [rooms, effectiveAbsenteesMap, activeCopyMap]);
 
   // 2. Flatten all Seated Students across the entire center
   const allSeatedStudents = useMemo(() => {
@@ -524,7 +565,7 @@ export default function AbsenteeManager({
           {EXAM_TIMETABLE.map((d) => {
             const dateStr = d.fullDate || d.date;
             const isSelected = selectedDateFilter === d.fullDate || selectedDateFilter === d.date;
-            const isToday = d.id === getTodayExamDay().id || d.fullDate === (examDetails?.date || getTodayExamDay().fullDate);
+            const isToday = d.id === getTodayExamDay().id;
             return (
               <button
                 key={d.id}

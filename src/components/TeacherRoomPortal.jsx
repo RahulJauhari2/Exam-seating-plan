@@ -39,8 +39,79 @@ import {
   RefreshCw,
   Phone,
   Bell,
+  Volume2,
   X
 } from 'lucide-react';
+
+// Lightweight pure-JS Web Audio School Bell Synthesizer (0 KB download, 100% offline & mobile-ready)
+const playSchoolWarningBell = () => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const playChime = (freq, start, duration, volume = 0.35) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(0, ctx.currentTime + start);
+        gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + duration);
+      };
+
+      // Classic School Ding-Dong-Ding-Dong Warning Bell Pattern
+      playChime(880, 0, 0.7);       // A5
+      playChime(659.25, 0.35, 0.7); // E5
+      playChime(1046.5, 0.75, 0.9); // C6
+      playChime(880, 1.2, 1.4);     // A5
+    }
+  } catch (err) {
+    console.error('Audio chime error:', err);
+  }
+
+  // Voice Speech Announcement in Hindi
+  try {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance('चेतावनी घंटी! परीक्षा समाप्त होने में 15 मिनट शेष हैं। बी कॉपी वितरण बंद करें और कॉपियां नत्थी कराएं।');
+      utterance.lang = 'hi-IN';
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch (err) {}
+
+  // Mobile Vibration alert
+  try {
+    if (navigator?.vibrate) {
+      navigator.vibrate([400, 200, 400, 200, 800]);
+    }
+  } catch (err) {}
+};
+
+function getRemainingExamMinutes(timeRange) {
+  if (!timeRange) return null;
+  const parts = timeRange.split('-');
+  if (parts.length < 2) return null;
+  const endPart = parts[1].trim();
+  const match = endPart.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const ampm = (match[3] || '').toUpperCase();
+  if (ampm === 'PM' && hours < 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const endMin = hours * 60 + minutes;
+  return endMin - nowMin;
+}
 
 export default function TeacherRoomPortal({
   examSession,
@@ -77,15 +148,38 @@ export default function TeacherRoomPortal({
 
   // Selected Exam Day State (Defaults to Today's scheduled exam day dynamically)
   const [selectedDayId, setSelectedDayId] = useState(() => {
-    if (activeDate) {
-      const match = (EXAM_TIMETABLE || []).find(
-        (d) => d.fullDate === activeDate || d.date === activeDate || activeDate.includes(d.date)
-      );
-      if (match) return match.id;
-    }
     const today = getTodayExamDay();
-    return today ? today.id : 'd4';
+    return today ? today.id : 'd5';
   });
+
+  // 15-Minute Warning Alarm State & Real-time Timer
+  const [alarmTestPlayed, setAlarmTestPlayed] = useState(false);
+  const [warningRemainingMins, setWarningRemainingMins] = useState(null);
+  const hasTriggeredWarningBell = useRef(false);
+
+  useEffect(() => {
+    const checkTimer = () => {
+      const timeStr = examDetails?.timeRange || (portalShift === 'shift_1' ? (examDetails?.shift1Time || '09:30 AM - 12:00 PM') : (examDetails?.shift2Time || '01:00 PM - 03:00 PM'));
+      const remaining = getRemainingExamMinutes(timeStr);
+      setWarningRemainingMins(remaining);
+
+      const warnMinutes = Number(examDetails?.warningMinutes) || 15;
+      if (remaining !== null && remaining <= warnMinutes && remaining > 0) {
+        if (!hasTriggeredWarningBell.current) {
+          hasTriggeredWarningBell.current = true;
+          playSchoolWarningBell();
+        }
+      }
+    };
+
+    checkTimer();
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      checkTimer();
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [examDetails, portalShift]);
 
   // Sync when activeDate prop updates
   useEffect(() => {
@@ -848,22 +942,64 @@ export default function TeacherRoomPortal({
           </div>
         )}
 
-        {/* Dynamic Exam Timing & Warning Bell Alert Card */}
+        {/* Dynamic Exam Timing & Warning Bell Alert Card with Live Alarm & Test Button */}
         {currentShiftDutyInfo.hasDuty && (
-          <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 text-xs">
+          <div className={`mt-3 p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all ${
+            warningRemainingMins !== null && warningRemainingMins <= (Number(examDetails?.warningMinutes) || 15) && warningRemainingMins > 0
+              ? 'bg-rose-50 border-2 border-rose-400 shadow-md animate-pulse'
+              : 'bg-amber-50 border border-amber-300'
+          }`}>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Bell className="w-4 h-4 animate-pulse" />
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                warningRemainingMins !== null && warningRemainingMins <= (Number(examDetails?.warningMinutes) || 15) && warningRemainingMins > 0
+                  ? 'bg-rose-600 text-white animate-bounce'
+                  : 'bg-amber-500 text-white'
+              }`}>
+                <Bell className="w-5 h-5 animate-pulse" />
               </div>
               <div>
-                <div className="font-black text-amber-950 flex items-center gap-1.5">
-                  <span>⏰ परीक्षा समय: {examDetails?.timeRange || (portalShift === 'shift_1' ? (examDetails?.shift1Time || '08:30 AM - 11:45 AM') : (examDetails?.shift2Time || '01:30 PM - 04:45 PM'))}</span>
+                <div className="font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                  <span>⏰ परीक्षा समय: {examDetails?.timeRange || (portalShift === 'shift_1' ? (examDetails?.shift1Time || '09:30 AM - 12:00 PM') : (examDetails?.shift2Time || '01:00 PM - 03:00 PM'))}</span>
+                  {warningRemainingMins !== null && warningRemainingMins > 0 && (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      warningRemainingMins <= (Number(examDetails?.warningMinutes) || 15)
+                        ? 'bg-rose-600 text-white animate-pulse'
+                        : 'bg-amber-200 text-amber-950'
+                    }`}>
+                      ⏳ {warningRemainingMins} मिनट शेष
+                    </span>
+                  )}
                 </div>
-                <div className="text-[11px] text-amber-900 font-medium mt-0.5">
-                  🔔 चेतावनी अलर्ट ({examDetails?.warningMinutes || 15} मिनट पूर्व): परीक्षार्थियों से उत्तर-पुस्तिकाएं नत्थी (बांधना) कराएं एवं 'B' कॉपी वितरण बंद करें।
+                <div className={`text-[11px] font-semibold mt-0.5 ${
+                  warningRemainingMins !== null && warningRemainingMins <= (Number(examDetails?.warningMinutes) || 15) && warningRemainingMins > 0
+                    ? 'text-rose-950 font-black'
+                    : 'text-amber-900'
+                }`}>
+                  {warningRemainingMins !== null && warningRemainingMins <= (Number(examDetails?.warningMinutes) || 15) && warningRemainingMins > 0
+                    ? `🚨 चेतावनी घंटी! अंतिम ${warningRemainingMins} मिनट शेष हैं: 'B' कॉपी वितरण तुरंत बंद करें व कॉपियां नत्थी कराएं!`
+                    : `🔔 चेतावनी अलार्म (${examDetails?.warningMinutes || 15} मिनट पूर्व): B कॉपी वितरण बंद करने हेतु मोबाइल पर स्वतः घंटी बजेगी।`}
                 </div>
               </div>
             </div>
+
+            {/* Test Alarm Sound on Mobile Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playSchoolWarningBell();
+                setAlarmTestPlayed(true);
+                setTimeout(() => setAlarmTestPlayed(false), 3500);
+              }}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shrink-0 text-xs shadow-xs ${
+                alarmTestPlayed
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white hover:bg-amber-100 text-amber-900 border border-amber-300'
+              }`}
+              title="मोबाइल पर घंटी और आवाज टेस्ट करें"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              <span>{alarmTestPlayed ? '🔔 घंटी बज रही है...' : '🔔 अलार्म टेस्ट करें'}</span>
+            </button>
           </div>
         )}
 

@@ -248,12 +248,14 @@ export default function App() {
             setRooms(s.rooms);
           }
           if (s.examDetails && s.examDetails.schoolName) {
+            const todayDay = getTodayExamDay();
+            const todayDate = todayDay?.fullDate || todayDay?.date;
             setExamDetails((prev) => ({
               ...prev,
               schoolName: s.examDetails.schoolName || prev.schoolName,
               examName: s.examDetails.examName || prev.examName,
               timeRange: s.examDetails.timeRange || prev.timeRange,
-              date: s.examDetails.date || prev.date,
+              date: todayDate || s.examDetails.date || prev.date,
             }));
           }
           if (s.dutyRoster && Object.keys(s.dutyRoster).length > 0) {
