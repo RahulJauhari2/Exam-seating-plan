@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { EXAM_TIMETABLE, getTodayExamDay } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
