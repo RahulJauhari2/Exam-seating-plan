@@ -260,4 +260,58 @@
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
+
+  /* Dedicated 2D Matrix Print Rules */
+  .print-absentee-sheet + .print-absentee-sheet,
+  .print-absentee-sheet + .print-matrix-sheet,
+  .print-matrix-sheet + .print-absentee-sheet {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .print-matrix-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print-matrix-sheet table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 7pt !important;
+    table-layout: auto !important;
+  }
+
+  .print-matrix-sheet th,
+  .print-matrix-sheet td {
+    border: 1px solid #000000 !important;
+    padding: 1.5px 1.5px !important;
+    text-align: center !important;
+    line-height: 1.1 !important;
+  }
+
+  .print-matrix-sheet thead th {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 6.5pt !important;
+    padding: 2.5px 1px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-matrix-sheet tfoot {
+    display: table-row-group !important;
+  }
+
+  .print-matrix-sheet tfoot tr {
+    background-color: #e2e8f0 !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

@@ -278,3 +278,110 @@ export function exportMasterTeacherDutyToExcel({ masterDutyRows = [], shiftSlots
   const fileName = `Master_Teacher_Duty_Audit_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
+
+/**
+ * Exports 2D Room-wise x Class-wise Answer Book Matrix to Excel
+ */
+export function export2DMatrixToExcel({ matrixRows = [], matrixColumns = [], colTotals = {}, grandTotal = {}, bCopyDetails = [], absentDetails = [] }, examDetails = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  // 1. Matrix Sheet
+  const rows = matrixRows.map((r, idx) => {
+    const row = {
+      'क्र.': idx + 1,
+      'कमरा / हॉल': r.roomName,
+    };
+    matrixColumns.forEach((c) => {
+      const cell = r.cells[c.classKey];
+      if (!cell || cell.totalSeated === 0) {
+        row[c.displayName] = '—';
+      } else if (cell.bCopiesCount > 0) {
+        row[c.displayName] = `${cell.presentCount} (A) + ${cell.bCopiesCount} (B)`;
+      } else {
+        row[c.displayName] = `${cell.presentCount} (A)`;
+      }
+    });
+    row["कुल 'A' कॉपियां"] = r.rowTotalA;
+    row["कुल 'B' कॉपियां"] = r.rowTotalB;
+    row["कमरा महायोग (A+B)"] = r.rowGrandTotal;
+    return row;
+  });
+
+  // Summary Row: Total A
+  const summaryA = {
+    'क्र.': '',
+    'कमरा / हॉल': "कक्षा कुल 'A' कॉपियां",
+  };
+  matrixColumns.forEach((c) => {
+    summaryA[c.displayName] = (colTotals[c.classKey]?.totalA || 0) + ' (A)';
+  });
+  summaryA["कुल 'A' कॉपियां"] = grandTotal.totalA || 0;
+  summaryA["कुल 'B' कॉपियां"] = '—';
+  summaryA["कमरा महायोग (A+B)"] = grandTotal.totalA || 0;
+  rows.push(summaryA);
+
+  // Summary Row: Total B
+  const summaryB = {
+    'क्र.': '',
+    'कमरा / हॉल': "कक्षा कुल 'B' कॉपियां",
+  };
+  matrixColumns.forEach((c) => {
+    summaryB[c.displayName] = (colTotals[c.classKey]?.totalB || 0) > 0 ? `${colTotals[c.classKey].totalB} (B)` : '0';
+  });
+  summaryB["कुल 'A' कॉपियां"] = '—';
+  summaryB["कुल 'B' कॉपियां"] = grandTotal.totalB || 0;
+  summaryB["कमरा महायोग (A+B)"] = grandTotal.totalB || 0;
+  rows.push(summaryB);
+
+  // Summary Row: Grand Total
+  const summaryGrand = {
+    'क्र.': 'महायोग',
+    'कमरा / हॉल': "कक्षा संपूर्ण महायोग (A+B)",
+  };
+  matrixColumns.forEach((c) => {
+    const tot = (colTotals[c.classKey]?.totalA || 0) + (colTotals[c.classKey]?.totalB || 0);
+    summaryGrand[c.displayName] = `${tot} कुल`;
+  });
+  summaryGrand["कुल 'A' कॉपियां"] = grandTotal.totalA || 0;
+  summaryGrand["कुल 'B' कॉपियां"] = grandTotal.totalB || 0;
+  summaryGrand["कमरा महायोग (A+B)"] = grandTotal.totalCopies || 0;
+  rows.push(summaryGrand);
+
+  const ws1 = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, ws1, '2D_कॉपी_वितरण_मैट्रिक्स');
+
+  // 2. B-Copy Audit Sheet
+  if (bCopyDetails && bCopyDetails.length > 0) {
+    const bRows = bCopyDetails.map((b, i) => ({
+      'क्र.': i + 1,
+      'कमरा': b.roomName,
+      'कक्षा': b.className,
+      'सेक्शन': b.section || '',
+      'रोल नंबर': b.rollNo,
+      'परीक्षार्थी नाम': b.name || '',
+      "पूरक 'B' कॉपियां": b.bCount || 1,
+      'B-कॉपी नंबर': Array.isArray(b.bCopyNumbers) ? b.bCopyNumbers.join(', ') : '',
+      'A-कॉपी सीरियल': b.aCopyNumber || '',
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(bRows);
+    XLSX.utils.book_append_sheet(workbook, ws2, 'B_कॉपी_विशेष_विवरण');
+  }
+
+  // 3. Absentee Audit Sheet
+  if (absentDetails && absentDetails.length > 0) {
+    const abRows = absentDetails.map((a, i) => ({
+      'क्र.': i + 1,
+      'कमरा': a.roomName,
+      'कक्षा': a.className,
+      'सेक्शन': a.section || '',
+      'रोल नंबर': a.rollNo,
+      'परीक्षार्थी नाम': a.name || '',
+      'स्थिति': 'अनुपस्थित (ABSENT)',
+    }));
+    const ws3 = XLSX.utils.json_to_sheet(abRows);
+    XLSX.utils.book_append_sheet(workbook, ws3, 'अनुपस्थित_छात्र_सूची');
+  }
+
+  const fileName = `2D_Copy_Distribution_Matrix_${(examDetails?.examName || 'Exam').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}

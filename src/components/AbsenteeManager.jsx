@@ -25,12 +25,15 @@ import {
   ClipboardList,
   Download,
   FileCheck,
-  Award
+  Award,
+  LayoutGrid,
+  X
 } from 'lucide-react';
 import { 
   exportAbsenteeListToExcel, 
   exportReExamListToExcel, 
-  exportClassAttendanceMatrixToExcel 
+  exportClassAttendanceMatrixToExcel,
+  export2DMatrixToExcel
 } from '../utils/excelExport';
 import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay, areDatesMatching, normalizeDateToYYYYMMDD } from '../data/examSchemeData';
 import { fetchLiveAbsenteesAPI, fetchLiveCopiesAPI } from '../services/api';
@@ -62,6 +65,7 @@ export default function AbsenteeManager({
   const [reExamSearch, setReExamSearch] = useState('');
   const [reExamClassFilter, setReExamClassFilter] = useState('all');
   const [matrixSelectedClass, setMatrixSelectedClass] = useState('all');
+  const [selectedMatrixCell, setSelectedMatrixCell] = useState(null);
 
   // Load all dates absentee records from MongoDB
   const [allDatesAbsentees, setAllDatesAbsentees] = useState([]);
@@ -393,7 +397,199 @@ export default function AbsenteeManager({
     return allSeatedStudents
       .filter((st) => Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]))
       .sort((a, b) => Number(a.rollNo || 0) - Number(b.rollNo || 0));
-  }, [allSeatedStudents, absentStudents]);
+  }, [allSeatedStudents, effectiveAbsenteesMap]);
+
+  // 5. Compute 2D Room-wise x Class-wise Matrix Data
+  const {
+    matrixColumns,
+    matrixRows,
+    matrixColTotals,
+    matrixGrandTotal,
+    allBCopyDetails,
+    allAbsentDetails,
+  } = useMemo(() => {
+    const colMap = {};
+    allSeatedStudents.forEach((st) => {
+      const classKey = `${st.className || ''}_${st.section || ''}`.trim() || 'Other';
+      if (!colMap[classKey]) {
+        colMap[classKey] = {
+          classKey,
+          className: st.className || '',
+          section: st.section || '',
+          displayName: `${st.className || ''}-${st.section || ''}`.trim(),
+        };
+      }
+    });
+
+    const matrixColumns = Object.values(colMap).sort((a, b) => {
+      const numA = parseInt(a.className, 10) || 0;
+      const numB = parseInt(b.className, 10) || 0;
+      if (numA !== numB) return numA - numB;
+      return (a.section || '').localeCompare(b.section || '');
+    });
+
+    const matrixColTotals = {};
+    matrixColumns.forEach((c) => {
+      matrixColTotals[c.classKey] = { totalA: 0, totalB: 0, totalAllocated: 0, totalAbsent: 0 };
+    });
+
+    const allBCopyDetails = [];
+    const allAbsentDetails = [];
+
+    const matrixRows = rooms.map((room) => {
+      const cells = {};
+      let rowTotalA = 0;
+      let rowTotalB = 0;
+      let rowTotalAllocated = 0;
+      let rowTotalAbsent = 0;
+
+      matrixColumns.forEach((col) => {
+        const studentsInCell = (room.students || []).filter((s) => {
+          const matchClass = String(s.className || '').trim() === String(col.className).trim();
+          const matchSec = String(s.section || '').trim().toUpperCase() === String(col.section).trim().toUpperCase();
+          return matchClass && matchSec;
+        });
+
+        const totalSeated = studentsInCell.length;
+        if (totalSeated === 0) {
+          cells[col.classKey] = {
+            classKey: col.classKey,
+            displayName: col.displayName,
+            totalSeated: 0,
+            presentCount: 0,
+            absentCount: 0,
+            bCopiesCount: 0,
+            students: [],
+            studentsWithB: [],
+            absentStudents: [],
+            rollRange: '—',
+          };
+          return;
+        }
+
+        rowTotalAllocated += totalSeated;
+        matrixColTotals[col.classKey].totalAllocated += totalSeated;
+
+        let cellAbsent = 0;
+        let cellB = 0;
+        const absentStudents = [];
+        const studentsWithB = [];
+        const rolls = [];
+
+        studentsInCell.forEach((st) => {
+          rolls.push(Number(st.rollNo));
+          const isAbs = Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]);
+          const bCount = getStudentBCopies(st.rollNo);
+
+          if (isAbs) {
+            cellAbsent++;
+            absentStudents.push(st);
+            allAbsentDetails.push({
+              roomName: room.roomName || room.name,
+              roomId: room.roomId || room.id,
+              className: col.className,
+              section: col.section,
+              rollNo: st.rollNo,
+              name: st.name || '',
+            });
+          }
+          if (bCount > 0) {
+            cellB += bCount;
+            const bRec = activeCopyMap[String(st.rollNo)] || activeCopyMap[Number(st.rollNo)];
+            studentsWithB.push({
+              rollNo: st.rollNo,
+              name: st.name || '',
+              bCount,
+              bCopyNumbers: bRec?.bCopyNumbers || [],
+              aCopyNumber: bRec?.aCopyNumber || '',
+            });
+            allBCopyDetails.push({
+              roomName: room.roomName || room.name,
+              roomId: room.roomId || room.id,
+              className: col.className,
+              section: col.section,
+              rollNo: st.rollNo,
+              name: st.name || '',
+              bCount,
+              bCopyNumbers: bRec?.bCopyNumbers || [],
+              aCopyNumber: bRec?.aCopyNumber || '',
+            });
+          }
+        });
+
+        const presentCount = totalSeated - cellAbsent;
+        rowTotalA += presentCount;
+        rowTotalB += cellB;
+        rowTotalAbsent += cellAbsent;
+
+        matrixColTotals[col.classKey].totalA += presentCount;
+        matrixColTotals[col.classKey].totalB += cellB;
+        matrixColTotals[col.classKey].totalAbsent += cellAbsent;
+
+        rolls.sort((a, b) => a - b);
+        const minRoll = rolls[0];
+        const maxRoll = rolls[rolls.length - 1];
+        const rollRange = minRoll === maxRoll ? `#${minRoll}` : `#${minRoll}-${maxRoll}`;
+
+        cells[col.classKey] = {
+          classKey: col.classKey,
+          displayName: col.displayName,
+          totalSeated,
+          presentCount,
+          absentCount: cellAbsent,
+          bCopiesCount: cellB,
+          students: studentsInCell,
+          studentsWithB,
+          absentStudents,
+          rollRange,
+        };
+      });
+
+      return {
+        roomId: room.roomId || room.id,
+        roomName: room.roomName || room.name,
+        cells,
+        rowTotalAllocated,
+        rowTotalA,
+        rowTotalB,
+        rowTotalAbsent,
+        rowGrandTotal: rowTotalA + rowTotalB,
+      };
+    });
+
+    const matrixGrandTotal = {
+      totalAllocated: matrixRows.reduce((sum, r) => sum + r.rowTotalAllocated, 0),
+      totalA: matrixRows.reduce((sum, r) => sum + r.rowTotalA, 0),
+      totalB: matrixRows.reduce((sum, r) => sum + r.rowTotalB, 0),
+      totalAbsent: matrixRows.reduce((sum, r) => sum + r.rowTotalAbsent, 0),
+      totalCopies: matrixRows.reduce((sum, r) => sum + r.rowGrandTotal, 0),
+    };
+
+    return {
+      matrixColumns,
+      matrixRows,
+      matrixColTotals,
+      matrixGrandTotal,
+      allBCopyDetails,
+      allAbsentDetails,
+    };
+  }, [allSeatedStudents, rooms, effectiveAbsenteesMap, activeCopyMap]);
+
+  const handleExport2DMatrixExcel = () => {
+    export2DMatrixToExcel({
+      matrixRows,
+      matrixColumns,
+      colTotals: matrixColTotals,
+      grandTotal: matrixGrandTotal,
+      bCopyDetails: allBCopyDetails,
+      absentDetails: allAbsentDetails,
+    }, examDetails);
+  };
+
+  const displayedMatrixColumns = useMemo(() => {
+    if (matrixSelectedClass === 'all') return matrixColumns;
+    return matrixColumns.filter((c) => c.classKey === matrixSelectedClass);
+  }, [matrixColumns, matrixSelectedClass]);
 
   // Center Totals
   const totalAllocated = absenteeSummary.reduce((sum, r) => sum + r.totalSeated, 0);
@@ -466,13 +662,25 @@ export default function AbsenteeManager({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Excel Export Buttons */}
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+            title="कक्षा व कमरा अनुपस्थिति एक्सेल डाउनलोड करें"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>एक्सेल (.xlsx)</span>
+            <span>एक्सेल (सामान्य)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExport2DMatrixExcel}
+            className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+            title="2D उत्तर-पुस्तिका वितरण मैट्रिक्स एक्सेल (.xlsx) डाउनलोड करें"
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>2D मैट्रिक्स (.xlsx)</span>
           </button>
 
           {/* Print Dropdown Buttons */}
@@ -480,20 +688,38 @@ export default function AbsenteeManager({
             <button
               type="button"
               onClick={() => handlePrint('class-wise')}
-              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex items-center gap-1 transition-all border-r border-indigo-200 cursor-pointer"
+              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex items-center gap-1 transition-all border-r border-indigo-200 cursor-pointer"
               title="केवल कक्षा-वार पत्रक प्रिंट करें"
             >
               <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
-              <span>कक्षा-वार प्रिंट</span>
+              <span>कक्षा-वार</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePrint('room-wise')}
+              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex items-center gap-1 transition-all border-r border-indigo-200 cursor-pointer"
+              title="केवल कमरा-वार पत्रक प्रिंट करें"
+            >
+              <DoorOpen className="w-3.5 h-3.5 text-blue-600" />
+              <span>कमरा-वार</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePrint('2d-matrix')}
+              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex items-center gap-1 transition-all border-r border-indigo-200 cursor-pointer"
+              title="2D उत्तर-पुस्तिका वितरण मैट्रिक्स प्रिंट करें (Landscape)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-purple-600" />
+              <span>2D मैट्रिक्स</span>
             </button>
             <button
               type="button"
               onClick={() => handlePrint('both')}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-              title="दोनों (कक्षा व कमरा) पत्रक प्रिंट करें"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="सभी पत्रक प्रिंट करें"
             >
               <Printer className="w-4 h-4" />
-              <span>प्रिंट पत्रक</span>
+              <span>सभी प्रिंट</span>
             </button>
           </div>
 
@@ -691,20 +917,20 @@ export default function AbsenteeManager({
         )}
       </div>
 
-      {/* View Switcher: Class-Wise vs Room-Wise (No Print) */}
+      {/* View Switcher: Class-Wise vs Room-Wise vs 2D Matrix (No Print) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 no-print flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveViewMode('class-wise')}
-            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
               activeViewMode === 'class-wise'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <GraduationCap className="w-4 h-4" />
-            <span>कक्षा-वार अनुपस्थिति (Class Teacher View)</span>
+            <span>कक्षा-वार अनुपस्थिति</span>
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
               totalAbsent > 0 ? 'bg-rose-500 text-white font-black' : 'bg-black/10'
             }`}>
@@ -715,14 +941,30 @@ export default function AbsenteeManager({
           <button
             type="button"
             onClick={() => setActiveViewMode('room-wise')}
-            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
               activeViewMode === 'room-wise'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <DoorOpen className="w-4 h-4" />
-            <span>कमरा-वार सीटिंग व उपस्थिति (Room View)</span>
+            <span>कमरा-वार सीटिंग</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveViewMode('2d-matrix')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeViewMode === '2d-matrix'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>📊 2D कॉपी मैट्रिक्स (A & B Matrix)</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-black">
+              {totalCenterBCopies} B
+            </span>
           </button>
         </div>
 
@@ -732,7 +974,9 @@ export default function AbsenteeManager({
           <span>
             {activeViewMode === 'class-wise'
               ? 'प्रत्येक कक्षा के अनुपस्थित छात्र उनके आवंटित कमरे सहित'
-              : 'कमरे अनुसार सीटिंग कार्ड्स पर 1-क्लिक अनुपस्थिति मार्क करें'}
+              : activeViewMode === 'room-wise'
+              ? 'कमरे अनुसार सीटिंग कार्ड्स पर 1-क्लिक अनुपस्थिति मार्क करें'
+              : 'कमरा × कक्षा 2D ग्रिड — किसी भी सेल पर क्लिक करके रोल नंबर व कॉपी विवरण देखें'}
           </span>
         </div>
       </div>
@@ -1118,6 +1362,525 @@ export default function AbsenteeManager({
       )}
 
       {/* ======================================================== */}
+      {/* VIEW C: 2D ANSWER BOOK MATRIX (ROOM-WISE x CLASS-WISE)   */}
+      {/* ======================================================== */}
+      {activeViewMode === '2d-matrix' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 no-print space-y-5">
+          {/* Header & Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-purple-600 text-white rounded-lg">
+                  <LayoutGrid className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-800">
+                    कमरा × कक्षा 2D उत्तर-पुस्तिका वितरण मैट्रिक्स (A & B Copy Matrix)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    प्रत्येक कमरे में उपस्थित ('A') व पूरक ('B') कॉपियों का प्रत्यक्ष संकलन। किसी भी बॉक्स पर क्लिक करके रोल नंबर देखें।
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+                <Filter className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-[11px] font-bold text-slate-600">कक्षा:</span>
+                <select
+                  value={matrixSelectedClass}
+                  onChange={(e) => setMatrixSelectedClass(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">सभी कक्षाएं ({matrixColumns.length})</option>
+                  {matrixColumns.map((c) => (
+                    <option key={c.classKey} value={c.classKey}>
+                      {c.displayName} ({matrixColTotals[c.classKey]?.totalAllocated || 0} छात्र)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExport2DMatrixExcel}
+                className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                title="2D मैट्रिक्स एक्सेल डाउनलोड करें"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>एक्सेल (.xlsx)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrint('2d-matrix')}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                title="2D मैट्रिक्स A4 Landscape में प्रिंट करें"
+              >
+                <Printer className="w-4 h-4" />
+                <span>प्रिंट (Landscape)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">कुल आबंटित</span>
+              <p className="text-lg font-black text-slate-900 mt-0.5">{matrixGrandTotal.totalAllocated}</p>
+            </div>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase">उपस्थित ('A' कॉपियां)</span>
+              <p className="text-lg font-black text-emerald-800 mt-0.5">{matrixGrandTotal.totalA}</p>
+            </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <span className="text-[10px] font-bold text-amber-800 uppercase">कुल पूरक 'B' कॉपियां</span>
+              <p className="text-lg font-black text-amber-900 mt-0.5">{matrixGrandTotal.totalB}</p>
+            </div>
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+              <span className="text-[10px] font-bold text-rose-700 uppercase">कुल अनुपस्थित</span>
+              <p className="text-lg font-black text-rose-800 mt-0.5">{matrixGrandTotal.totalAbsent}</p>
+            </div>
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
+              <span className="text-[10px] font-bold text-purple-700 uppercase">कुल प्रयुक्त कॉपियां (A+B)</span>
+              <p className="text-lg font-black text-purple-900 mt-0.5">{matrixGrandTotal.totalCopies}</p>
+            </div>
+          </div>
+
+          {/* Legend / Info bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-slate-600">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="font-bold text-slate-800">संकेत (Legend):</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-emerald-600 inline-block"></span>
+                <strong className="text-emerald-800">A</strong> = उपस्थित मुख्य कॉपियां
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block"></span>
+                <strong className="text-amber-800">+B</strong> = अतिरिक्त पूरक कॉपियां
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-rose-500 inline-block"></span>
+                <strong className="text-rose-800">अनुप.</strong> = अनुपस्थित छात्र
+              </span>
+              <span className="inline-flex items-center gap-1 text-slate-500 font-mono">
+                #9101-9125 = रोल नंबर रेंज
+              </span>
+            </div>
+            <span className="text-indigo-600 font-bold">
+              💡 किसी भी सेल पर क्लिक/टैप करके छात्र सूची व रोल नंबर देखें
+            </span>
+          </div>
+
+          {/* Interactive 2D Matrix Table */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto max-h-[600px] relative">
+              <table className="w-full text-xs text-center border-collapse">
+                <thead className="bg-slate-900 text-white font-extrabold uppercase sticky top-0 z-20">
+                  <tr>
+                    <th className="p-3 text-left border-r border-slate-700 bg-slate-900 sticky left-0 z-30 min-w-[130px] shadow-sm">
+                      कमरा / कक्ष
+                    </th>
+                    {displayedMatrixColumns.map((col) => (
+                      <th key={col.classKey} className="p-2.5 border-r border-slate-700 min-w-[78px] max-w-[110px]">
+                        <div className="font-black text-xs text-amber-300">{col.displayName}</div>
+                        <div className="text-[10px] font-medium text-slate-300">
+                          {matrixColTotals[col.classKey]?.totalAllocated || 0} छात्र
+                        </div>
+                      </th>
+                    ))}
+                    <th className="p-2.5 border-r border-slate-700 bg-emerald-950 text-emerald-300 min-w-[70px]">
+                      कुल 'A'
+                    </th>
+                    <th className="p-2.5 border-r border-slate-700 bg-amber-950 text-amber-300 min-w-[70px]">
+                      कुल 'B'
+                    </th>
+                    <th className="p-2.5 border-r border-slate-700 bg-rose-950 text-rose-300 min-w-[70px]">
+                      अनुपस्थित
+                    </th>
+                    <th className="p-2.5 bg-purple-950 text-purple-200 min-w-[75px]">
+                      महायोग
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {matrixRows.map((r, rIdx) => {
+                    if (r.rowTotalAllocated === 0) return null;
+                    return (
+                      <tr key={r.roomId} className={rIdx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-100/70'}>
+                        <td className="p-2.5 text-left font-black text-slate-900 border-r border-slate-200 sticky left-0 z-10 bg-inherit shadow-xs">
+                          <div className="text-xs font-black">{r.roomName}</div>
+                          <div className="text-[10px] text-slate-500 font-semibold">{r.rowTotalAllocated} आबंटित</div>
+                        </td>
+                        {displayedMatrixColumns.map((col) => {
+                          const cell = r.cells[col.classKey];
+                          if (!cell || cell.totalSeated === 0) {
+                            return (
+                              <td key={col.classKey} className="p-2 border-r border-slate-200 text-slate-300 font-bold select-none">
+                                —
+                              </td>
+                            );
+                          }
+                          const hasB = cell.bCopiesCount > 0;
+                          const hasAbs = cell.absentCount > 0;
+                          return (
+                            <td
+                              key={col.classKey}
+                              onClick={() => setSelectedMatrixCell({ room: r, col, cell })}
+                              className={`p-1.5 border-r border-slate-200 transition-all cursor-pointer group hover:scale-[1.02] hover:z-10 hover:shadow-md ${
+                                hasB ? 'bg-amber-50/90 hover:bg-amber-100 border-amber-200' : 'hover:bg-indigo-50/80'
+                              }`}
+                              title={`${r.roomName} - ${col.displayName}: क्लिक करके सभी ${cell.totalSeated} छात्रों के रोल नंबर देखें`}
+                            >
+                              <div className="flex flex-col items-center justify-center gap-0.5">
+                                <span className="text-xs font-black text-emerald-800 group-hover:underline">
+                                  {cell.presentCount} A
+                                </span>
+                                {hasB && (
+                                  <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black rounded-full text-[10px] shadow-xs">
+                                    +{cell.bCopiesCount} B
+                                  </span>
+                                )}
+                                {hasAbs && (
+                                  <span className="px-1 py-0.1 bg-rose-100 text-rose-800 font-bold rounded text-[9px]">
+                                    {cell.absentCount} अनुप.
+                                  </span>
+                                )}
+                                <span className="text-[9px] font-mono text-slate-500 mt-0.5 font-bold">
+                                  {cell.rollRange}
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                        <td className="p-2 border-r border-slate-200 font-black text-emerald-800 bg-emerald-50/40">
+                          {r.rowTotalA}
+                        </td>
+                        <td className="p-2 border-r border-slate-200 font-black text-amber-900 bg-amber-50/50">
+                          {r.rowTotalB > 0 ? r.rowTotalB : '—'}
+                        </td>
+                        <td className="p-2 border-r border-slate-200 font-black text-rose-700 bg-rose-50/40">
+                          {r.rowTotalAbsent > 0 ? r.rowTotalAbsent : '—'}
+                        </td>
+                        <td className="p-2 font-black text-purple-900 bg-purple-50/40">
+                          {r.rowGrandTotal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-200 font-extrabold text-slate-900 border-t-2 border-slate-900 sticky bottom-0 z-20 shadow-md">
+                  {/* Row 1: Total A */}
+                  <tr className="bg-emerald-100/90 border-b border-emerald-300 text-emerald-950">
+                    <td className="p-2.5 text-left font-black border-r border-emerald-300 sticky left-0 z-30 bg-emerald-100">
+                      कक्षा-वार कुल 'A' मुख्य
+                    </td>
+                    {displayedMatrixColumns.map((col) => (
+                      <td key={col.classKey} className="p-2 border-r border-emerald-300 font-black text-emerald-900">
+                        {matrixColTotals[col.classKey]?.totalA || 0}
+                      </td>
+                    ))}
+                    <td colSpan="4" className="p-2 font-black text-emerald-950 text-center">
+                      कुल 'A' मुख्य कॉपियां: {matrixGrandTotal.totalA}
+                    </td>
+                  </tr>
+                  {/* Row 2: Total B */}
+                  <tr className="bg-amber-100/90 border-b border-amber-300 text-amber-950">
+                    <td className="p-2.5 text-left font-black border-r border-amber-300 sticky left-0 z-30 bg-amber-100">
+                      कक्षा-वार कुल 'B' पूरक
+                    </td>
+                    {displayedMatrixColumns.map((col) => (
+                      <td key={col.classKey} className="p-2 border-r border-amber-300 font-black text-amber-950">
+                        {matrixColTotals[col.classKey]?.totalB || 0}
+                      </td>
+                    ))}
+                    <td colSpan="4" className="p-2 font-black text-amber-950 text-center">
+                      कुल 'B' पूरक कॉपियां: {matrixGrandTotal.totalB}
+                    </td>
+                  </tr>
+                  {/* Row 3: Class Grand Total */}
+                  <tr className="bg-slate-900 text-white font-black">
+                    <td className="p-2.5 text-left font-black border-r border-slate-700 sticky left-0 z-30 bg-slate-900 text-amber-300">
+                      कक्षा महायोग (A + B)
+                    </td>
+                    {displayedMatrixColumns.map((col) => {
+                      const t = matrixColTotals[col.classKey];
+                      return (
+                        <td key={col.classKey} className="p-2 border-r border-slate-700 font-black text-amber-300">
+                          {(t?.totalA || 0) + (t?.totalB || 0)}
+                        </td>
+                      );
+                    })}
+                    <td className="p-2 border-r border-slate-700 text-emerald-300 font-black">
+                      {matrixGrandTotal.totalA}
+                    </td>
+                    <td className="p-2 border-r border-slate-700 text-amber-300 font-black">
+                      {matrixGrandTotal.totalB}
+                    </td>
+                    <td className="p-2 border-r border-slate-700 text-rose-300 font-black">
+                      {matrixGrandTotal.totalAbsent}
+                    </td>
+                    <td className="p-2 font-black text-white bg-purple-900">
+                      {matrixGrandTotal.totalCopies}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Screen Quick Audit Lists: B-Copy Recipients & Absent Students */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+            {/* Box 1: All B-Copy Students */}
+            <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-amber-500 text-slate-950 rounded-lg">
+                    <BookOpen className="w-4 h-4" />
+                  </span>
+                  <h4 className="text-xs sm:text-sm font-black text-amber-950">
+                    पूरक 'B' उत्तर-पुस्तिका प्राप्तकर्ता छात्र ({allBCopyDetails.length} छात्र, {matrixGrandTotal.totalB} कॉपियां)
+                  </h4>
+                </div>
+                <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full text-[10px] font-black">
+                  कुल {matrixGrandTotal.totalB} 'B' कॉपियां
+                </span>
+              </div>
+
+              {allBCopyDetails.length > 0 ? (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                  {allBCopyDetails.map((b, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-white rounded-xl border border-amber-200 text-xs flex items-center justify-between gap-2 shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-black text-slate-900">#{b.rollNo}</span>
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {b.className}-{b.section}
+                          </span>
+                          <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded">
+                            {b.roomName}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-bold text-slate-800 truncate max-w-[200px]">
+                          {b.name || 'परीक्षार्थी'}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-black rounded-lg text-xs shadow-xs">
+                          +{b.bCount} 'B' {b.bCopyNumbers?.length ? `(${b.bCopyNumbers.join(', ')})` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic py-4 text-center">
+                  वर्तमान में किसी छात्र को पूरक 'B' कॉपी जारी नहीं की गई है।
+                </p>
+              )}
+            </div>
+
+            {/* Box 2: All Absent Students */}
+            <div className="bg-rose-50/50 border border-rose-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-rose-200">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-rose-600 text-white rounded-lg">
+                    <UserX className="w-4 h-4" />
+                  </span>
+                  <h4 className="text-xs sm:text-sm font-black text-rose-950">
+                    अनुपस्थित परीक्षार्थी सूची ({allAbsentDetails.length} अनुपस्थित छात्र)
+                  </h4>
+                </div>
+                <span className="px-2 py-0.5 bg-rose-200 text-rose-900 rounded-full text-[10px] font-black">
+                  {allAbsentDetails.length} अनुपस्थित
+                </span>
+              </div>
+
+              {allAbsentDetails.length > 0 ? (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                  {allAbsentDetails.map((ab, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-white rounded-xl border border-rose-200 text-xs flex items-center justify-between gap-2 shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-black text-rose-700">#{ab.rollNo}</span>
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {ab.className}-{ab.section}
+                          </span>
+                          <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded">
+                            {ab.roomName}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-bold text-slate-800 truncate max-w-[200px]">
+                          {ab.name || 'परीक्षार्थी'}
+                        </div>
+                      </div>
+
+                      <span className="px-2 py-0.5 bg-rose-600 text-white font-black rounded-lg text-[10px] uppercase">
+                        ABSENT
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic py-4 text-center">
+                  ✅ शत-प्रतिशत उपस्थिति (कोई परीक्षार्थी अनुपस्थित नहीं है)।
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 2D MATRIX CELL DETAIL MODAL POPUP                         */}
+      {/* ======================================================== */}
+      {selectedMatrixCell && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs no-print">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 bg-indigo-600 text-white rounded text-xs font-black uppercase">
+                    {selectedMatrixCell.room.roomName}
+                  </span>
+                  <span className="text-sm font-bold text-slate-400">•</span>
+                  <span className="text-sm font-black text-amber-300">
+                    कक्षा: {selectedMatrixCell.col.displayName}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black mt-1">
+                  छात्र रोल नंबर एवं उत्तर-पुस्तिका विवरण (Detailed Roster)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedMatrixCell(null)}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                title="बंद करें"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Mini Summary */}
+            <div className="grid grid-cols-4 gap-2 p-3 bg-slate-100 border-b border-slate-200 text-center text-xs">
+              <div className="bg-white p-2 rounded-xl">
+                <span className="text-slate-500 font-bold text-[10px] uppercase">नामांकित छात्र</span>
+                <p className="font-black text-slate-800 text-sm">{selectedMatrixCell.cell.totalSeated}</p>
+              </div>
+              <div className="bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                <span className="text-emerald-700 font-bold text-[10px] uppercase">उपस्थित ('A')</span>
+                <p className="font-black text-emerald-800 text-sm">{selectedMatrixCell.cell.presentCount}</p>
+              </div>
+              <div className="bg-amber-50 p-2 rounded-xl border border-amber-200">
+                <span className="text-amber-800 font-bold text-[10px] uppercase">'B' कॉपियां</span>
+                <p className="font-black text-amber-900 text-sm">{selectedMatrixCell.cell.bCopiesCount}</p>
+              </div>
+              <div className="bg-rose-50 p-2 rounded-xl border border-rose-200">
+                <span className="text-rose-700 font-bold text-[10px] uppercase">अनुपस्थित</span>
+                <p className="font-black text-rose-800 text-sm">{selectedMatrixCell.cell.absentCount}</p>
+              </div>
+            </div>
+
+            {/* Modal Student List */}
+            <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              <div className="flex items-center justify-between pb-1 text-xs font-bold text-slate-500 border-b border-slate-100">
+                <span>परीक्षार्थियों की नामावली ({selectedMatrixCell.cell.students.length} छात्र):</span>
+                <span className="font-mono text-indigo-700">रोल रेंज: {selectedMatrixCell.cell.rollRange}</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {selectedMatrixCell.cell.students
+                  .slice()
+                  .sort((a, b) => Number(a.rollNo) - Number(b.rollNo))
+                  .map((st) => {
+                    const isAbs = Boolean(effectiveAbsenteesMap[st.rollNo?.toString()] || effectiveAbsenteesMap[st.rollNo]);
+                    const bCount = getStudentBCopies(st.rollNo);
+                    const bRec = activeCopyMap[String(st.rollNo)] || activeCopyMap[Number(st.rollNo)];
+
+                    return (
+                      <div
+                        key={st.rollNo}
+                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 shadow-xs ${
+                          isAbs
+                            ? 'bg-rose-50 border-rose-300'
+                            : bCount > 0
+                            ? 'bg-amber-50/70 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-black text-slate-900 text-sm">
+                              #{st.rollNo}
+                            </span>
+                            {st.benchNumber && (
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                                बेंच {st.benchNumber}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-bold text-slate-800 truncate max-w-[170px]">
+                            {st.name || 'परीक्षार्थी'}
+                          </div>
+                          {st.subject && (
+                            <div className="text-[10px] text-slate-500 truncate">
+                              {st.subject}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          {isAbs ? (
+                            <span className="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-black uppercase">
+                              ABSENT
+                            </span>
+                          ) : (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">
+                                ✅ 'A' उपस्थित
+                              </span>
+                              {bCount > 0 && (
+                                <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded text-[10px] font-black shadow-xs">
+                                  +{bCount} 'B' {bRec?.bCopyNumbers?.length ? `(${bRec.bCopyNumbers.join(', ')})` : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                कुल उपस्थित 'A': <strong>{selectedMatrixCell.cell.presentCount}</strong> | पूरक 'B': <strong>{selectedMatrixCell.cell.bCopiesCount}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedMatrixCell(null)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                बंद करें (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
       {/* PRINTABLE SHEETS (Always Visible on Print)               */}
       {/* ======================================================== */}
       <div className="bg-white p-6 sm:p-10 rounded-2xl border border-slate-200 shadow-sm print:border-none print:shadow-none print:p-0">
@@ -1392,6 +2155,195 @@ export default function AbsenteeManager({
                 <div>
                   <div className="w-32 h-6 border-b border-dashed border-slate-400"></div>
                   <p className="text-[10px] font-bold text-slate-700 mt-0.5">हस्ताक्षर केंद्राध्यक्ष / सील</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================== */}
+        {/* PRINT SECTION 3: 2D ANSWER BOOK DISTRIBUTION MATRIX   */}
+        {/* ===================================================== */}
+        {(printOption === 'both' || printOption === '2d-matrix') && (
+          <div className="print-matrix-sheet">
+            {/* Header */}
+            <div className="print-sheet-header text-center pb-2 border-b-2 border-slate-900 mb-2">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                {examDetails.schoolName || 'Govt. Model Higher Secondary School'}
+              </h1>
+              <p className="text-sm font-bold text-indigo-900 mt-0.5">
+                {examDetails.examName || 'Annual Examination 2026'}
+              </p>
+              <div className="print-meta inline-flex items-center gap-3 mt-1 px-3 py-0.5 bg-slate-100 rounded-full text-[10px] font-semibold text-slate-800 border border-slate-300">
+                <span>📅 दिनांक: {selectedDateFilter !== 'all' ? selectedDateFilter : examDetails.date}</span>
+                <span>•</span>
+                <span>⏰ समय / शिफ्ट: {examDetails.timeRange}</span>
+              </div>
+              <div className="mt-1">
+                <span className="print-banner px-3 py-0.5 bg-purple-900 text-white text-xs font-black tracking-widest uppercase rounded">
+                  ROOM-WISE × CLASS-WISE ANSWER BOOK DISTRIBUTION MATRIX (कक्षा एवं कमरा-वार उत्तर-पुस्तिका वितरण पत्रक - 'A' व 'B' कॉपियां)
+                </span>
+              </div>
+            </div>
+
+            {/* Master 2D Matrix Table */}
+            <div className="border border-slate-900 overflow-hidden mb-3">
+              <table className="w-full text-center border-collapse">
+                <thead className="bg-slate-900 text-white font-extrabold uppercase text-[9px]">
+                  <tr>
+                    <th className="p-1 border border-black text-left w-24">कमरा / कक्ष</th>
+                    {matrixColumns.map((col) => (
+                      <th key={col.classKey} className="p-1 border border-black">
+                        {col.displayName}
+                      </th>
+                    ))}
+                    <th className="p-1 border border-black w-14 bg-emerald-950 text-white">कुल 'A'</th>
+                    <th className="p-1 border border-black w-14 bg-amber-950 text-amber-200">कुल 'B'</th>
+                    <th className="p-1 border border-black w-14 bg-rose-950 text-white">अनुप.</th>
+                    <th className="p-1 border border-black w-14 bg-indigo-950 text-white">महायोग</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black text-[9px]">
+                  {matrixRows.map((r, idx) => {
+                    if (r.rowTotalAllocated === 0) return null;
+                    return (
+                      <tr key={r.roomId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="p-1 border border-black text-left font-bold whitespace-nowrap">
+                          {r.roomName}
+                        </td>
+                        {matrixColumns.map((col) => {
+                          const cell = r.cells[col.classKey];
+                          if (!cell || cell.totalSeated === 0) {
+                            return (
+                              <td key={col.classKey} className="p-1 border border-black text-slate-300">
+                                —
+                              </td>
+                            );
+                          }
+                          return (
+                            <td key={col.classKey} className={`p-1 border border-black font-semibold ${cell.bCopiesCount > 0 ? 'bg-amber-100 font-bold' : ''}`}>
+                              <div>{cell.presentCount} A</div>
+                              {cell.bCopiesCount > 0 && (
+                                <div className="text-[8px] font-black text-amber-900">+{cell.bCopiesCount} B</div>
+                              )}
+                              {cell.absentCount > 0 && (
+                                <div className="text-[7.5px] font-bold text-rose-700">{cell.absentCount} abs</div>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="p-1 border border-black font-black text-emerald-900 bg-emerald-50/60">
+                          {r.rowTotalA}
+                        </td>
+                        <td className="p-1 border border-black font-black text-amber-900 bg-amber-50/60">
+                          {r.rowTotalB > 0 ? r.rowTotalB : '—'}
+                        </td>
+                        <td className="p-1 border border-black font-black text-rose-800 bg-rose-50/60">
+                          {r.rowTotalAbsent > 0 ? r.rowTotalAbsent : '—'}
+                        </td>
+                        <td className="p-1 border border-black font-black text-slate-900 bg-slate-100">
+                          {r.rowGrandTotal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-200 border-t-2 border-black font-black text-[9px]">
+                  <tr>
+                    <td className="p-1 border border-black text-left">कक्षा-वार कुल 'A' कॉपियां</td>
+                    {matrixColumns.map((col) => (
+                      <td key={col.classKey} className="p-1 border border-black text-emerald-900">
+                        {matrixColTotals[col.classKey]?.totalA || 0}
+                      </td>
+                    ))}
+                    <td colSpan="4" className="p-1 border border-black text-center text-emerald-900">
+                      कुल 'A': {matrixGrandTotal.totalA}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-1 border border-black text-left">कक्षा-वार कुल 'B' कॉपियां</td>
+                    {matrixColumns.map((col) => (
+                      <td key={col.classKey} className="p-1 border border-black text-amber-950 font-black">
+                        {matrixColTotals[col.classKey]?.totalB || 0}
+                      </td>
+                    ))}
+                    <td colSpan="4" className="p-1 border border-black text-center text-amber-950 font-black">
+                      कुल 'B': {matrixGrandTotal.totalB}
+                    </td>
+                  </tr>
+                  <tr className="bg-slate-900 text-white font-extrabold">
+                    <td className="p-1 border border-black text-left text-amber-300">विद्यालय कुल महायोग (A+B)</td>
+                    {matrixColumns.map((col) => (
+                      <td key={col.classKey} className="p-1 border border-black text-amber-300">
+                        {(matrixColTotals[col.classKey]?.totalA || 0) + (matrixColTotals[col.classKey]?.totalB || 0)}
+                      </td>
+                    ))}
+                    <td className="p-1 border border-black text-emerald-300">{matrixGrandTotal.totalA}</td>
+                    <td className="p-1 border border-black text-amber-300">{matrixGrandTotal.totalB}</td>
+                    <td className="p-1 border border-black text-rose-300">{matrixGrandTotal.totalAbsent}</td>
+                    <td className="p-1 border border-black text-white">{matrixGrandTotal.totalCopies}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Under-Table Audit Appendix for Paper Print: Detailed B-Copy recipients and Absent roll numbers */}
+            <div className="grid grid-cols-2 gap-3 text-[9px] border-t-2 border-slate-900 pt-2 mb-3">
+              {/* Box 1: B-Copy Recipients */}
+              <div className="border border-slate-900 p-2 rounded bg-amber-50/20">
+                <h4 className="font-black text-amber-950 border-b border-amber-300 pb-1 mb-1 uppercase">
+                  1. पूरक 'B' उत्तर-पुस्तिका प्राप्तकर्ता परीक्षार्थी विवरण ({allBCopyDetails.length} छात्र, कुल {matrixGrandTotal.totalB} कॉपियां)
+                </h4>
+                {allBCopyDetails.length > 0 ? (
+                  <div className="space-y-0.5 max-h-36 overflow-hidden">
+                    {allBCopyDetails.map((b, idx) => (
+                      <div key={idx} className="flex items-center justify-between border-b border-slate-200 pb-0.5">
+                        <span className="font-bold">
+                          {idx + 1}. #{b.rollNo} {b.name ? `(${b.name})` : ''} - {b.className}-{b.section} ({b.roomName})
+                        </span>
+                        <span className="font-mono font-black text-amber-900">
+                          +{b.bCount} 'B' {b.bCopyNumbers?.length ? `[${b.bCopyNumbers.join(', ')}]` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="italic text-slate-500">किसी परीक्षार्थी को पूरक 'B' कॉपी जारी नहीं हुई।</p>
+                )}
+              </div>
+
+              {/* Box 2: Absentees */}
+              <div className="border border-slate-900 p-2 rounded bg-rose-50/20">
+                <h4 className="font-black text-rose-950 border-b border-rose-300 pb-1 mb-1 uppercase">
+                  2. अनुपस्थित परीक्षार्थी विवरण (Absentees Audit - कुल {allAbsentDetails.length} अनुपस्थित)
+                </h4>
+                {allAbsentDetails.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 max-h-36 overflow-hidden">
+                    {allAbsentDetails.map((ab, idx) => (
+                      <span key={idx} className="px-1.5 py-0.2 border border-rose-400 bg-rose-100 font-bold rounded text-[8.5px]">
+                        #{ab.rollNo} {ab.className}-{ab.section} ({ab.roomName})
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="italic text-slate-500">शत-प्रतिशत उपस्थिति (शून्य अनुपस्थित परीक्षार्थी)।</p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Signatures */}
+            <div className="print-sheet-footer pt-2 border-t border-slate-400 flex items-center justify-between text-[10px] text-slate-700">
+              <p className="max-w-md">
+                * प्रमाणित किया जाता है कि 'A' मुख्य कॉपियां एवं पूरक 'B' कॉपियों का वितरण उपरोक्त 2D मैट्रिक्स के अनुसार पूर्णतः सत्यापित है।
+              </p>
+              <div className="flex items-center gap-12 text-center">
+                <div>
+                  <div className="w-28 h-5 border-b border-dashed border-slate-500"></div>
+                  <p className="font-bold text-[9px] mt-0.5">हस्ताक्षर परीक्षा प्रभारी</p>
+                </div>
+                <div>
+                  <div className="w-28 h-5 border-b border-dashed border-slate-500"></div>
+                  <p className="font-bold text-[9px] mt-0.5">हस्ताक्षर केंद्राध्यक्ष / प्रधानाचार्य</p>
                 </div>
               </div>
             </div>
