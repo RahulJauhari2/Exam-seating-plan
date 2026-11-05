@@ -535,6 +535,15 @@ export default function App() {
     }
   };
 
+  // Handle Date switch (synchronizes live polling and portal date)
+  const handleDateChange = (newDate) => {
+    if (!newDate) return;
+    setExamDetails((prev) => ({
+      ...prev,
+      date: newDate,
+    }));
+  };
+
   // Reset to current shift's default
   const handleResetData = () => {
     if (window.confirm('क्या आप डेटा को डिफ़ॉल्ट प्रीसेट पर रीसेट करना चाहते हैं?')) {
@@ -816,6 +825,7 @@ export default function App() {
                 activeDate={examDetails.date}
                 activeShift={activeShift}
                 handleShiftChange={handleShiftChange}
+                onDateChange={handleDateChange}
                 teachers={teachers}
                 liveAbsentees={liveAbsentees}
                 bCopyRecords={bCopyRecords}

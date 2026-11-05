@@ -192,17 +192,48 @@ export const EXAM_TIMETABLE = [
   },
 ];
 
+// Standard Date Normalizer to canonical 'YYYY-MM-DD'
+export const normalizeDateToYYYYMMDD = (d) => {
+  if (!d) return '';
+  const str = String(d).trim().replace(/\//g, '-');
+  const parts = str.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      // YYYY-MM-DD
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else if (parts[2].length === 4) {
+      // DD-MM-YYYY
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (parts[2].length === 2) {
+      // DD-MM-YY -> 20YY-MM-DD
+      return `20${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  return str;
+};
+
+// Check if two date strings match regardless of format (YYYY-MM-DD, DD-MM-YYYY, DD-MM-YY)
+export const areDatesMatching = (d1, d2) => {
+  if (!d1 || !d2) return false;
+  const n1 = normalizeDateToYYYYMMDD(d1);
+  const n2 = normalizeDateToYYYYMMDD(d2);
+  return Boolean(n1 && n2 && n1 === n2);
+};
+
 // Helper to dynamically get today's scheduled exam day in Indian Standard Time (IST)
 // Ensures teacher login, student search, and admin dashboards automatically open with today's date
 export const getTodayExamDay = () => {
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istDate = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + istOffset);
-  const todayISO = istDate.toISOString().split('T')[0];
+  let todayISO = '';
+  try {
+    todayISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch (err) {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + istOffset);
+    todayISO = istDate.toISOString().split('T')[0];
+  }
 
-  const match = EXAM_TIMETABLE.find(
-    (d) => d.fullDate === todayISO || d.date === todayISO || (d.fullDate && todayISO.includes(d.fullDate))
-  );
+  const match = EXAM_TIMETABLE.find((d) => areDatesMatching(d.fullDate, todayISO) || areDatesMatching(d.date, todayISO));
   if (match) return match;
 
   const firstDay = EXAM_TIMETABLE[0];

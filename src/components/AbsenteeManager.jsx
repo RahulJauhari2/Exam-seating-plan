@@ -32,7 +32,7 @@ import {
   exportReExamListToExcel, 
   exportClassAttendanceMatrixToExcel 
 } from '../utils/excelExport';
-import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay } from '../data/examSchemeData';
+import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay, areDatesMatching, normalizeDateToYYYYMMDD } from '../data/examSchemeData';
 import { fetchLiveAbsenteesAPI, fetchLiveCopiesAPI } from '../services/api';
 
 export default function AbsenteeManager({ 
@@ -92,6 +92,7 @@ export default function AbsenteeManager({
 
   // Load date-wise B-copies dynamically when date filter changes
   const [dateWiseCopyMap, setDateWiseCopyMap] = useState({});
+  const [loadedCopyDate, setLoadedCopyDate] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,17 +101,35 @@ export default function AbsenteeManager({
       date: selectedDateFilter,
       shift: activeShift,
     }).then((res) => {
-      if (isMounted && res && res.success && res.copyMap) {
-        setDateWiseCopyMap(res.copyMap);
+      if (isMounted) {
+        if (res && res.success && res.copyMap) {
+          setDateWiseCopyMap(res.copyMap);
+        } else {
+          setDateWiseCopyMap({});
+        }
+        setLoadedCopyDate(selectedDateFilter);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      if (isMounted) {
+        setDateWiseCopyMap({});
+        setLoadedCopyDate(selectedDateFilter);
+      }
+    });
     return () => { isMounted = false; };
   }, [selectedDateFilter, activeShift, examDetails?.examName, bCopyRecords]);
 
   const activeCopyMap = useMemo(() => {
-    if (dateWiseCopyMap && Object.keys(dateWiseCopyMap).length > 0) return dateWiseCopyMap;
-    return bCopyRecords || {};
-  }, [dateWiseCopyMap, bCopyRecords]);
+    // If we have loaded data for this selectedDateFilter, use it directly (even if empty, i.e., 0 B-copies)
+    if (loadedCopyDate === selectedDateFilter) {
+      return dateWiseCopyMap || {};
+    }
+    // If selected date matches today/activeDate, can initially show bCopyRecords while loading
+    if (areDatesMatching(selectedDateFilter, examDetails?.date) || areDatesMatching(selectedDateFilter, todayDateStr)) {
+      return bCopyRecords || {};
+    }
+    // Future or other dates start at 0 while loading
+    return {};
+  }, [dateWiseCopyMap, loadedCopyDate, selectedDateFilter, bCopyRecords, examDetails?.date, todayDateStr]);
 
   // Helper to fetch B-copies for a student
   const getStudentBCopies = (rollNo) => {
@@ -228,27 +247,20 @@ export default function AbsenteeManager({
       return map;
     }
 
-    // Match selectedDateFilter against allDatesAbsentees (e.g. 2026-11-05 or 05-11-26)
+    // Match selectedDateFilter against allDatesAbsentees strictly using canonical date matching
     (allDatesAbsentees || []).forEach((r) => {
-      const rDate = String(r.date || '');
-      const sFilter = String(selectedDateFilter || '');
-      const match =
-        rDate === sFilter ||
-        rDate.includes(sFilter) ||
-        sFilter.includes(rDate) ||
-        (rDate.replace(/-/g, '').slice(-4) === sFilter.replace(/-/g, '').slice(-4));
-      if (match && r.rollNo) {
+      if (r.rollNo && areDatesMatching(r.date, selectedDateFilter)) {
         map[String(r.rollNo)] = true;
         map[Number(r.rollNo)] = true;
       }
     });
 
-    // Also include live local absentStudents if on today's active date
+    // Also include live local absentStudents ONLY if selected date is truly today's active date
     const todayFullDate = getTodayExamDay().fullDate;
     const isToday =
-      selectedDateFilter === todayFullDate ||
-      selectedDateFilter === getTodayExamDay().date ||
-      selectedDateFilter === examDetails?.date;
+      areDatesMatching(selectedDateFilter, todayFullDate) ||
+      areDatesMatching(selectedDateFilter, getTodayExamDay().date) ||
+      areDatesMatching(selectedDateFilter, examDetails?.date);
     if (isToday) {
       Object.keys(absentStudents || {}).forEach((k) => {
         if (absentStudents[k]) {
@@ -374,7 +386,7 @@ export default function AbsenteeManager({
       if (numA !== numB) return numA - numB;
       return (a.section || '').localeCompare(b.section || '');
     });
-  }, [allSeatedStudents, effectiveAbsenteesMap, teachers, bCopyRecords]);
+  }, [allSeatedStudents, effectiveAbsenteesMap, teachers, activeCopyMap]);
 
   // 4. Flat list of all absent students
   const flatAbsentStudents = useMemo(() => {

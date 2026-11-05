@@ -68,6 +68,8 @@ export const updateStudentCopies = async (req, res) => {
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || req.ip || '';
     const userAgent = req.headers['user-agent'] || '';
 
+    const effectiveDate = date ? String(date).trim() : new Date().toISOString().split('T')[0];
+
     const recordData = {
       rollNo: Number(rollNo),
       bCopiesCount: Math.max(0, Number(bCopiesCount) || 0),
@@ -75,7 +77,7 @@ export const updateStudentCopies = async (req, res) => {
       aCopyNumber: String(aCopyNumber || ''),
       roomName,
       sessionName,
-      date,
+      date: effectiveDate,
       shift,
       studentName,
       className,
@@ -87,10 +89,7 @@ export const updateStudentCopies = async (req, res) => {
       updatedAt: new Date(),
     };
 
-    const queryFilter = { rollNo: recordData.rollNo, shift };
-    if (recordData.date) {
-      queryFilter.date = recordData.date;
-    }
+    const queryFilter = { rollNo: recordData.rollNo, shift, date: effectiveDate };
 
     let savedRecord = null;
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { EXAM_TIMETABLE, getTodayExamDay } from '../data/examSchemeData';
+import { EXAM_TIMETABLE, getTodayExamDay, areDatesMatching } from '../data/examSchemeData';
 import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
 import { generateSeatingPlan } from '../utils/seatingAlgorithm';
 import { 
@@ -118,6 +118,7 @@ export default function TeacherRoomPortal({
   activeDate,
   activeShift,
   handleShiftChange,
+  onDateChange,
   teachers = [],
   liveAbsentees = {},
   bCopyRecords = {},
@@ -200,32 +201,30 @@ export default function TeacherRoomPortal({
     return (EXAM_TIMETABLE || []).find((d) => d.id === selectedDayId) || getTodayExamDay();
   }, [selectedDayId]);
 
-  // Centralized safe absentee checker (declared before useMemo hooks)
+  // Centralized safe absentee checker (strictly date-isolated)
   const isStudentAbsent = (rollNo) => {
     if (rollNo === undefined || rollNo === null) return false;
     const num = Number(rollNo);
     const str = String(rollNo);
     const rec = liveAbsentees[rollNo] || liveAbsentees[str] || (!isNaN(num) && liveAbsentees[num]);
     if (!rec || !rec.isAbsent) return false;
-    // Verify record date matches currently selected exam date
+    const targetDate = selectedDay?.fullDate || selectedDay?.date || activeDate;
     if (rec.date) {
-      const targetDate = selectedDay.fullDate || selectedDay.date;
-      const match = rec.date === targetDate || rec.date === selectedDay.date || (activeDate && (rec.date === activeDate || activeDate.includes(rec.date)));
-      if (!match) return false;
+      return areDatesMatching(rec.date, targetDate);
     }
-    return true;
+    return areDatesMatching(activeDate, targetDate);
   };
 
-  // Helper to get B-Copies Count for any student (declared before useMemo hooks)
+  // Helper to get B-Copies Count for any student (strictly date-isolated)
   const getStudentBCopies = (rollNo) => {
     if (rollNo === undefined || rollNo === null) return 0;
     const rec = bCopyRecords[rollNo] || bCopyRecords[String(rollNo)] || bCopyRecords[Number(rollNo)];
     if (!rec) return 0;
-    // Check if record date matches currently selected exam date (reset to 0 for new day)
+    const targetDate = selectedDay?.fullDate || selectedDay?.date || activeDate;
     if (rec.date) {
-      const curDate = selectedDay.fullDate || selectedDay.date;
-      const match = rec.date === curDate || curDate.includes(rec.date) || rec.date.includes(curDate);
-      if (!match) return 0;
+      if (!areDatesMatching(rec.date, targetDate)) return 0;
+    } else {
+      if (!areDatesMatching(activeDate, targetDate)) return 0;
     }
     return Number(rec?.bCopiesCount) || 0;
   };
@@ -718,7 +717,7 @@ export default function TeacherRoomPortal({
         absentStudents: absentList,
       };
     });
-  }, [classGroupedStudents, liveAbsentees]);
+  }, [classGroupedStudents, liveAbsentees, selectedDay, bCopyRecords]);
 
   // Total Statistics
   const totalStudents = roomStudents.length;
@@ -788,7 +787,7 @@ export default function TeacherRoomPortal({
       if (isStudentAbsent(st.rollNo)) return sum;
       return sum + getStudentBCopies(st.rollNo);
     }, 0);
-  }, [roomStudents, bCopyRecords, liveAbsentees]);
+  }, [roomStudents, bCopyRecords, liveAbsentees, selectedDay]);
 
   // Handle B-Copy +1 or -1
   const handleUpdateStudentBCopy = async (student, delta) => {
@@ -1118,7 +1117,14 @@ export default function TeacherRoomPortal({
             </div>
             <select
               value={selectedDayId}
-              onChange={(e) => setSelectedDayId(e.target.value)}
+              onChange={(e) => {
+                const dayId = e.target.value;
+                setSelectedDayId(dayId);
+                const day = (EXAM_TIMETABLE || []).find((d) => d.id === dayId);
+                if (day && onDateChange) {
+                  onDateChange(day.fullDate || day.date);
+                }
+              }}
               className="mt-1.5 w-full bg-white border border-purple-300 text-purple-950 font-black text-xs sm:text-sm rounded-lg py-1 px-2 focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
             >
               {EXAM_TIMETABLE.map((d) => (
@@ -1142,7 +1148,10 @@ export default function TeacherRoomPortal({
             <div className="flex items-center gap-1 mt-1.5">
               <button
                 type="button"
-                onClick={() => setPortalShift('shift_1')}
+                onClick={() => {
+                  setPortalShift('shift_1');
+                  if (handleShiftChange) handleShiftChange('shift_1');
+                }}
                 className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[34px] ${
                   portalShift === 'shift_1'
                     ? 'bg-indigo-600 text-white shadow-xs'
@@ -1155,7 +1164,10 @@ export default function TeacherRoomPortal({
               </button>
               <button
                 type="button"
-                onClick={() => setPortalShift('shift_2')}
+                onClick={() => {
+                  setPortalShift('shift_2');
+                  if (handleShiftChange) handleShiftChange('shift_2');
+                }}
                 className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[34px] ${
                   portalShift === 'shift_2'
                     ? 'bg-amber-600 text-white shadow-xs'
