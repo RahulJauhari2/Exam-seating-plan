@@ -61,6 +61,14 @@ const CopyRecordSchema = new mongoose.Schema(
       type: String,
       default: 'teacher',
     },
+    clientIp: {
+      type: String,
+      default: '',
+    },
+    userAgent: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

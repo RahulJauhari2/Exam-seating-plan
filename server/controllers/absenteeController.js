@@ -67,6 +67,8 @@ export const toggleAbsentee = async (req, res) => {
     const markedBy = req.user?.name || req.body.markedBy || 'Teacher';
     const markedByRole = req.user?.role || req.body.markedByRole || 'teacher';
     const effectiveDate = date || new Date().toISOString().split('T')[0];
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || req.ip || '';
+    const userAgent = req.headers['user-agent'] || '';
 
     const recordData = {
       rollNo,
@@ -80,6 +82,8 @@ export const toggleAbsentee = async (req, res) => {
       section,
       markedBy,
       markedByRole,
+      clientIp,
+      userAgent,
       updatedAt: new Date().toISOString(),
     };
 
