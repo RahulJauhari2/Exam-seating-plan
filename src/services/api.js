@@ -310,11 +310,10 @@ export async function toggleAbsenteeAPI(payload) {
 export async function fetchLiveAbsenteesAPI(params = {}) {
   try {
     const searchParams = new URLSearchParams();
-    if (params.sessionName) searchParams.append('sessionName', params.sessionName);
-    if (params.date) searchParams.append('date', params.date);
-    if (params.shift) searchParams.append('shift', params.shift);
-    if (params.roomName) searchParams.append('roomName', params.roomName);
-    if (params.date) searchParams.append('date', params.date);
+    if (params.sessionName) searchParams.set('sessionName', params.sessionName);
+    if (params.date) searchParams.set('date', params.date);
+    if (params.shift) searchParams.set('shift', params.shift);
+    if (params.roomName) searchParams.set('roomName', params.roomName);
 
     const res = await fetch(`${API_BASE_URL}/absentees?${searchParams.toString()}`, {
       method: 'GET',
@@ -356,10 +355,10 @@ export async function resetAbsenteesAPI(params) {
 export async function fetchLiveCopiesAPI(params = {}) {
   try {
     const searchParams = new URLSearchParams();
-    if (params.sessionName) searchParams.append('sessionName', params.sessionName);
-    if (params.shift) searchParams.append('shift', params.shift);
-    if (params.roomName) searchParams.append('roomName', params.roomName);
-    if (params.date) searchParams.append('date', params.date);
+    if (params.sessionName) searchParams.set('sessionName', params.sessionName);
+    if (params.shift) searchParams.set('shift', params.shift);
+    if (params.roomName) searchParams.set('roomName', params.roomName);
+    if (params.date) searchParams.set('date', params.date);
 
     const res = await fetch(`${API_BASE_URL}/copies?${searchParams.toString()}`, {
       method: 'GET',

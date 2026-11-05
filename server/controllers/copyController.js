@@ -136,7 +136,18 @@ export const updateStudentCopies = async (req, res) => {
 // 2. Get Live Copies
 export const getLiveCopies = async (req, res) => {
   try {
-    const { sessionName, shift, roomName, date } = req.query;
+    let { sessionName, shift, roomName, date } = req.query;
+
+    // Defend against array parameters caused by duplicate query string keys
+    if (Array.isArray(sessionName)) sessionName = sessionName[0];
+    if (Array.isArray(shift)) shift = shift[0];
+    if (Array.isArray(roomName)) roomName = roomName[0];
+    if (Array.isArray(date)) date = date[0];
+
+    if (typeof sessionName === 'string') sessionName = sessionName.trim();
+    if (typeof shift === 'string') shift = shift.trim();
+    if (typeof roomName === 'string') roomName = roomName.trim();
+    if (typeof date === 'string') date = date.trim();
 
     const filter = {};
     if (sessionName) {
@@ -146,9 +157,24 @@ export const getLiveCopies = async (req, res) => {
         $in: [sessionName, cleanSession, spacedSession, 'Half Yearly  Examination 2026', 'Half_Yearly_2026_27'],
       };
     }
-    if (shift) filter.shift = shift;
-    if (roomName) filter.roomName = roomName;
-    if (date) filter.date = date;
+    if (shift && shift !== 'all') filter.shift = shift;
+    if (roomName && roomName !== 'all') filter.roomName = roomName;
+    if (date && date !== 'all') {
+      const dateVariations = [date];
+      if (date.includes('-')) {
+        const parts = date.split('-');
+        if (parts[0].length === 4) {
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0].slice(2)}`);
+        } else if (parts[2].length === 4) {
+          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        } else if (parts[2].length === 2) {
+          dateVariations.push(`20${parts[2]}-${parts[1]}-${parts[0]}`);
+          dateVariations.push(`${parts[0]}-${parts[1]}-20${parts[2]}`);
+        }
+      }
+      filter.date = { $in: dateVariations };
+    }
 
     let records = [];
 

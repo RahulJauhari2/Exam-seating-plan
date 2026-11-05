@@ -139,7 +139,18 @@ export const toggleAbsentee = async (req, res) => {
 // 2. Get Live Absentees for current Date, Shift, and Session
 export const getLiveAbsentees = async (req, res) => {
   try {
-    const { sessionName, date, shift, roomName } = req.query;
+    let { sessionName, date, shift, roomName } = req.query;
+
+    // Defend against array parameters caused by duplicate query string keys
+    if (Array.isArray(sessionName)) sessionName = sessionName[0];
+    if (Array.isArray(date)) date = date[0];
+    if (Array.isArray(shift)) shift = shift[0];
+    if (Array.isArray(roomName)) roomName = roomName[0];
+
+    if (typeof sessionName === 'string') sessionName = sessionName.trim();
+    if (typeof date === 'string') date = date.trim();
+    if (typeof shift === 'string') shift = shift.trim();
+    if (typeof roomName === 'string') roomName = roomName.trim();
 
     const filter = {};
     if (sessionName) {
