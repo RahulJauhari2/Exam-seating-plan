@@ -44,13 +44,27 @@ import {
 } from 'lucide-react';
 
 // Lightweight pure-JS Web Audio School Bell Synthesizer (0 KB download, 100% offline & mobile-ready)
-const playSchoolWarningBell = () => {
+let sharedAudioCtx = null;
+
+export const primeAudioContext = () => {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
-      const ctx = new AudioCtx();
-      if (ctx.state === 'suspended') ctx.resume();
+      if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+        sharedAudioCtx = new AudioCtx();
+      }
+      if (sharedAudioCtx.state === 'suspended') {
+        sharedAudioCtx.resume();
+      }
+    }
+  } catch {}
+};
 
+const playSchoolWarningBell = () => {
+  try {
+    primeAudioContext();
+    const ctx = sharedAudioCtx;
+    if (ctx) {
       const playChime = (freq, start, duration, volume = 0.35) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();

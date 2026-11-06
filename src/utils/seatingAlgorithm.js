@@ -377,7 +377,12 @@ export function generateSeatingPlan({ classes, rooms }) {
     const gateSummaryItems = [];
     Object.keys(classSummaryMap).forEach((key) => {
       const item = classSummaryMap[key];
-      const sortedRolls = item.rollNumbers.sort((a, b) => a - b);
+      const sortedRolls = item.rollNumbers
+        .map((r) => Number(r))
+        .filter((r) => !isNaN(r))
+        .sort((a, b) => a - b);
+
+      if (sortedRolls.length === 0) return;
 
       // Compute contiguous ranges (e.g. 901-909 or 901, 905...)
       const ranges = [];
@@ -385,14 +390,15 @@ export function generateSeatingPlan({ classes, rooms }) {
       let rangeEnd = sortedRolls[0];
 
       for (let i = 1; i < sortedRolls.length; i++) {
-        if (sortedRolls[i] === rangeEnd + 1) {
-          rangeEnd = sortedRolls[i];
+        const currentRoll = sortedRolls[i];
+        if (currentRoll === rangeEnd + 1) {
+          rangeEnd = currentRoll;
         } else {
           ranges.push(
             rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart} - ${rangeEnd}`
           );
-          rangeStart = sortedRolls[i];
-          rangeEnd = sortedRolls[i];
+          rangeStart = currentRoll;
+          rangeEnd = currentRoll;
         }
       }
       ranges.push(
@@ -461,7 +467,8 @@ export function generateSeatingPlan({ classes, rooms }) {
     });
 
     Object.values(unseatedMap).forEach((item) => {
-      const sorted = item.rolls.sort((a, b) => a - b);
+      const sorted = item.rolls.map(Number).filter((r) => !isNaN(r)).sort((a, b) => a - b);
+      if (sorted.length === 0) return;
       unseatedBreakdown.push({
         className: item.className,
         section: item.section,

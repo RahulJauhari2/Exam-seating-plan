@@ -403,7 +403,7 @@ export default function App() {
       if (typeof document !== 'undefined' && document.hidden) return;
       pollLiveAbsentees();
       pollCopies();
-    }, 4000);
+    }, 6000);
 
     return () => {
       isSubscribed = false;

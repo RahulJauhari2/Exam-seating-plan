@@ -9,6 +9,43 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const LOCAL_COPIES_FILE = path.join(DATA_DIR, 'local_copies.json');
 
+// Standard Date Normalizer to canonical 'YYYY-MM-DD'
+export const normalizeToCanonicalDate = (d) => {
+  if (!d) return '';
+  const str = String(d).trim().replace(/\//g, '-');
+  const parts = str.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else if (parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (parts[2].length === 2) {
+      return `20${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  return str;
+};
+
+// Generates all standard format variations of a date for backwards-compatible matching
+export const getAllDateVariations = (d) => {
+  if (!d || d === 'all') return [];
+  const canonical = normalizeToCanonicalDate(d);
+  const variations = new Set([String(d).trim(), canonical]);
+  const parts = canonical.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const yyyy = parts[0];
+    const yy = yyyy.slice(2);
+    const mm = parts[1];
+    const dd = parts[2];
+    variations.add(`${dd}-${mm}-${yyyy}`);
+    variations.add(`${dd}-${mm}-${yy}`);
+    variations.add(`${dd}/${mm}/${yyyy}`);
+    variations.add(`${dd}/${mm}/${yy}`);
+    variations.add(`${yyyy}/${mm}/${dd}`);
+  }
+  return Array.from(variations);
+};
+
 // Helper to read local copies file
 const readLocalCopies = () => {
   try {
@@ -68,7 +105,8 @@ export const updateStudentCopies = async (req, res) => {
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || req.ip || '';
     const userAgent = req.headers['user-agent'] || '';
 
-    const effectiveDate = date ? String(date).trim() : new Date().toISOString().split('T')[0];
+    const effectiveDate = normalizeToCanonicalDate(date || new Date().toISOString().split('T')[0]);
+    const dateVariations = getAllDateVariations(effectiveDate);
 
     const recordData = {
       rollNo: Number(rollNo),
@@ -89,7 +127,7 @@ export const updateStudentCopies = async (req, res) => {
       updatedAt: new Date(),
     };
 
-    const queryFilter = { rollNo: recordData.rollNo, shift, date: effectiveDate };
+    const queryFilter = { rollNo: recordData.rollNo, shift, date: { $in: dateVariations } };
 
     let savedRecord = null;
 
@@ -97,7 +135,7 @@ export const updateStudentCopies = async (req, res) => {
       if (recordData.bCopiesCount > 0 || recordData.aCopyNumber) {
         savedRecord = await CopyRecord.findOneAndUpdate(
           queryFilter,
-          recordData,
+          { ...recordData, date: effectiveDate },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
       } else {
@@ -110,11 +148,11 @@ export const updateStudentCopies = async (req, res) => {
     // Mirror to local JSON
     let local = readLocalCopies();
     if (recordData.bCopiesCount > 0 || recordData.aCopyNumber) {
-      const idx = local.findIndex((r) => r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || r.date === recordData.date));
+      const idx = local.findIndex((r) => r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || normalizeToCanonicalDate(r.date) === effectiveDate));
       if (idx >= 0) local[idx] = { ...local[idx], ...recordData };
       else local.push(recordData);
     } else {
-      local = local.filter((r) => !(r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || r.date === recordData.date)));
+      local = local.filter((r) => !(r.rollNo === recordData.rollNo && r.shift === shift && (!recordData.date || normalizeToCanonicalDate(r.date) === effectiveDate)));
     }
     writeLocalCopies(local);
 
@@ -159,19 +197,7 @@ export const getLiveCopies = async (req, res) => {
     if (shift && shift !== 'all') filter.shift = shift;
     if (roomName && roomName !== 'all') filter.roomName = roomName;
     if (date && date !== 'all') {
-      const dateVariations = [date];
-      if (date.includes('-')) {
-        const parts = date.split('-');
-        if (parts[0].length === 4) {
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0].slice(2)}`);
-        } else if (parts[2].length === 4) {
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        } else if (parts[2].length === 2) {
-          dateVariations.push(`20${parts[2]}-${parts[1]}-${parts[0]}`);
-          dateVariations.push(`${parts[0]}-${parts[1]}-20${parts[2]}`);
-        }
-      }
+      const dateVariations = getAllDateVariations(date);
       filter.date = { $in: dateVariations };
     }
 
@@ -181,8 +207,12 @@ export const getLiveCopies = async (req, res) => {
       records = await CopyRecord.find(filter).sort({ updatedAt: -1 });
     } else {
       const local = readLocalCopies();
+      const canonicalTargetDate = date && date !== 'all' ? normalizeToCanonicalDate(date) : null;
       records = local.filter((r) => {
-        if (date && r.date && r.date !== date) return false;
+        if (canonicalTargetDate && r.date) {
+          const rCanonical = normalizeToCanonicalDate(r.date);
+          if (rCanonical !== canonicalTargetDate) return false;
+        }
         if (shift && r.shift !== shift) return false;
         if (roomName && r.roomName !== roomName) return false;
         return true;

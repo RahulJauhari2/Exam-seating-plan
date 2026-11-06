@@ -9,25 +9,26 @@ import {
   saveDutyRoster,
   saveEvaluationAllotment
 } from '../controllers/examController.js';
+import { verifyAuth, requireRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Health check
+// Health check & Read operations (Public / Read-only)
 router.get('/health', getHealth);
-
-// Sessions CRUD
-router.post('/sessions', saveExamSession);
 router.get('/sessions', getAllSessions);
 router.get('/sessions/:sessionName', getSessionByName);
-router.delete('/sessions/:sessionName', deleteSession);
 
-// Marks endpoints
-router.post('/marks', saveMarks);
+// Protected Operations: Sessions CRUD
+router.post('/sessions', verifyAuth, requireRole(['principal', 'coordinator', 'superadmin', 'admin']), saveExamSession);
+router.delete('/sessions/:sessionName', verifyAuth, requireRole(['principal', 'superadmin', 'admin']), deleteSession);
 
-// Duty Roster endpoint
-router.post('/duty-roster', saveDutyRoster);
+// Protected Marks endpoints (Teachers, Coordinators, Principal, Admin)
+router.post('/marks', verifyAuth, requireRole(['teacher', 'principal', 'coordinator', 'superadmin', 'admin']), saveMarks);
 
-// Evaluation Allotment & Locks endpoint
-router.post('/allotment', saveEvaluationAllotment);
+// Protected Duty Roster endpoint (Coordinator, Principal, Admin)
+router.post('/duty-roster', verifyAuth, requireRole(['principal', 'coordinator', 'superadmin', 'admin']), saveDutyRoster);
+
+// Protected Evaluation Allotment & Locks endpoint (Coordinator, Principal, Admin)
+router.post('/allotment', verifyAuth, requireRole(['principal', 'coordinator', 'superadmin', 'admin']), saveEvaluationAllotment);
 
 export default router;

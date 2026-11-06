@@ -48,6 +48,14 @@ export async function checkServerHealth() {
   }
 }
 
+// Helper to build request headers with optional Bearer JWT token
+const getRequestHeaders = () => {
+  const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 /**
  * Save complete Exam Session to MongoDB with Zod validation
  */
@@ -55,7 +63,7 @@ export async function saveExamSessionToDB(sessionData) {
   try {
     const res = await fetch(`${API_BASE_URL}/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRequestHeaders(),
       body: JSON.stringify(sessionData),
     });
 
@@ -126,7 +134,7 @@ export async function deleteExamSessionFromDB(sessionName, shift = 'shift_1') {
   try {
     const res = await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(sessionName)}?shift=${shift}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRequestHeaders(),
     });
     return await res.json();
   } catch (error) {
@@ -144,7 +152,7 @@ export async function saveMarksToDB(sessionName, shift, marksData) {
   try {
     const res = await fetch(`${API_BASE_URL}/marks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRequestHeaders(),
       body: JSON.stringify({ sessionName, activeShift: shift, marksData }),
     });
     return await res.json();
@@ -163,7 +171,7 @@ export async function saveDutyRosterToDB(sessionName, shift, dutyRoster) {
   try {
     const res = await fetch(`${API_BASE_URL}/duty-roster`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRequestHeaders(),
       body: JSON.stringify({ sessionName, activeShift: shift, dutyRoster }),
     });
     return await res.json();
@@ -183,7 +191,7 @@ export async function saveEvaluationAllotmentAPI(sessionName, shift, evaluationA
   try {
     const res = await fetch(`${API_BASE_URL}/allotment`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRequestHeaders(),
       body: JSON.stringify({ sessionName, activeShift: shift, evaluationAllotment, marksLocks }),
     });
     return await res.json();

@@ -1,46 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, UserCheck, Armchair, DoorOpen, Sparkles, BookOpen } from 'lucide-react';
 
 export default function StudentFinder({ seatingResult }) {
   const { rooms = [] } = seatingResult;
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Collect all seated student records with their room and bench context
-  const allStudents = [];
-  rooms.forEach((r) => {
-    r.benches.forEach((b) => {
-      if (b.leftSeat) {
-        allStudents.push({
-          ...b.leftSeat,
-          roomName: r.roomName,
-          benchNumber: b.benchNumber,
-          companion: b.rightSeat,
-        });
-      }
-      if (b.rightSeat) {
-        allStudents.push({
-          ...b.rightSeat,
-          roomName: r.roomName,
-          benchNumber: b.benchNumber,
-          companion: b.leftSeat,
-        });
-      }
+  // Collect all seated student records with their room and bench context (Memoized)
+  const allStudents = useMemo(() => {
+    const list = [];
+    rooms.forEach((r) => {
+      (r.benches || []).forEach((b) => {
+        if (b.leftSeat) {
+          list.push({
+            ...b.leftSeat,
+            roomName: r.roomName,
+            benchNumber: b.benchNumber,
+            companion: b.rightSeat,
+          });
+        }
+        if (b.rightSeat) {
+          list.push({
+            ...b.rightSeat,
+            roomName: r.roomName,
+            benchNumber: b.benchNumber,
+            companion: b.leftSeat,
+          });
+        }
+      });
     });
-  });
+    return list;
+  }, [rooms]);
 
   const query = searchQuery.trim().toLowerCase();
-  const matchedStudents = query
-    ? allStudents.filter(
-        (s) =>
-          (s.rollNo && s.rollNo.toString().includes(query)) ||
-          (s.formNumber && s.formNumber.toString().includes(query)) ||
-          (s.name && s.name.toLowerCase().includes(query)) ||
-          (s.fatherName && s.fatherName.toLowerCase().includes(query)) ||
-          (s.mobile && s.mobile.includes(query)) ||
-          `${s.className}-${s.section}`.toLowerCase().includes(query) ||
-          (s.subject && s.subject.toLowerCase().includes(query))
-      )
-    : [];
+  const matchedStudents = useMemo(() => {
+    if (!query) return [];
+    return allStudents.filter(
+      (s) =>
+        (s.rollNo && s.rollNo.toString().includes(query)) ||
+        (s.formNumber && s.formNumber.toString().includes(query)) ||
+        (s.name && s.name.toLowerCase().includes(query)) ||
+        (s.fatherName && s.fatherName.toLowerCase().includes(query)) ||
+        (s.mobile && s.mobile.includes(query)) ||
+        `${s.className}-${s.section}`.toLowerCase().includes(query) ||
+        (s.subject && s.subject.toLowerCase().includes(query))
+    );
+  }, [allStudents, query]);
 
   return (
     <div className="space-y-6">

@@ -10,6 +10,43 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const LOCAL_ABSENTEES_FILE = path.join(DATA_DIR, 'local_absentees.json');
 
+// Standard Date Normalizer to canonical 'YYYY-MM-DD'
+export const normalizeToCanonicalDate = (d) => {
+  if (!d) return '';
+  const str = String(d).trim().replace(/\//g, '-');
+  const parts = str.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else if (parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (parts[2].length === 2) {
+      return `20${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  return str;
+};
+
+// Generates all standard format variations of a date for backwards-compatible matching
+export const getAllDateVariations = (d) => {
+  if (!d || d === 'all') return [];
+  const canonical = normalizeToCanonicalDate(d);
+  const variations = new Set([String(d).trim(), canonical]);
+  const parts = canonical.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const yyyy = parts[0];
+    const yy = yyyy.slice(2);
+    const mm = parts[1];
+    const dd = parts[2];
+    variations.add(`${dd}-${mm}-${yyyy}`);
+    variations.add(`${dd}-${mm}-${yy}`);
+    variations.add(`${dd}/${mm}/${yyyy}`);
+    variations.add(`${dd}/${mm}/${yy}`);
+    variations.add(`${yyyy}/${mm}/${dd}`);
+  }
+  return Array.from(variations);
+};
+
 // Helper to read local absentees file
 const readLocalAbsentees = () => {
   try {
@@ -66,7 +103,8 @@ export const toggleAbsentee = async (req, res) => {
 
     const markedBy = req.user?.name || req.body.markedBy || 'Teacher';
     const markedByRole = req.user?.role || req.body.markedByRole || 'teacher';
-    const effectiveDate = date || new Date().toISOString().split('T')[0];
+    const effectiveDate = normalizeToCanonicalDate(date || new Date().toISOString().split('T')[0]);
+    const dateVariations = getAllDateVariations(effectiveDate);
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || req.ip || '';
     const userAgent = req.headers['user-agent'] || '';
 
@@ -93,13 +131,13 @@ export const toggleAbsentee = async (req, res) => {
       if (isAbsent) {
         // Mark student absent: upsert record for this student, specific date & shift
         savedRecord = await AbsenteeRecord.findOneAndUpdate(
-          { rollNo, date: effectiveDate, shift },
-          { ...recordData, updatedAt: new Date() },
+          { rollNo, date: { $in: dateVariations }, shift },
+          { ...recordData, date: effectiveDate, updatedAt: new Date() },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
       } else {
         // Mark student present: completely remove from AbsenteeRecord for this date & shift
-        await AbsenteeRecord.deleteMany({ rollNo, date: effectiveDate, shift });
+        await AbsenteeRecord.deleteMany({ rollNo, date: { $in: dateVariations }, shift });
         savedRecord = { ...recordData, isAbsent: false };
       }
     }
@@ -108,7 +146,7 @@ export const toggleAbsentee = async (req, res) => {
     let localRecords = readLocalAbsentees();
     if (isAbsent) {
       const existingIdx = localRecords.findIndex(
-        (r) => r.rollNo === rollNo && r.shift === shift && r.date === effectiveDate
+        (r) => r.rollNo === rollNo && r.shift === shift && normalizeToCanonicalDate(r.date) === effectiveDate
       );
       if (existingIdx >= 0) {
         localRecords[existingIdx] = { ...localRecords[existingIdx], ...recordData };
@@ -117,7 +155,7 @@ export const toggleAbsentee = async (req, res) => {
       }
     } else {
       localRecords = localRecords.filter(
-        (r) => !(r.rollNo === rollNo && r.shift === shift && r.date === effectiveDate)
+        (r) => !(r.rollNo === rollNo && r.shift === shift && normalizeToCanonicalDate(r.date) === effectiveDate)
       );
     }
     writeLocalAbsentees(localRecords);
@@ -161,22 +199,7 @@ export const getLiveAbsentees = async (req, res) => {
       };
     }
     if (date && date !== 'all') {
-      const dateVariations = [date];
-      if (date.includes('-')) {
-        const parts = date.split('-');
-        if (parts[0].length === 4) {
-          // 2026-11-02 -> 02-11-2026, 02-11-26
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0].slice(2)}`);
-        } else if (parts[2].length === 4) {
-          // 02-11-2026 -> 2026-11-02
-          dateVariations.push(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        } else if (parts[2].length === 2) {
-          // 02-11-26 -> 2026-11-02, 02-11-2026
-          dateVariations.push(`20${parts[2]}-${parts[1]}-${parts[0]}`);
-          dateVariations.push(`${parts[0]}-${parts[1]}-20${parts[2]}`);
-        }
-      }
+      const dateVariations = getAllDateVariations(date);
       filter.date = { $in: dateVariations };
     }
     if (shift && shift !== 'all') filter.shift = shift;
@@ -189,10 +212,11 @@ export const getLiveAbsentees = async (req, res) => {
     } else {
       // Fallback to local file
       const local = readLocalAbsentees();
+      const canonicalTargetDate = date && date !== 'all' ? normalizeToCanonicalDate(date) : null;
       records = local.filter((r) => {
-        if (date && date !== 'all') {
-          const dateMatches = r.date === date || (r.date && r.date.includes(date)) || (date && date.includes(r.date));
-          if (!dateMatches) return false;
+        if (canonicalTargetDate) {
+          const rCanonical = normalizeToCanonicalDate(r.date);
+          if (rCanonical !== canonicalTargetDate) return false;
         }
         if (shift && shift !== 'all' && r.shift !== shift) return false;
         if (roomName && roomName !== 'all' && r.roomName !== roomName) return false;

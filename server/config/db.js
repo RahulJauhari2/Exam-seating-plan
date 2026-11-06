@@ -6,7 +6,7 @@ dotenv.config();
 export let lastConnectionError = null;
 export const getLastConnectionError = () => lastConnectionError;
 
-const ATLAS_PRODUCTION_URI = 'mongodb+srv://abvickatra_db_user:FP0z9iFqJDHUJVDc@cluster0.cfu86u4.mongodb.net/seatingPlan?retryWrites=true&w=majority';
+const LOCAL_FALLBACK_URI = 'mongodb://127.0.0.1:27017/exam_seating_db';
 
 export const getMongoUri = () => {
   // Parse multiline string if saved under process.env.Env or ENV (as seen in Coolify modal)
@@ -19,7 +19,7 @@ export const getMongoUri = () => {
     }
   }
 
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || ATLAS_PRODUCTION_URI;
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || LOCAL_FALLBACK_URI;
   return uri.trim();
 };
 
@@ -39,6 +39,10 @@ export const connectDB = async () => {
   }
 
   const uri = getMongoUri();
+  if (!uri) {
+    lastConnectionError = 'MONGODB_URI environment variable is not defined.';
+    return false;
+  }
 
   if (!cached.promise) {
     cached.promise = mongoose.connect(uri, {

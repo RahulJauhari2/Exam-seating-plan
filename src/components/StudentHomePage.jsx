@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Search, 
   Sparkles, 
@@ -17,12 +17,12 @@ import {
   HeartHandshake, 
   GraduationCap, 
   Sun, 
-  Sunset,
-  ChevronRight,
-  Smile,
-  FileText,
-  UserCheck,
-  Printer
+  Sunset, 
+  ChevronRight, 
+  Smile, 
+  FileText, 
+  UserCheck, 
+  Printer 
 } from 'lucide-react';
 import { EXAM_TIMETABLE, EXAM_SCHEME_METADATA, getTodayExamDay } from '../data/examSchemeData';
 
@@ -38,41 +38,45 @@ export default function StudentHomePage({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
 
-  // Collect all seated student records with their room and bench context for instant search
-  const allStudents = [];
-  rooms.forEach((r) => {
-    (r.benches || []).forEach((b) => {
-      if (b.leftSeat) {
-        allStudents.push({
-          ...b.leftSeat,
-          roomName: r.roomName,
-          benchNumber: b.benchNumber,
-          side: 'बायां सीट (Left Seat)',
-          companion: b.rightSeat,
-        });
-      }
-      if (b.rightSeat) {
-        allStudents.push({
-          ...b.rightSeat,
-          roomName: r.roomName,
-          benchNumber: b.benchNumber,
-          side: 'दायां सीट (Right Seat)',
-          companion: b.leftSeat,
-        });
-      }
+  // Collect all seated student records with their room and bench context for instant search (Memoized)
+  const allStudents = useMemo(() => {
+    const list = [];
+    rooms.forEach((r) => {
+      (r.benches || []).forEach((b) => {
+        if (b.leftSeat) {
+          list.push({
+            ...b.leftSeat,
+            roomName: r.roomName,
+            benchNumber: b.benchNumber,
+            side: 'बायां सीट (Left Seat)',
+            companion: b.rightSeat,
+          });
+        }
+        if (b.rightSeat) {
+          list.push({
+            ...b.rightSeat,
+            roomName: r.roomName,
+            benchNumber: b.benchNumber,
+            side: 'दायां सीट (Right Seat)',
+            companion: b.leftSeat,
+          });
+        }
+      });
     });
-  });
+    return list;
+  }, [rooms]);
 
   const query = searchQuery.trim().toLowerCase();
-  const matchedStudents = query
-    ? allStudents.filter(
-        (s) =>
-          (s.rollNo && s.rollNo.toString().includes(query)) ||
-          (s.name && s.name.toLowerCase().includes(query)) ||
-          (s.fatherName && s.fatherName.toLowerCase().includes(query)) ||
-          (s.formNumber && s.formNumber.toString().includes(query))
-      )
-    : [];
+  const matchedStudents = useMemo(() => {
+    if (!query) return [];
+    return allStudents.filter(
+      (s) =>
+        (s.rollNo && s.rollNo.toString().includes(query)) ||
+        (s.name && s.name.toLowerCase().includes(query)) ||
+        (s.fatherName && s.fatherName.toLowerCase().includes(query)) ||
+        (s.formNumber && s.formNumber.toString().includes(query))
+    );
+  }, [allStudents, query]);
 
   // Storytelling Exam Day 4-Step Journey
   const journeySteps = [
