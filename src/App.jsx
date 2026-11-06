@@ -569,9 +569,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 font-sans text-slate-900 flex flex-col">
-      {/* Live Absentee Real-Time Alert Toast (Shows instantly in Control Room / Principal Screen) */}
+      {/* Live Absentee Real-Time Alert Toast (Shows instantly in Control Room / Principal Screen, Hidden on Print) */}
       {liveNotification && (
-        <div className="fixed top-16 right-4 z-50 max-w-sm w-full bg-red-600 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-red-400/80 animate-bounce flex items-start gap-3">
+        <div className="fixed top-16 right-4 z-50 max-w-sm w-full bg-red-600 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-red-400/80 animate-bounce flex items-start gap-3 no-print">
           <div className="p-2 bg-white/20 rounded-xl shrink-0">
             <Radio className="w-5 h-5 text-yellow-300 animate-pulse" />
           </div>

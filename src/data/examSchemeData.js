@@ -174,13 +174,10 @@ export const EXAM_TIMETABLE = [
   },
   {
     id: 'd7',
-    date: '07-11-26',
-    fullDate: '2026-11-07',
-    day: 'SATURDAY',
+    date: '13-11-26',
+    fullDate: '2026-11-13',
+    day: 'FRIDAY',
     shift_1: {
-      // No shift 1 on Saturday 7th Nov
-    },
-    shift_2: {
       '6': [
         { name: 'COMMERCE', code: '935' },
         { name: 'COMPUTER', code: '941' },
@@ -188,6 +185,9 @@ export const EXAM_TIMETABLE = [
       ],
       '7': [{ name: 'HINDI' }],
       '8': [{ name: 'SCIENCE' }],
+    },
+    shift_2: {
+      // Postponed from 07-11-2026 due to Diwali festival; rescheduled to 13-11-2026 First Meeting (Shift 1)
     },
   },
 ];
@@ -240,6 +240,10 @@ export const getTodayExamDay = () => {
   const lastDay = EXAM_TIMETABLE[EXAM_TIMETABLE.length - 1];
   if (todayISO < firstDay.fullDate) return firstDay;
   if (todayISO > lastDay.fullDate) return lastDay;
+
+  // On break/holiday days between exams (e.g. Diwali break Nov 07-12), show the upcoming exam day
+  const upcomingDay = EXAM_TIMETABLE.find((d) => d.fullDate > todayISO);
+  if (upcomingDay) return upcomingDay;
 
   return firstDay;
 };
