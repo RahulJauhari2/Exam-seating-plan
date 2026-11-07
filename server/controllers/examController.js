@@ -527,7 +527,10 @@ export const saveDutyRoster = async (req, res) => {
           ]
         },
         { 
-          $set: { dutyRoster: mergedRoster } 
+          $set: { 
+            dutyRoster: mergedRoster,
+            ...(req.body.examDetails && typeof req.body.examDetails === 'object' ? { examDetails: req.body.examDetails } : {})
+          } 
         }
       );
 

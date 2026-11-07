@@ -110,7 +110,7 @@ const playSchoolWarningBell = () => {
 
 function getRemainingExamMinutes(timeRange) {
   if (!timeRange) return null;
-  const parts = timeRange.split('-');
+  const parts = String(timeRange).split(/[-–—]|(?:\s+to\s+)/i);
   if (parts.length < 2) return null;
   const endPart = parts[1].trim();
   const match = endPart.match(/(\d+):(\d+)\s*(AM|PM)?/i);
@@ -118,8 +118,16 @@ function getRemainingExamMinutes(timeRange) {
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const ampm = (match[3] || '').toUpperCase();
-  if (ampm === 'PM' && hours < 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
+
+  // In daytime school exam context, 12:00 is midday noon (12:00 PM)
+  if (hours === 12) {
+    hours = 12;
+  } else if (ampm === 'PM' && hours < 12) {
+    hours += 12;
+  } else if (!ampm && hours >= 1 && hours <= 6) {
+    // Unlabeled afternoon hours (e.g. 01:00 to 03:00)
+    hours += 12;
+  }
 
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -314,6 +322,18 @@ export default function TeacherRoomPortal({
 
   // Available room objects corresponding to the shift the teacher is currently viewing
   const rooms = useMemo(() => {
+    // Dynamically check whether Junior (6-8) or Senior (9-12) classes sit on selectedDay in this shift
+    const daySubjects = selectedDay?.[portalShift] || {};
+    const hasJunior = Boolean(daySubjects['6'] || daySubjects['7'] || daySubjects['8']);
+    const hasSenior = Boolean(daySubjects['9'] || daySubjects['10'] || daySubjects['11'] || daySubjects['12']);
+
+    if (hasJunior && !hasSenior) {
+      return (seatingShift2?.rooms && seatingShift2.rooms.length > 0) ? seatingShift2.rooms : (examSession?.rooms || []);
+    }
+    if (hasSenior && !hasJunior) {
+      return (seatingShift1?.rooms && seatingShift1.rooms.length > 0) ? seatingShift1.rooms : (examSession?.rooms || []);
+    }
+
     if (examSession?.rooms && examSession.rooms.length > 0 && portalShift === activeShift) {
       return examSession.rooms;
     }
@@ -321,7 +341,7 @@ export default function TeacherRoomPortal({
       return (seatingShift1?.rooms && seatingShift1.rooms.length > 0) ? seatingShift1.rooms : (examSession?.rooms || []);
     }
     return (seatingShift2?.rooms && seatingShift2.rooms.length > 0) ? seatingShift2.rooms : (examSession?.rooms || []);
-  }, [portalShift, activeShift, seatingShift1, seatingShift2, examSession?.rooms]);
+  }, [portalShift, activeShift, seatingShift1, seatingShift2, examSession?.rooms, selectedDay]);
 
   // Flatten all students across all rooms in the exam session
   const allSchoolStudents = useMemo(() => {
@@ -545,12 +565,18 @@ export default function TeacherRoomPortal({
   };
 
   const s1DutyInfo = useMemo(() => {
-    return getDutyInfoForShift('shift_1', seatingShift1?.rooms || []);
-  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift1]);
+    const daySubjects = selectedDay?.shift_1 || {};
+    const isJuniorInS1 = Boolean(daySubjects['6'] || daySubjects['7'] || daySubjects['8']) && !Boolean(daySubjects['9'] || daySubjects['10'] || daySubjects['11'] || daySubjects['12']);
+    const targetRooms = isJuniorInS1 ? (seatingShift2?.rooms || []) : (seatingShift1?.rooms || []);
+    return getDutyInfoForShift('shift_1', targetRooms);
+  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift1, seatingShift2]);
 
   const s2DutyInfo = useMemo(() => {
-    return getDutyInfoForShift('shift_2', seatingShift2?.rooms || []);
-  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift2]);
+    const daySubjects = selectedDay?.shift_2 || {};
+    const isSeniorInS2 = Boolean(daySubjects['9'] || daySubjects['10'] || daySubjects['11'] || daySubjects['12']) && !Boolean(daySubjects['6'] || daySubjects['7'] || daySubjects['8']);
+    const targetRooms = isSeniorInS2 ? (seatingShift1?.rooms || []) : (seatingShift2?.rooms || []);
+    return getDutyInfoForShift('shift_2', targetRooms);
+  }, [selectedDay, selectedDayId, dutyRoster, teacherIdSet, seatingShift1, seatingShift2]);
 
   const currentShiftDutyInfo = portalShift === 'shift_1' ? s1DutyInfo : s2DutyInfo;
 

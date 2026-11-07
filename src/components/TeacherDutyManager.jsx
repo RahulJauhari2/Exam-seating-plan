@@ -271,7 +271,7 @@ export default function TeacherDutyManager({
 
   // State for Dynamic Exam Time & Warning Bell Modal
   const [showTimeModal, setShowTimeModal] = useState(false);
-  const [shift1TimeInput, setShift1TimeInput] = useState(examDetails?.shift1Time || examDetails?.timeRange || '09:30 AM - 12:00 AM');
+  const [shift1TimeInput, setShift1TimeInput] = useState(examDetails?.shift1Time || examDetails?.timeRange || '09:30 AM - 12:00 PM');
   const [shift2TimeInput, setShift2TimeInput] = useState(examDetails?.shift2Time || '01:00 PM - 03:00 PM');
   const [warningMinutesInput, setWarningMinutesInput] = useState(examDetails?.warningMinutes || 15);
   const [entryMinutesInput, setEntryMinutesInput] = useState(examDetails?.entryMinutes || 15);

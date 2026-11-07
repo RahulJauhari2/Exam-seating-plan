@@ -21,6 +21,7 @@ import {
   EXAM_TIMETABLE,
   getTodayExamDay
 } from '../data/examSchemeData';
+import { DEFAULT_SHIFT_1, DEFAULT_SHIFT_2 } from '../data/defaultData';
 
 // Helper to check if a class/section or student is English medium
 function isSectionEnglish(c) {
@@ -284,15 +285,27 @@ export default function ExamSchemeManager({
     return EXAM_TIMETABLE.find((d) => d.id === selectedDateId) || EXAM_TIMETABLE[0];
   }, [selectedDateId]);
 
-  // Aggregate total students per class base number from current classes in state
+  // Unified classes pool combining current classes and all school grades (6th through 12th)
+  const combinedClasses = useMemo(() => {
+    const list = [...(classes || [])];
+    const presentGrades = new Set(list.map((c) => String(c.name).trim()));
+    [...(DEFAULT_SHIFT_1?.classes || []), ...(DEFAULT_SHIFT_2?.classes || [])].forEach((c) => {
+      if (!presentGrades.has(String(c.name).trim())) {
+        list.push(c);
+      }
+    });
+    return list;
+  }, [classes]);
+
+  // Aggregate total students per class base number across all grades
   const classTotals = useMemo(() => {
     const map = {};
-    classes.forEach((c) => {
+    combinedClasses.forEach((c) => {
       const grade = c.name;
       map[grade] = (map[grade] || 0) + (Number(c.totalStudents) || 0);
     });
     return map;
-  }, [classes]);
+  }, [combinedClasses]);
 
   // Calculate paper requirements for selected day & shift
   const paperDemand = useMemo(() => {
@@ -306,7 +319,7 @@ export default function ExamSchemeManager({
       const totalStudentsInGrade = classTotals[grade] || 0;
       const countSubjects = subList.length;
 
-      const gradeClasses = classes.filter((c) => String(c.name).trim() === grade);
+      const gradeClasses = combinedClasses.filter((c) => String(c.name).trim() === grade);
       const allGradeStudents = gradeClasses.flatMap((c) => c.studentList || []);
 
       subList.forEach((sub) => {
@@ -1240,15 +1253,33 @@ export default function ExamSchemeManager({
                         {(row.shift_1['12'] || []).map((s) => s.name).join(' / ') || '—'}
                       </td>
 
-                      {/* Shift 2 (6 to 8) */}
+                      {/* Shift 2 (6 to 8) - With automatic fallback to Shift 1 if rescheduled */}
                       <td className="py-2 px-1 border-r border-slate-400 bg-teal-50/20">
-                        {(row.shift_2['6'] || []).map((s) => s.name).join(' / ') || '—'}
+                        {(() => {
+                          const s2 = row.shift_2?.['6'] || [];
+                          const s1 = row.shift_1?.['6'] || [];
+                          if (s2.length > 0) return s2.map((s) => s.name).join(' / ');
+                          if (s1.length > 0) return `${s1.map((s) => s.name).join(' / ')} (प्रातः 9:30)`;
+                          return '—';
+                        })()}
                       </td>
                       <td className="py-2 px-1 border-r border-slate-400 bg-teal-50/20">
-                        {(row.shift_2['7'] || []).map((s) => s.name).join(' / ') || '—'}
+                        {(() => {
+                          const s2 = row.shift_2?.['7'] || [];
+                          const s1 = row.shift_1?.['7'] || [];
+                          if (s2.length > 0) return s2.map((s) => s.name).join(' / ');
+                          if (s1.length > 0) return `${s1.map((s) => s.name).join(' / ')} (प्रातः 9:30)`;
+                          return '—';
+                        })()}
                       </td>
                       <td className="py-2 px-1 bg-teal-50/20">
-                        {(row.shift_2['8'] || []).map((s) => s.name).join(' / ') || '—'}
+                        {(() => {
+                          const s2 = row.shift_2?.['8'] || [];
+                          const s1 = row.shift_1?.['8'] || [];
+                          if (s2.length > 0) return s2.map((s) => s.name).join(' / ');
+                          if (s1.length > 0) return `${s1.map((s) => s.name).join(' / ')} (प्रातः 9:30)`;
+                          return '—';
+                        })()}
                       </td>
                     </tr>
                   ))}

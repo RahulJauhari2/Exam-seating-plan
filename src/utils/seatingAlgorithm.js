@@ -377,33 +377,49 @@ export function generateSeatingPlan({ classes, rooms }) {
     const gateSummaryItems = [];
     Object.keys(classSummaryMap).forEach((key) => {
       const item = classSummaryMap[key];
-      const sortedRolls = item.rollNumbers
-        .map((r) => Number(r))
-        .filter((r) => !isNaN(r))
-        .sort((a, b) => a - b);
+      const rawRolls = item.rollNumbers || [];
+      if (rawRolls.length === 0) return;
 
-      if (sortedRolls.length === 0) return;
+      const allNumeric = rawRolls.every((r) => !isNaN(Number(r)) && r !== '' && r !== null);
+      let rangeText = '';
+      let fromRoll = rawRolls[0];
+      let toRoll = rawRolls[rawRolls.length - 1];
 
-      // Compute contiguous ranges (e.g. 901-909 or 901, 905...)
-      const ranges = [];
-      let rangeStart = sortedRolls[0];
-      let rangeEnd = sortedRolls[0];
+      if (allNumeric) {
+        const sortedRolls = rawRolls
+          .map((r) => Number(r))
+          .sort((a, b) => a - b);
 
-      for (let i = 1; i < sortedRolls.length; i++) {
-        const currentRoll = sortedRolls[i];
-        if (currentRoll === rangeEnd + 1) {
-          rangeEnd = currentRoll;
-        } else {
-          ranges.push(
-            rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart} - ${rangeEnd}`
-          );
-          rangeStart = currentRoll;
-          rangeEnd = currentRoll;
+        fromRoll = sortedRolls[0];
+        toRoll = sortedRolls[sortedRolls.length - 1];
+
+        // Compute contiguous ranges (e.g. 901-909 or 901, 905...)
+        const ranges = [];
+        let rangeStart = sortedRolls[0];
+        let rangeEnd = sortedRolls[0];
+
+        for (let i = 1; i < sortedRolls.length; i++) {
+          const currentRoll = sortedRolls[i];
+          if (currentRoll === rangeEnd + 1) {
+            rangeEnd = currentRoll;
+          } else {
+            ranges.push(
+              rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart} - ${rangeEnd}`
+            );
+            rangeStart = currentRoll;
+            rangeEnd = currentRoll;
+          }
         }
+        ranges.push(
+          rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart} - ${rangeEnd}`
+        );
+        rangeText = ranges.join(', ');
+      } else {
+        const sortedStrRolls = [...rawRolls].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+        fromRoll = sortedStrRolls[0];
+        toRoll = sortedStrRolls[sortedStrRolls.length - 1];
+        rangeText = `${fromRoll} - ${toRoll} (${rawRolls.length} छात्र)`;
       }
-      ranges.push(
-        rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart} - ${rangeEnd}`
-      );
 
       gateSummaryItems.push({
         classKey: key,
@@ -411,10 +427,10 @@ export function generateSeatingPlan({ classes, rooms }) {
         section: item.section,
         subject: item.subject,
         color: item.color,
-        fromRoll: sortedRolls[0],
-        toRoll: sortedRolls[sortedRolls.length - 1],
-        rangeText: ranges.join(', '),
-        totalStudents: sortedRolls.length,
+        fromRoll,
+        toRoll,
+        rangeText,
+        totalStudents: rawRolls.length,
       });
     });
 

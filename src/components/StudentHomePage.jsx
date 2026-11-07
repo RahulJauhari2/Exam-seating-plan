@@ -461,45 +461,61 @@ export default function StudentHomePage({
 
                 {/* Shift 1 subjects */}
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-black uppercase text-blue-800 tracking-wider flex items-center gap-1">
-                    <Sun className="w-3 h-3 text-amber-500" />
-                    <span>प्रातः पाली (Shift 1: 9th-12th)</span>
+                  <span className="text-[10px] font-black uppercase text-blue-800 tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Sun className="w-3 h-3 text-amber-500" />
+                      <span>प्रातः पाली (Shift 1 / 09:30 AM)</span>
+                    </span>
                   </span>
                   <div className="space-y-1 text-xs">
-                    {['9', '10', '11', '12'].map((g) => {
-                      if (selectedClassFilter !== 'all' && selectedClassFilter !== g) return null;
-                      const subs = shift1Subjects[g] || [];
-                      return (
-                        <div key={g} className="flex items-center justify-between bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
-                          <span className="font-bold text-slate-600">कक्षा {g}th:</span>
-                          <span className="font-black text-indigo-950 truncate max-w-[180px]">
-                            {subs.map((s) => s.name).join(' / ') || '—'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {Object.keys(shift1Subjects).length === 0 ? (
+                      <div className="text-[11px] text-slate-400 italic bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
+                        कोई परीक्षा नहीं (अवकाश / खाली)
+                      </div>
+                    ) : (
+                      Object.entries(shift1Subjects).map(([g, subs]) => {
+                        if (selectedClassFilter !== 'all' && selectedClassFilter !== g) return null;
+                        if (!subs || subs.length === 0) return null;
+                        return (
+                          <div key={g} className="flex items-center justify-between bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
+                            <span className="font-bold text-slate-600">कक्षा {g}th:</span>
+                            <span className="font-black text-indigo-950 truncate max-w-[180px]">
+                              {subs.map((s) => s.name).join(' / ')}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
                 {/* Shift 2 subjects */}
                 <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
-                  <span className="text-[10px] font-black uppercase text-orange-800 tracking-wider flex items-center gap-1">
-                    <Sunset className="w-3 h-3 text-orange-500" />
-                    <span>द्वितीय पाली (Shift 2: 6th-8th)</span>
+                  <span className="text-[10px] font-black uppercase text-orange-800 tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Sunset className="w-3 h-3 text-orange-500" />
+                      <span>द्वितीय पाली (Shift 2 / 01:00 PM)</span>
+                    </span>
                   </span>
                   <div className="space-y-1 text-xs">
-                    {['6', '7', '8'].map((g) => {
-                      if (selectedClassFilter !== 'all' && selectedClassFilter !== g) return null;
-                      const subs = shift2Subjects[g] || [];
-                      return (
-                        <div key={g} className="flex items-center justify-between bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
-                          <span className="font-bold text-slate-600">कक्षा {g}th:</span>
-                          <span className="font-black text-indigo-950 truncate max-w-[180px]">
-                            {subs.map((s) => s.name).join(' / ') || '—'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {Object.keys(shift2Subjects).length === 0 ? (
+                      <div className="text-[11px] text-slate-400 italic bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
+                        कोई परीक्षा नहीं (अवकाश / खाली)
+                      </div>
+                    ) : (
+                      Object.entries(shift2Subjects).map(([g, subs]) => {
+                        if (selectedClassFilter !== 'all' && selectedClassFilter !== g) return null;
+                        if (!subs || subs.length === 0) return null;
+                        return (
+                          <div key={g} className="flex items-center justify-between bg-white p-1.5 px-2.5 rounded-lg border border-slate-100">
+                            <span className="font-bold text-slate-600">कक्षा {g}th:</span>
+                            <span className="font-black text-indigo-950 truncate max-w-[180px]">
+                              {subs.map((s) => s.name).join(' / ')}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>

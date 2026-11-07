@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { DEFAULT_TEACHERS } from './data/defaultTeachers';
 import { useAuth } from './context/AuthContext';
-import { getTodayExamDay } from './data/examSchemeData';
+import { getTodayExamDay, EXAM_TIMETABLE, areDatesMatching } from './data/examSchemeData';
 import { fetchLiveAbsenteesAPI, toggleAbsenteeAPI, fetchLiveCopiesAPI, updateStudentCopiesAPI, fetchTeachersAPI, loadExamSessionFromDB, saveDutyRosterToDB } from './services/api';
 import { AlertTriangle, ShieldCheck, Compass, Radio, UserX, X, Lock, KeyRound } from 'lucide-react';
 
@@ -67,21 +67,44 @@ const StaffLockedGuard = ({ title, description, onLogin, onGoToStudentView }) =>
   </div>
 );
 
+// Helper to resolve whether a date and shift uses Junior (6-8) or Senior (9-12) datasets
+const getShiftDataForDate = (date, shift) => {
+  const day = (EXAM_TIMETABLE || []).find(
+    (d) => areDatesMatching(d.fullDate, date) || areDatesMatching(d.date, date)
+  );
+  const daySubjects = day?.[shift] || {};
+  const hasJunior = Boolean(daySubjects['6'] || daySubjects['7'] || daySubjects['8']);
+  const hasSenior = Boolean(daySubjects['9'] || daySubjects['10'] || daySubjects['11'] || daySubjects['12']);
+
+  if (hasJunior && !hasSenior) return DEFAULT_SHIFT_2;
+  if (hasSenior && !hasJunior) return DEFAULT_SHIFT_1;
+  return shift === 'shift_2' ? DEFAULT_SHIFT_2 : DEFAULT_SHIFT_1;
+};
+
 export default function App() {
   const { currentUser, isAuthenticated, isTeacher, canAccessAllRooms, logout } = useAuth();
 
-  // Active shift state: 'shift_1' (9th-12th) or 'shift_2' (6th-8th)
-  // Smart initialization: reads saved preference, otherwise defaults based on afternoon time (>= 12:00 PM -> shift_2)
+  // Automatically determine today's scheduled exam day
+  const todayExamDay = useMemo(() => getTodayExamDay(), []);
+
+  // Active shift state: 'shift_1' or 'shift_2'
+  // Smart initialization: If today's day only has exams in shift_1 and shift_2 is empty (e.g. 13-11-2026), default to shift_1
   const initialShift = (() => {
     try {
       const saved = localStorage.getItem('exam_active_shift');
       if (saved === 'shift_1' || saved === 'shift_2') return saved;
     } catch {}
+    const hasS1 = Object.keys(todayExamDay?.shift_1 || {}).length > 0;
+    const hasS2 = Object.keys(todayExamDay?.shift_2 || {}).length > 0;
+    if (hasS1 && !hasS2) return 'shift_1';
+    if (hasS2 && !hasS1) return 'shift_2';
     return new Date().getHours() >= 12 ? 'shift_2' : 'shift_1';
   })();
 
   const [activeShift, setActiveShift] = useState(initialShift);
-  const initialDefaultData = initialShift === 'shift_2' ? DEFAULT_SHIFT_2 : DEFAULT_SHIFT_1;
+  const initialDefaultData = useMemo(() => {
+    return getShiftDataForDate(todayExamDay?.fullDate || todayExamDay?.date, initialShift);
+  }, []);
 
   // Absent students state: { [rollNo]: true }
   const [absentStudents, setAbsentStudents] = useState({});
@@ -105,9 +128,6 @@ export default function App() {
   // Auth & RBAC Modals
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
-
-  // Automatically determine today's scheduled exam day
-  const todayExamDay = useMemo(() => getTodayExamDay(), []);
 
   // Exam details state (Defaults to Today's scheduled exam date dynamically)
   const [examDetails, setExamDetails] = useState({
@@ -516,28 +536,22 @@ export default function App() {
     try {
       localStorage.setItem('exam_active_shift', newShift);
     } catch {}
-    if (newShift === 'shift_1') {
-      setClasses(DEFAULT_SHIFT_1.classes);
-      setRooms(DEFAULT_SHIFT_1.rooms);
-      setExamDetails((prev) => ({
-        ...prev,
-        examName: DEFAULT_SHIFT_1.examName,
-        timeRange: DEFAULT_SHIFT_1.timeRange,
-      }));
-    } else {
-      setClasses(DEFAULT_SHIFT_2.classes);
-      setRooms(DEFAULT_SHIFT_2.rooms);
-      setExamDetails((prev) => ({
-        ...prev,
-        examName: DEFAULT_SHIFT_2.examName,
-        timeRange: DEFAULT_SHIFT_2.timeRange,
-      }));
-    }
+    const shiftData = getShiftDataForDate(examDetails.date, newShift);
+    setClasses(shiftData.classes);
+    setRooms(shiftData.rooms);
+    setExamDetails((prev) => ({
+      ...prev,
+      examName: shiftData.examName,
+      timeRange: newShift === 'shift_1' ? (prev.shift1Time || shiftData.timeRange) : (prev.shift2Time || shiftData.timeRange),
+    }));
   };
 
-  // Handle Date switch (synchronizes live polling and portal date)
+  // Handle Date switch (synchronizes live polling, portal date, and dynamically swaps junior/senior classes if needed)
   const handleDateChange = (newDate) => {
     if (!newDate) return;
+    const shiftData = getShiftDataForDate(newDate, activeShift);
+    setClasses(shiftData.classes);
+    setRooms(shiftData.rooms);
     setExamDetails((prev) => ({
       ...prev,
       date: newDate,

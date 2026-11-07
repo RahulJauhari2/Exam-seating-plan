@@ -169,10 +169,22 @@ export async function saveMarksToDB(sessionName, shift, marksData) {
  */
 export async function saveDutyRosterToDB(sessionName, shift, dutyRoster) {
   try {
+    let payload = {};
+    if (sessionName && typeof sessionName === 'object' && !Array.isArray(sessionName)) {
+      payload = {
+        sessionName: sessionName.sessionName || 'Half_Yearly_2026_27',
+        activeShift: sessionName.shift || sessionName.activeShift || 'shift_1',
+        dutyRoster: sessionName.dutyRoster || {},
+        examDetails: sessionName.examDetails,
+      };
+    } else {
+      payload = { sessionName, activeShift: shift, dutyRoster };
+    }
+
     const res = await fetch(`${API_BASE_URL}/duty-roster`, {
       method: 'POST',
       headers: getRequestHeaders(),
-      body: JSON.stringify({ sessionName, activeShift: shift, dutyRoster }),
+      body: JSON.stringify(payload),
     });
     return await res.json();
   } catch (error) {
